@@ -1,0 +1,227 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { useRouter } from "next/navigation";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
+import { apiClient } from "@/lib/api-client";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface MockUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+}
+
+type AuthUser = MockUser | SupabaseUser | null;
+
+export interface AuthContextType {
+  user: AuthUser;
+  isLoading: boolean;
+  isMockMode: boolean;
+  signIn: (email: string, password: string) => Promise<{ error?: string }>;
+  signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error?: string }>;
+  updatePassword: (newPassword: string) => Promise<{ error?: string }>;
+}
+
+// ─── Context ──────────────────────────────────────────────────────────────────
+
+export const AuthContext = createContext<AuthContextType | null>(null);
+
+// ─── Mock user constant ───────────────────────────────────────────────────────
+
+const MOCK_USER: MockUser = {
+  id: "mock-user-id",
+  email: "admin@centralintelligence.ai",
+  name: "Jade Doe",
+  role: "admin",
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function isMockConfigured(): boolean {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return !url || !key;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const mockMode = isMockConfigured();
+
+  const [user, setUser] = useState<AuthUser>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // ── Initialisation ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (mockMode) {
+      // Auto-sign-in with mock user so the app is always usable without creds.
+      setUser(MOCK_USER);
+      setIsLoading(false);
+      return;
+    }
+
+    const supabase = createClient();
+    if (!supabase) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Hydrate from existing session.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.access_token) {
+        apiClient.setToken(session.access_token);
+      }
+      setIsLoading(false);
+    });
+
+    // Keep in sync with Supabase auth state changes (login, logout, refresh).
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.access_token) {
+        apiClient.setToken(session.access_token);
+      } else {
+        apiClient.clearToken();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [mockMode]);
+
+  // ── signIn ─────────────────────────────────────────────────────────────────
+
+  const signIn = useCallback(
+    async (email: string, password: string): Promise<{ error?: string }> => {
+      if (mockMode) {
+        // Simulate a brief network round-trip.
+        await delay(500);
+        setUser(MOCK_USER);
+        return {};
+      }
+
+      const supabase = createClient();
+      if (!supabase) return { error: "Auth not configured" };
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      return {};
+    },
+    [mockMode],
+  );
+
+  // ── signOut ────────────────────────────────────────────────────────────────
+
+  const signOut = useCallback(async (): Promise<void> => {
+    if (mockMode) {
+      setUser(null);
+      router.push("/login");
+      return;
+    }
+
+    const supabase = createClient();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+
+    apiClient.clearToken();
+    setUser(null);
+    router.push("/login");
+  }, [mockMode, router]);
+
+  // ── resetPassword ──────────────────────────────────────────────────────────
+
+  const resetPassword = useCallback(
+    async (_email: string): Promise<{ error?: string }> => {
+      if (mockMode) {
+        await delay(500);
+        return {};
+      }
+
+      const supabase = createClient();
+      if (!supabase) return { error: "Auth not configured" };
+
+      // Send the user to /reset-password after they click the email link.
+      // Without `redirectTo`, Supabase falls back to the project's Site URL
+      // (configured in Supabase Dashboard), which may not match where we
+      // actually want to receive and consume the recovery token.
+      const { error } = await supabase.auth.resetPasswordForEmail(_email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      return {};
+    },
+    [mockMode],
+  );
+
+  // ── updatePassword ─────────────────────────────────────────────────────────
+  // Called from /reset-password after the user follows their recovery link.
+  // The Supabase client (createBrowserClient with detectSessionInUrl on by
+  // default) consumes the recovery token from window.location.hash, sets a
+  // PASSWORD_RECOVERY session, and updateUser then changes the password.
+  const updatePassword = useCallback(
+    async (newPassword: string): Promise<{ error?: string }> => {
+      if (mockMode) {
+        await delay(500);
+        return {};
+      }
+
+      const supabase = createClient();
+      if (!supabase) return { error: "Auth not configured" };
+
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      return {};
+    },
+    [mockMode],
+  );
+
+  // ── Value ──────────────────────────────────────────────────────────────────
+
+  const value: AuthContextType = {
+    user,
+    isLoading,
+    isMockMode: mockMode,
+    signIn,
+    signOut,
+    resetPassword,
+    updatePassword,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}

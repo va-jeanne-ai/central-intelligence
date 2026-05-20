@@ -1,0 +1,3780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Central Intelligence — Web App Mockup</title>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #F3F4F6;
+      color: #111827;
+      line-height: 1.5;
+    }
+
+    /* ─── Design Tokens ────────────────────────────────────────── */
+    :root {
+      --gold:        #F59E0B;
+      --gold-light:  #FCD34D;
+      --gold-dark:   #D97706;
+      --sidebar:     #1F2937;
+      --sidebar-hover: #374151;
+      --sidebar-active: #374151;
+      --white:       #FFFFFF;
+      --gray-50:     #F9FAFB;
+      --gray-100:    #F3F4F6;
+      --gray-200:    #E5E7EB;
+      --gray-300:    #D1D5DB;
+      --gray-400:    #9CA3AF;
+      --gray-500:    #6B7280;
+      --gray-600:    #4B5563;
+      --gray-700:    #374151;
+      --gray-800:    #1F2937;
+      --gray-900:    #111827;
+      --marketing:   #10B981;
+      --sales:       #3B82F6;
+      --fulfillment: #F97316;
+      --danger:      #EF4444;
+      --radius-sm:   6px;
+      --radius:      10px;
+      --radius-lg:   16px;
+      --shadow-sm:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+      --shadow:      0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.05);
+      --shadow-md:   0 10px 15px rgba(0,0,0,.08), 0 4px 6px rgba(0,0,0,.05);
+    }
+
+    /* ─── Screen Separator ─────────────────────────────────────── */
+    .screen-label {
+      max-width: 1280px;
+      margin: 56px auto 0;
+      padding: 0 24px;
+    }
+    .screen-label h2 {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    .screen-label hr {
+      border: none;
+      border-top: 2px dashed var(--gray-300);
+      margin-bottom: 24px;
+    }
+
+    /* ─── App Shell ────────────────────────────────────────────── */
+    .app-shell {
+      max-width: 1280px;
+      margin: 0 auto 0;
+      padding: 0 24px 40px;
+    }
+    .app-frame {
+      display: flex;
+      height: 820px;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-md), 0 0 0 1px rgba(0,0,0,.06);
+    }
+
+    /* ─── Sidebar ──────────────────────────────────────────────── */
+    .sidebar {
+      width: 228px;
+      flex-shrink: 0;
+      background: var(--sidebar);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 22px 20px 18px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    .logo-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dark) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .logo-text {
+      font-size: 17px;
+      font-weight: 700;
+      color: #FFFFFF;
+      letter-spacing: -.02em;
+    }
+    .logo-sub {
+      font-size: 10px;
+      color: var(--gold-light);
+      font-weight: 500;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .sidebar-nav { flex: 1; padding: 12px 0; }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 20px;
+      cursor: pointer;
+      color: #9CA3AF;
+      font-size: 13.5px;
+      font-weight: 500;
+      border-radius: 0;
+      transition: background .15s, color .15s;
+      position: relative;
+    }
+    .nav-item:hover { background: var(--sidebar-hover); color: #E5E7EB; }
+    .nav-item.active {
+      background: rgba(245,158,11,.12);
+      color: var(--gold-light);
+    }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--gold);
+      border-radius: 0 3px 3px 0;
+    }
+    .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+    .nav-section-label {
+      padding: 16px 20px 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--gray-600);
+    }
+    .nav-section-label.marketing { color: rgba(16,185,129,.6); }
+    .nav-section-label.sales     { color: rgba(59,130,246,.6); }
+    .nav-section-label.fulfillment { color: rgba(249,115,22,.6); }
+    .nav-section-label.admin     { color: rgba(156,163,175,.5); }
+
+    .sidebar-footer {
+      padding: 16px 20px;
+      border-top: 1px solid rgba(255,255,255,.07);
+    }
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .user-name { font-size: 13px; font-weight: 600; color: #E5E7EB; }
+    .user-role { font-size: 11px; color: var(--gray-500); }
+
+    /* ─── Main Content ─────────────────────────────────────────── */
+    .main-content {
+      flex: 1;
+      background: var(--gray-50);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      background: var(--white);
+      border-bottom: 1px solid var(--gray-200);
+      padding: 0 28px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .topbar-title { font-size: 18px; font-weight: 700; color: var(--gray-900); }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .topbar-date { font-size: 13px; color: var(--gray-500); }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:hover { opacity: .9; transform: translateY(-1px); }
+    .btn-primary { background: var(--gold); color: var(--white); }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--gray-200);
+      color: var(--gray-700);
+    }
+    .btn-ghost:hover { background: var(--gray-100); }
+
+    .page-body { padding: 24px 28px; flex: 1; }
+
+    /* ─── Cards & Grids ────────────────────────────────────────── */
+    .card {
+      background: var(--white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      border: 1px solid var(--gray-200);
+    }
+    .card-header {
+      padding: 16px 20px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gray-800);
+    }
+    .card-body { padding: 16px 20px; }
+
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+    /* ─── KPI Cards ────────────────────────────────────────────── */
+    .kpi-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      border: 1px solid var(--gray-200);
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow .2s, transform .2s;
+    }
+    .kpi-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+    .kpi-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-500);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 8px;
+    }
+    .kpi-value {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--gray-900);
+      letter-spacing: -.03em;
+      line-height: 1;
+    }
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--gray-500);
+      margin-top: 6px;
+    }
+    .kpi-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 99px;
+      margin-top: 8px;
+    }
+    .badge-up { background: #D1FAE5; color: #065F46; }
+    .badge-down { background: #FEE2E2; color: #991B1B; }
+
+    /* ─── Dept Summary Cards ───────────────────────────────────── */
+    .dept-card {
+      border-radius: var(--radius);
+      padding: 20px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .dept-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+    .dept-card::after {
+      content: '';
+      position: absolute;
+      right: -20px;
+      bottom: -20px;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.08);
+    }
+    .dept-card.marketing { background: linear-gradient(135deg, #059669, #10B981); }
+    .dept-card.sales     { background: linear-gradient(135deg, #1D4ED8, #3B82F6); }
+    .dept-card.fulfillment { background: linear-gradient(135deg, #EA580C, #F97316); }
+    .dept-card-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; opacity: .8; }
+    .dept-card-title { font-size: 17px; font-weight: 700; margin: 4px 0 12px; }
+    .dept-card-stats { display: flex; gap: 20px; }
+    .dept-stat-val { font-size: 22px; font-weight: 800; display: block; letter-spacing: -.03em; }
+    .dept-stat-lbl { font-size: 11px; opacity: .75; }
+
+    /* ─── Central Intelligence Widget ─────────────────────────────────────── */
+    .ci-widget {
+      background: linear-gradient(135deg, #78350F 0%, #92400E 40%, #1F2937 100%);
+      border-radius: var(--radius);
+      padding: 20px;
+      color: #fff;
+      border: 1px solid rgba(245,158,11,.25);
+    }
+    .ci-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .ci-icon-wrap {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(245,158,11,.2);
+      border: 1.5px solid rgba(245,158,11,.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+    .ci-title { font-size: 14px; font-weight: 700; color: var(--gold-light); }
+    .ci-sub { font-size: 11px; color: rgba(255,255,255,.6); margin-top: 1px; }
+    .ci-recs { display: flex; flex-direction: column; gap: 8px; }
+    .ci-rec-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    .ci-rec-icon { font-size: 14px; margin-top: 1px; flex-shrink: 0; }
+    .ci-rec-text { color: rgba(255,255,255,.88); }
+    .ci-rec-text strong { color: var(--gold-light); font-weight: 700; }
+
+    /* ─── Chat Screen ──────────────────────────────────────────── */
+    .chat-wrapper {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .chat-messages {
+      flex: 1;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    .chat-msg { display: flex; gap: 10px; max-width: 84%; }
+    .chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
+    .chat-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .avatar-ci {
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+      border: 2px solid rgba(245,158,11,.3);
+    }
+    .avatar-user {
+      background: var(--sales);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .chat-bubble {
+      padding: 11px 15px;
+      border-radius: 16px;
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+    .bubble-ci {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      color: var(--gray-800);
+      border-top-left-radius: 4px;
+      box-shadow: var(--shadow-sm);
+    }
+    .bubble-user {
+      background: var(--sales);
+      color: #fff;
+      border-top-right-radius: 4px;
+    }
+    .bubble-tag {
+      display: inline-block;
+      background: rgba(245,158,11,.12);
+      color: var(--gold-dark);
+      border: 1px solid rgba(245,158,11,.25);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      margin: 4px 3px 2px 0;
+    }
+    .bubble-metric {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 700;
+      color: var(--gray-900);
+    }
+    .chat-time { font-size: 10px; color: var(--gray-400); margin-top: 4px; padding: 0 4px; }
+    .chat-input-bar {
+      background: var(--white);
+      border-top: 1px solid var(--gray-200);
+      padding: 14px 20px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .chat-input {
+      flex: 1;
+      border: 1px solid var(--gray-200);
+      border-radius: 24px;
+      padding: 10px 18px;
+      font-size: 13.5px;
+      color: var(--gray-400);
+      background: var(--gray-50);
+      outline: none;
+    }
+    .chat-send-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--gold);
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background .15s, transform .1s;
+    }
+    .chat-send-btn:hover { background: var(--gold-dark); transform: scale(1.05); }
+    .typing-indicator {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 15px;
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: 16px;
+      border-top-left-radius: 4px;
+      width: fit-content;
+    }
+    .typing-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--gray-400);
+    }
+
+    /* ─── Charts (Pure CSS) ────────────────────────────────────── */
+    .chart-wrapper { position: relative; }
+    /* Line Chart */
+    .line-chart { width: 100%; height: 140px; position: relative; }
+    .line-chart svg { width: 100%; height: 100%; }
+    /* Pie Chart */
+    .pie-section { display: flex; align-items: center; gap: 20px; }
+    .pie-svg { width: 120px; height: 120px; flex-shrink: 0; }
+    .legend { display: flex; flex-direction: column; gap: 8px; }
+    .legend-item { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--gray-700); }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ─── Funnel ───────────────────────────────────────────────── */
+    .funnel-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      padding: 8px 0;
+    }
+    .funnel-step {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      color: #fff;
+      font-weight: 700;
+      height: 40px;
+      min-width: 180px;
+      margin-bottom: 0;
+      transition: opacity .2s;
+      white-space: nowrap;
+      overflow: visible;
+    }
+    .funnel-step:hover { opacity: .9; }
+    .funnel-label {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .funnel-num { font-size: 16px; font-weight: 800; margin-right: 4px; }
+    .funnel-arrow {
+      color: var(--gray-300);
+      font-size: 18px;
+      line-height: 1;
+      margin: 2px auto;
+    }
+    .conv-rate { font-size: 10px; font-weight: 600; opacity: .85; margin-left: 8px; }
+
+    /* ─── Data Table ───────────────────────────────────────────── */
+    .filter-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .filter-input {
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      padding: 7px 12px;
+      font-size: 12.5px;
+      color: var(--gray-700);
+      background: var(--white);
+      outline: none;
+    }
+    .filter-input:focus { border-color: var(--gold); }
+    .filter-select {
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      padding: 7px 12px;
+      font-size: 12.5px;
+      color: var(--gray-700);
+      background: var(--white);
+      cursor: pointer;
+    }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      background: var(--gray-50);
+      border-bottom: 1px solid var(--gray-200);
+    }
+    .data-table td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--gray-100);
+      color: var(--gray-800);
+      vertical-align: middle;
+    }
+    .data-table tbody tr:hover { background: var(--gray-50); }
+    .data-table tbody tr:last-child td { border-bottom: none; }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-new      { background: #DBEAFE; color: #1E40AF; }
+    .badge-active   { background: #D1FAE5; color: #065F46; }
+    .badge-booked   { background: #EDE9FE; color: #5B21B6; }
+    .badge-applied  { background: #FEF3C7; color: #92400E; }
+    .badge-closed   { background: #D1FAE5; color: #065F46; }
+    .badge-lost     { background: #FEE2E2; color: #991B1B; }
+    .score-bar-wrap { width: 60px; height: 6px; background: var(--gray-200); border-radius: 3px; }
+    .score-bar { height: 6px; border-radius: 3px; background: var(--gold); }
+    .mini-btn {
+      padding: 4px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      color: var(--gray-700);
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .mini-btn:hover { background: var(--gray-100); }
+
+    /* ─── Sales Calls Screen ───────────────────────────────────── */
+    .upload-zone {
+      border: 2px dashed var(--gray-300);
+      border-radius: var(--radius);
+      padding: 24px;
+      text-align: center;
+      background: var(--gray-50);
+      transition: border-color .2s, background .2s;
+      cursor: pointer;
+    }
+    .upload-zone:hover { border-color: var(--gold); background: #FFFBEB; }
+    .upload-icon { font-size: 32px; margin-bottom: 8px; }
+    .upload-title { font-size: 14px; font-weight: 700; color: var(--gray-700); }
+    .upload-sub { font-size: 12px; color: var(--gray-400); margin-top: 4px; }
+    .upload-input-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+      max-width: 460px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .upload-url {
+      flex: 1;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--gray-500);
+      background: var(--white);
+    }
+
+    .calls-list { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+    .call-item {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .call-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+      cursor: pointer;
+    }
+    .call-header:hover { background: var(--gray-50); }
+    .call-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--sales);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .call-info { flex: 1; }
+    .call-name { font-size: 13.5px; font-weight: 700; color: var(--gray-900); }
+    .call-meta { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+    .call-badges { display: flex; gap: 6px; align-items: center; }
+    .call-expand { font-size: 16px; color: var(--gray-400); }
+    .call-detail { padding: 0 18px 16px; border-top: 1px solid var(--gray-100); }
+    .detail-section { margin-top: 14px; }
+    .detail-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .transcript-block {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-size: 12.5px;
+      color: var(--gray-700);
+      line-height: 1.6;
+      max-height: 90px;
+      overflow: hidden;
+      position: relative;
+    }
+    .transcript-block::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 32px;
+      background: linear-gradient(transparent, var(--gray-50));
+    }
+    .highlight { background: #FEF3C7; color: #92400E; border-radius: 3px; padding: 1px 3px; }
+    .pain-points { display: flex; flex-direction: column; gap: 5px; }
+    .pain-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      font-size: 12.5px;
+      color: var(--gray-700);
+      background: #FFF7ED;
+      border: 1px solid #FED7AA;
+      border-radius: var(--radius-sm);
+      padding: 7px 10px;
+    }
+    .pain-dot { color: var(--fulfillment); margin-top: 2px; }
+    .content-ideas { display: flex; flex-direction: column; gap: 5px; }
+    .idea-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      font-size: 12.5px;
+      color: var(--gray-700);
+      background: #F0FDF4;
+      border: 1px solid #BBF7D0;
+      border-radius: var(--radius-sm);
+      padding: 7px 10px;
+    }
+    .idea-icon { color: var(--marketing); }
+
+    /* ─── Members Screen ───────────────────────────────────────── */
+    .search-bar {
+      position: relative;
+      width: 280px;
+    }
+    .search-bar input {
+      width: 100%;
+      padding: 8px 12px 8px 34px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--gray-700);
+      background: var(--white);
+      outline: none;
+    }
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--gray-400);
+      font-size: 14px;
+    }
+
+    .member-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .member-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 18px 14px;
+      text-align: center;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow .2s, transform .2s;
+    }
+    .member-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+    .member-avatar-lg {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      margin: 0 auto 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .member-name { font-size: 13.5px; font-weight: 700; color: var(--gray-900); }
+    .member-join { font-size: 11px; color: var(--gray-400); margin-top: 3px; }
+    .member-status { margin-top: 8px; }
+
+    .member-detail-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .member-detail-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .member-detail-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--fulfillment), #EA580C);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .detail-name { font-size: 16px; font-weight: 800; color: var(--gray-900); }
+    .detail-sub { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+
+    .goal-item { margin-bottom: 12px; }
+    .goal-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+    .goal-label { font-size: 12.5px; font-weight: 600; color: var(--gray-700); }
+    .goal-pct { font-size: 12px; font-weight: 700; color: var(--gray-500); }
+    .progress-track { height: 8px; background: var(--gray-200); border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 8px; border-radius: 4px; }
+    .fill-gold       { background: linear-gradient(90deg, var(--gold-dark), var(--gold)); }
+    .fill-marketing  { background: linear-gradient(90deg, #059669, var(--marketing)); }
+    .fill-sales      { background: linear-gradient(90deg, #1D4ED8, var(--sales)); }
+
+    .history-list { display: flex; flex-direction: column; gap: 6px; }
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      background: var(--gray-50);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      color: var(--gray-700);
+      border: 1px solid var(--gray-100);
+    }
+    .history-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .history-date { color: var(--gray-400); margin-left: auto; }
+
+    /* ─── Notification dot ─────────────────────────────────────── */
+    .notif-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--gold);
+      flex-shrink: 0;
+    }
+
+    /* ─── Misc utilities ───────────────────────────────────────── */
+    .mt-4  { margin-top: 16px; }
+    .mt-6  { margin-top: 24px; }
+    .mb-4  { margin-bottom: 16px; }
+    .gap-3 { gap: 12px; }
+    .flex  { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .text-sm  { font-size: 12.5px; }
+    .text-muted { color: var(--gray-500); }
+    .font-bold { font-weight: 700; }
+    .divider {
+      border: none;
+      border-top: 1px solid var(--gray-100);
+      margin: 14px 0;
+    }
+
+    /* ─── Platform Tags ───────────────────────────────────────── */
+    .platform-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tag-instagram { background: #FCEEF3; color: #C13584; border: 1px solid #F0C0D4; }
+    .tag-facebook  { background: #E8F0FE; color: #1877F2; border: 1px solid #BFDBFE; }
+    .tag-twitter   { background: #E8F4FD; color: #1DA1F2; border: 1px solid #BAE6FD; }
+    .tag-linkedin  { background: #E8F1F8; color: #0A66C2; border: 1px solid #B4D5E8; }
+    .tag-all       { background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200); }
+
+    /* ─── Template Card ───────────────────────────────────────── */
+    .template-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow .2s, transform .2s;
+      cursor: pointer;
+    }
+    .template-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+    .template-card-title { font-size: 13px; font-weight: 700; color: var(--gray-800); margin-bottom: 6px; }
+    .template-card-preview {
+      font-size: 12px;
+      color: var(--gray-500);
+      line-height: 1.5;
+      margin-bottom: 8px;
+      max-height: 40px;
+      overflow: hidden;
+    }
+    .template-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .template-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+    .template-perf {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--marketing);
+      white-space: nowrap;
+    }
+    .copy-btn {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      background: var(--marketing);
+      color: var(--white);
+      border: none;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .copy-btn:hover { opacity: .85; }
+
+    /* ─── Offer Cards ─────────────────────────────────────────── */
+    .offer-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow .2s, transform .2s;
+    }
+    .offer-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+    .offer-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .offer-card-title { font-size: 14px; font-weight: 700; color: var(--gray-900); }
+    .offer-card-price { font-size: 18px; font-weight: 800; color: var(--marketing); }
+    .offer-features { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+    .offer-feature {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--gray-700);
+    }
+    .offer-feature-icon { color: var(--marketing); font-size: 12px; }
+    .icp-score-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--gray-50);
+      border: 1px solid var(--gray-100);
+      border-radius: var(--radius-sm);
+      margin-top: 8px;
+    }
+    .icp-score-label { font-size: 11px; font-weight: 600; color: var(--gray-500); }
+    .icp-score-value { font-size: 16px; font-weight: 800; color: var(--gold-dark); }
+    .icp-score-bar { flex: 1; height: 6px; background: var(--gray-200); border-radius: 3px; }
+    .icp-score-fill { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--gold-dark), var(--gold)); }
+    .badge-draft    { background: #FEF3C7; color: #92400E; }
+    .badge-archived { background: var(--gray-100); color: var(--gray-500); }
+
+    /* ─── Suggestion Panel ────────────────────────────────────── */
+    .suggestion-panel {
+      background: linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 100%);
+      border: 1px solid #BBF7D0;
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .suggestion-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #065F46;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .suggestion-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 10px;
+      background: rgba(255,255,255,.7);
+      border: 1px solid #D1FAE5;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      color: var(--gray-700);
+      margin-bottom: 6px;
+      line-height: 1.45;
+    }
+    .suggestion-icon { color: var(--marketing); flex-shrink: 0; margin-top: 1px; }
+
+    /* ─── Calendar Grid ───────────────────────────────────────── */
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 1px;
+      background: var(--gray-200);
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--gray-200);
+    }
+    .cal-header-cell {
+      background: var(--gray-50);
+      padding: 8px 4px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--gray-500);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .cal-cell {
+      background: var(--white);
+      padding: 6px 6px 4px;
+      min-height: 80px;
+      position: relative;
+    }
+    .cal-cell.other-month { background: var(--gray-50); }
+    .cal-cell.today { background: #FFFBEB; }
+    .cal-day { font-size: 11px; font-weight: 600; color: var(--gray-400); margin-bottom: 4px; }
+    .cal-cell.today .cal-day { color: var(--gold-dark); font-weight: 800; }
+    .cal-event {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 5px;
+      border-radius: 3px;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cal-event.marketing { background: #D1FAE5; color: #065F46; }
+    .cal-event.sales     { background: #DBEAFE; color: #1E40AF; }
+    .cal-event.fulfillment { background: #FED7AA; color: #9A3412; }
+    .cal-event.promo     { background: #EDE9FE; color: #5B21B6; }
+    .cal-event.dm        { background: #FCEEF3; color: #C13584; }
+
+    /* ─── Form Groups ─────────────────────────────────────────── */
+    .form-group { margin-bottom: 14px; }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-600);
+      margin-bottom: 5px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--gray-700);
+      background: var(--white);
+      outline: none;
+    }
+    .form-input:focus { border-color: var(--gold); }
+    .form-textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--gray-700);
+      background: var(--white);
+      outline: none;
+      resize: vertical;
+      min-height: 60px;
+      font-family: inherit;
+    }
+    .form-textarea:focus { border-color: var(--gold); }
+
+    /* ─── Page-level annotation ────────────────────────────────── */
+    .annotation-bar {
+      background: var(--gray-800);
+      color: var(--gray-300);
+      font-size: 12px;
+      padding: 8px 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .annotation-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); flex-shrink: 0; }
+
+    /* ─── Scrollbar styling ────────────────────────────────────── */
+    .main-content::-webkit-scrollbar,
+    .sidebar::-webkit-scrollbar { width: 5px; }
+    .main-content::-webkit-scrollbar-track { background: transparent; }
+    .main-content::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 9px; }
+    .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 9px; }
+
+    /* ─── Outer page padding ───────────────────────────────────── */
+    .page-top-header {
+      background: var(--gray-800);
+      padding: 18px 24px;
+      text-align: center;
+    }
+    .page-top-header h1 {
+      font-size: 20px;
+      font-weight: 800;
+      color: #FFFFFF;
+      letter-spacing: -.02em;
+    }
+    .page-top-header p {
+      font-size: 13px;
+      color: var(--gray-400);
+      margin-top: 4px;
+    }
+    .page-top-header .header-badges {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 10px;
+    }
+    .page-top-header .hbadge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 99px;
+      border: 1px solid;
+    }
+    .hbadge-gold   { background: rgba(245,158,11,.15); color: var(--gold-light); border-color: rgba(245,158,11,.3); }
+    .hbadge-green  { background: rgba(16,185,129,.12); color: #6EE7B7; border-color: rgba(16,185,129,.25); }
+    .hbadge-blue   { background: rgba(59,130,246,.12); color: #93C5FD; border-color: rgba(59,130,246,.25); }
+
+    /* mini sparkline dots */
+    .sparkline { display: flex; align-items: flex-end; gap: 3px; height: 32px; }
+    .spark-bar {
+      flex: 1;
+      border-radius: 2px 2px 0 0;
+      background: var(--gold);
+      opacity: .7;
+      transition: opacity .2s;
+    }
+    .spark-bar:hover { opacity: 1; }
+
+    /* ─── Login Screen ─────────────────────────────────────────── */
+    .login-screen {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 24px 40px;
+    }
+    .login-stage {
+      background: var(--sidebar);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md), 0 0 0 1px rgba(0,0,0,.06);
+      min-height: 820px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    /* subtle hex-pattern background shimmer */
+    .login-stage::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 20% 35%, rgba(245,158,11,.07) 0%, transparent 50%),
+        radial-gradient(circle at 80% 65%, rgba(245,158,11,.05) 0%, transparent 45%);
+      pointer-events: none;
+    }
+    .login-pair {
+      width: 100%;
+      display: flex;
+      gap: 40px;
+      align-items: flex-start;
+      justify-content: center;
+      position: relative;
+      z-index: 1;
+    }
+    .login-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+    .login-col-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+      align-self: flex-start;
+      padding-left: 2px;
+    }
+    .login-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 20px 40px rgba(0,0,0,.3), 0 0 0 1px rgba(0,0,0,.06);
+      width: 420px;
+      overflow: hidden;
+    }
+    .login-card-body {
+      padding: 36px 36px 28px;
+    }
+    /* Logo block inside card */
+    .login-logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+    .login-logo-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dark) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      box-shadow: 0 4px 12px rgba(245,158,11,.35);
+      margin-bottom: 12px;
+    }
+    .login-logo-name {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--gray-900);
+      letter-spacing: -.03em;
+    }
+    .login-logo-sub {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--gray-400);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+    .login-heading {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--gray-800);
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    /* Form fields */
+    .login-field {
+      margin-bottom: 16px;
+    }
+    .login-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--gray-700);
+      margin-bottom: 6px;
+      letter-spacing: .01em;
+    }
+    .login-input-wrap {
+      position: relative;
+    }
+    .login-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      font-size: 13.5px;
+      color: var(--gray-800);
+      background: var(--gray-50);
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+      font-family: inherit;
+    }
+    .login-input:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(245,158,11,.12);
+      background: var(--white);
+    }
+    .login-input.has-icon-right {
+      padding-right: 40px;
+    }
+    .login-input.error {
+      border-color: var(--danger);
+      background: #FFF5F5;
+    }
+    .login-input.error:focus {
+      box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+    }
+    .input-icon-right {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--gray-400);
+      font-size: 15px;
+      cursor: pointer;
+      user-select: none;
+    }
+    /* Remember / Forgot row */
+    .login-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 22px;
+      margin-top: 4px;
+    }
+    .login-remember {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12.5px;
+      color: var(--gray-600);
+      cursor: pointer;
+    }
+    .login-remember input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
+    .login-forgot {
+      font-size: 12.5px;
+      color: var(--gray-400);
+      text-decoration: none;
+      cursor: default;
+    }
+    /* Sign In button */
+    .login-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px 20px;
+      border-radius: var(--radius-sm);
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--white);
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dark) 100%);
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(245,158,11,.3);
+      transition: opacity .15s, transform .1s, box-shadow .15s;
+      font-family: inherit;
+    }
+    .login-btn:hover {
+      opacity: .93;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(245,158,11,.4);
+    }
+    /* Powered-by footer */
+    .login-powered {
+      font-size: 11.5px;
+      color: var(--gray-500);
+      margin-top: 20px;
+      letter-spacing: .02em;
+    }
+    .login-powered span {
+      color: var(--gold);
+      font-weight: 700;
+    }
+    /* Error banner */
+    .login-error-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: #FEF2F2;
+      border: 1px solid #FECACA;
+      border-radius: var(--radius-sm);
+      padding: 11px 14px;
+      margin-bottom: 20px;
+    }
+    .login-error-icon {
+      font-size: 15px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .login-error-text {
+      font-size: 13px;
+      color: #991B1B;
+      line-height: 1.45;
+    }
+    .login-error-text strong {
+      font-weight: 700;
+      display: block;
+      margin-bottom: 1px;
+    }
+    .login-attempts {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      margin-bottom: 8px;
+    }
+    .attempt-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .attempt-dot.used   { background: var(--danger); }
+    .attempt-dot.avail  { background: var(--gray-300); }
+    .login-attempts-label {
+      font-size: 11.5px;
+      color: var(--gray-500);
+      margin-left: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════
+     PAGE HEADER
+══════════════════════════════════════════════════════════════════ -->
+<div class="page-top-header">
+  <h1>Central Intelligence — Web App Mockup</h1>
+  <p>Client presentation reference — 6 screens shown below, scrollable</p>
+  <div class="header-badges">
+    <span class="hbadge hbadge-gold">Next.js Web App</span>
+    <span class="hbadge hbadge-green">AI-Powered</span>
+    <span class="hbadge hbadge-blue">Agent Integrated</span>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     SCREEN 0 — LOGIN
+══════════════════════════════════════════════════════════════════ -->
+<div class="screen-label">
+  <h2>Screen 0 &mdash; Login &nbsp;/&nbsp; Route: /login</h2>
+  <hr />
+</div>
+
+<div id="screen-login" class="login-screen">
+  <div class="login-stage">
+
+    <div class="login-pair">
+
+      <!-- ── DEFAULT STATE ──────────────────────────── -->
+      <div class="login-col">
+        <div class="login-col-label">Default state</div>
+        <div class="login-card">
+          <div class="login-card-body">
+
+            <!-- Logo -->
+            <div class="login-logo">
+              <div class="login-logo-icon">&#x1F41D;</div>
+              <div class="login-logo-name">Central Intelligence</div>
+              <div class="login-logo-sub">AI Command Center</div>
+            </div>
+
+            <div class="login-heading">Sign in to your account</div>
+
+            <!-- Email field -->
+            <div class="login-field">
+              <label class="login-label" for="email-default">Email address</label>
+              <div class="login-input-wrap">
+                <input
+                  class="login-input"
+                  id="email-default"
+                  type="email"
+                  placeholder="you@company.com"
+                  value="hans@centralintelligence.ai"
+                  readonly
+                />
+              </div>
+            </div>
+
+            <!-- Password field -->
+            <div class="login-field">
+              <label class="login-label" for="pw-default">Password</label>
+              <div class="login-input-wrap">
+                <input
+                  class="login-input has-icon-right"
+                  id="pw-default"
+                  type="password"
+                  placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+                  value="placeholder"
+                  readonly
+                />
+                <span class="input-icon-right" title="Show / hide password">&#128065;</span>
+              </div>
+            </div>
+
+            <!-- Remember me / Forgot password -->
+            <div class="login-row">
+              <label class="login-remember">
+                <input type="checkbox" checked readonly /> Remember me
+              </label>
+              <a class="login-forgot" href="#">Forgot password?</a>
+            </div>
+
+            <!-- Sign In button -->
+            <button class="login-btn">
+              <span>&#x1F41D;</span> Sign In
+            </button>
+
+          </div><!-- /.login-card-body -->
+        </div><!-- /.login-card -->
+        <div class="login-powered">Powered by <span>Central Intelligence AI</span></div>
+      </div><!-- /.login-col default -->
+
+
+      <!-- ── ERROR STATE ────────────────────────────── -->
+      <div class="login-col">
+        <div class="login-col-label">Error state &mdash; failed attempt</div>
+        <div class="login-card">
+          <div class="login-card-body">
+
+            <!-- Logo -->
+            <div class="login-logo">
+              <div class="login-logo-icon">&#x1F41D;</div>
+              <div class="login-logo-name">Central Intelligence</div>
+              <div class="login-logo-sub">AI Command Center</div>
+            </div>
+
+            <div class="login-heading">Sign in to your account</div>
+
+            <!-- Error banner -->
+            <div class="login-error-banner">
+              <span class="login-error-icon">&#x26A0;&#xFE0F;</span>
+              <div class="login-error-text">
+                <strong>Invalid email or password.</strong>
+                Please check your credentials and try again.
+              </div>
+            </div>
+
+            <!-- Attempt counter -->
+            <div class="login-attempts">
+              <span class="attempt-dot used"></span>
+              <span class="attempt-dot used"></span>
+              <span class="attempt-dot used"></span>
+              <span class="attempt-dot avail"></span>
+              <span class="attempt-dot avail"></span>
+              <span class="login-attempts-label">3 of 5 attempts remaining</span>
+            </div>
+
+            <!-- Email field — error state -->
+            <div class="login-field">
+              <label class="login-label" for="email-error">Email address</label>
+              <div class="login-input-wrap">
+                <input
+                  class="login-input error"
+                  id="email-error"
+                  type="email"
+                  placeholder="you@company.com"
+                  value="hans@centralintelligence.ai"
+                  readonly
+                />
+              </div>
+            </div>
+
+            <!-- Password field — error state -->
+            <div class="login-field">
+              <label class="login-label" for="pw-error">Password</label>
+              <div class="login-input-wrap">
+                <input
+                  class="login-input error has-icon-right"
+                  id="pw-error"
+                  type="password"
+                  placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+                  value="placeholder"
+                  readonly
+                />
+                <span class="input-icon-right" title="Show / hide password">&#128065;</span>
+              </div>
+            </div>
+
+            <!-- Remember me / Forgot password -->
+            <div class="login-row">
+              <label class="login-remember">
+                <input type="checkbox" readonly /> Remember me
+              </label>
+              <a class="login-forgot" href="#">Forgot password?</a>
+            </div>
+
+            <!-- Sign In button -->
+            <button class="login-btn">
+              <span>&#x1F41D;</span> Sign In
+            </button>
+
+          </div><!-- /.login-card-body -->
+        </div><!-- /.login-card -->
+        <div class="login-powered">Powered by <span>Central Intelligence AI</span></div>
+      </div><!-- /.login-col error -->
+
+    </div><!-- /.login-pair -->
+
+  </div><!-- /.login-stage -->
+</div><!-- /#screen-login -->
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     SCREEN 1 — DASHBOARD
+══════════════════════════════════════════════════════════════════ -->
+<div class="screen-label">
+  <h2>Screen 1 — Dashboard &nbsp;/&nbsp; Route: /</h2>
+  <hr />
+</div>
+<div class="app-shell" id="screen-dashboard">
+  <div class="app-frame">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">&#x1F41D;</div>
+        <div>
+          <div class="logo-text">Central Intelligence</div>
+          <div class="logo-sub">AI Command Center</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-item active">
+          <span class="nav-icon">&#x1F4CA;</span> Dashboard
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F451;</span> Central Intelligence Chat
+        </div>
+
+        <div class="nav-section-label sales">Sales</div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F9F2;</span> Leads
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F4DE;</span> Sales Calls
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F4C5;</span> Appointments
+        </div>
+
+        <div class="nav-section-label fulfillment">Fulfillment</div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F465;</span> Members
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F3AF;</span> Coaching Calls
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x2705;</span> Accountability
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F6E0;</span> Tech SOS
+        </div>
+
+        <div class="nav-section-label marketing">Marketing</div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F4F1;</span> Social Media
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x2709;</span> Email
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F4C8;</span> Funnels
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F4E2;</span> Ads
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F4AC;</span> DM
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F381;</span> Offers
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F4C5;</span> Promo Calendar
+        </div>
+
+        <div class="nav-section-label admin">Admin</div>
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F4E5;</span> Data Import
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-pill">
+          <div class="user-avatar">JD</div>
+          <div>
+            <div class="user-name">Jade Doe</div>
+            <div class="user-role">Admin</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="main-content">
+      <div class="annotation-bar">
+        <div class="annotation-dot"></div>
+        Route: / &nbsp;|&nbsp; Dashboard — Business-wide overview with AI recommendations
+      </div>
+      <div class="topbar">
+        <div class="topbar-title">Dashboard</div>
+        <div class="topbar-right">
+          <span class="topbar-date">Week of Mar 3, 2026</span>
+          <button class="btn btn-primary">&#x1F451; Ask Central Intelligence</button>
+        </div>
+      </div>
+
+      <div class="page-body">
+        <!-- Dept Cards -->
+        <div class="grid-3 mb-4">
+          <div class="dept-card marketing">
+            <div class="dept-card-label">Department</div>
+            <div class="dept-card-title">&#x1F4F1; Marketing</div>
+            <div class="dept-card-stats">
+              <div>
+                <span class="dept-stat-val">8.4%</span>
+                <span class="dept-stat-lbl">Email CTR</span>
+              </div>
+              <div>
+                <span class="dept-stat-val">12k</span>
+                <span class="dept-stat-lbl">Social Reach</span>
+              </div>
+              <div>
+                <span class="dept-stat-val">2.1x</span>
+                <span class="dept-stat-lbl">ROAS</span>
+              </div>
+            </div>
+          </div>
+          <div class="dept-card sales">
+            <div class="dept-card-label">Department</div>
+            <div class="dept-card-title">&#x1F4DE; Sales</div>
+            <div class="dept-card-stats">
+              <div>
+                <span class="dept-stat-val">47</span>
+                <span class="dept-stat-lbl">New Leads</span>
+              </div>
+              <div>
+                <span class="dept-stat-val">12.3%</span>
+                <span class="dept-stat-lbl">Conv. Rate</span>
+              </div>
+              <div>
+                <span class="dept-stat-val">$62k</span>
+                <span class="dept-stat-lbl">Pipeline</span>
+              </div>
+            </div>
+          </div>
+          <div class="dept-card fulfillment">
+            <div class="dept-card-label">Department</div>
+            <div class="dept-card-title">&#x1F465; Fulfillment</div>
+            <div class="dept-card-stats">
+              <div>
+                <span class="dept-stat-val">84</span>
+                <span class="dept-stat-lbl">Active Members</span>
+              </div>
+              <div>
+                <span class="dept-stat-val">91%</span>
+                <span class="dept-stat-lbl">Satisfaction</span>
+              </div>
+              <div>
+                <span class="dept-stat-val">7</span>
+                <span class="dept-stat-lbl">Calls This Wk</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPI Row + Central Intelligence Widget -->
+        <div class="grid-2 mt-4" style="grid-template-columns: 1fr 380px;">
+          <!-- KPI + Sparkline -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Weekly Performance Snapshot</span>
+              <span class="text-sm text-muted">vs last week</span>
+            </div>
+            <div class="card-body">
+              <div class="grid-4">
+                <div class="kpi-card">
+                  <div class="kpi-label">Total Leads</div>
+                  <div class="kpi-value">1,247</div>
+                  <span class="kpi-badge badge-up">&#x2191; 14%</span>
+                  <div class="kpi-sub">All time</div>
+                </div>
+                <div class="kpi-card">
+                  <div class="kpi-label">This Week</div>
+                  <div class="kpi-value">47</div>
+                  <span class="kpi-badge badge-up">&#x2191; 9%</span>
+                  <div class="kpi-sub">7-day window</div>
+                </div>
+                <div class="kpi-card">
+                  <div class="kpi-label">Calls Booked</div>
+                  <div class="kpi-value">11</div>
+                  <span class="kpi-badge badge-down">&#x2193; 3%</span>
+                  <div class="kpi-sub">This week</div>
+                </div>
+                <div class="kpi-card">
+                  <div class="kpi-label">Revenue</div>
+                  <div class="kpi-value">$18.4k</div>
+                  <span class="kpi-badge badge-up">&#x2191; 22%</span>
+                  <div class="kpi-sub">This month</div>
+                </div>
+              </div>
+              <!-- Sparkline mini chart -->
+              <div style="margin-top:16px;">
+                <div class="text-sm text-muted mb-4" style="margin-bottom:8px;">Lead Volume — Last 8 Weeks</div>
+                <div class="sparkline">
+                  <div class="spark-bar" style="height:45%"></div>
+                  <div class="spark-bar" style="height:55%"></div>
+                  <div class="spark-bar" style="height:40%"></div>
+                  <div class="spark-bar" style="height:70%"></div>
+                  <div class="spark-bar" style="height:60%"></div>
+                  <div class="spark-bar" style="height:80%"></div>
+                  <div class="spark-bar" style="height:65%"></div>
+                  <div class="spark-bar" style="height:100%; background: var(--gold-dark);"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Central Intelligence Widget -->
+          <div class="ci-widget">
+            <div class="ci-header">
+              <div class="ci-icon-wrap">&#x1F451;</div>
+              <div>
+                <div class="ci-title">Central Intelligence Recommendations</div>
+                <div class="ci-sub">Focus areas for this week — AI-generated</div>
+              </div>
+            </div>
+            <div class="ci-recs">
+              <div class="ci-rec-item">
+                <span class="ci-rec-icon">&#x1F4DE;</span>
+                <div class="ci-rec-text">
+                  <strong>Follow up on 23 stale applications</strong> — average age is 11 days. Book a call before they go cold.
+                </div>
+              </div>
+              <div class="ci-rec-item">
+                <span class="ci-rec-icon">&#x1F4C8;</span>
+                <div class="ci-rec-text">
+                  <strong>Webinar funnel conversion dropped 4%</strong> — last email sequence had low CTR (2.1%). A/B test the CTA.
+                </div>
+              </div>
+              <div class="ci-rec-item">
+                <span class="ci-rec-icon">&#x1F3AF;</span>
+                <div class="ci-rec-text">
+                  <strong>3 members missed their weekly submission</strong> — proactive check-in could prevent churn.
+                </div>
+              </div>
+              <div class="ci-rec-item">
+                <span class="ci-rec-icon">&#x2B50;</span>
+                <div class="ci-rec-text">
+                  <strong>Pain point "cash flow" appeared in 7 sales calls</strong> — strong angle for next email campaign.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     SCREEN 2 — CENTRAL INTELLIGENCE CHAT
+══════════════════════════════════════════════════════════════════ -->
+<div class="screen-label" style="margin-top:64px;">
+  <h2>Screen 2 — Central Intelligence Chat &nbsp;/&nbsp; Route: /chat</h2>
+  <hr />
+</div>
+<div class="app-shell" id="screen-chat">
+  <div class="app-frame">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">&#x1F41D;</div>
+        <div>
+          <div class="logo-text">Central Intelligence</div>
+          <div class="logo-sub">AI Command Center</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item">
+          <span class="nav-icon">&#x1F4CA;</span> Dashboard
+        </div>
+        <div class="nav-item active">
+          <span class="nav-icon">&#x1F451;</span> Central Intelligence Chat
+        </div>
+        <div class="nav-section-label sales">Sales</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F9F2;</span> Leads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4DE;</span> Sales Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Appointments</div>
+        <div class="nav-section-label fulfillment">Fulfillment</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F465;</span> Members</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F3AF;</span> Coaching Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x2705;</span> Accountability</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F6E0;</span> Tech SOS</div>
+        <div class="nav-section-label marketing">Marketing</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4F1;</span> Social Media</div>
+        <div class="nav-item"><span class="nav-icon">&#x2709;</span> Email</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C8;</span> Funnels</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E2;</span> Ads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4AC;</span> DM</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F381;</span> Offers</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Promo Calendar</div>
+        <div class="nav-section-label admin">Admin</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E5;</span> Data Import</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-pill">
+          <div class="user-avatar">JD</div>
+          <div><div class="user-name">Jade Doe</div><div class="user-role">Admin</div></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CHAT MAIN -->
+    <div class="main-content">
+      <div class="annotation-bar">
+        <div class="annotation-dot"></div>
+        Route: /chat &nbsp;|&nbsp; Central Intelligence has cross-department data access — leads, calls, members, marketing metrics
+      </div>
+      <div class="topbar">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#F59E0B,#D97706);display:flex;align-items:center;justify-content:center;font-size:18px;">&#x1F451;</div>
+          <div>
+            <div class="topbar-title" style="font-size:16px;">Central Intelligence</div>
+            <div style="font-size:11px;color:#10B981;font-weight:600;">&#x25CF; Online — connected to all data sources</div>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-ghost">&#x1F9F9; Clear chat</button>
+          <button class="btn btn-ghost">&#x1F4BE; Export</button>
+        </div>
+      </div>
+
+      <!-- CHAT AREA -->
+      <div class="chat-wrapper" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+        <div class="chat-messages">
+
+          <!-- C.I. opening -->
+          <div class="chat-msg">
+            <div class="chat-avatar avatar-ci">&#x1F451;</div>
+            <div>
+              <div class="chat-bubble bubble-ci">
+                Good morning! I have access to your full business data across Sales, Marketing, and Fulfillment. What would you like to explore or optimize today?
+              </div>
+              <div class="chat-time">9:02 AM</div>
+            </div>
+          </div>
+
+          <!-- User message 1 -->
+          <div class="chat-msg user">
+            <div class="chat-avatar avatar-user">JD</div>
+            <div style="text-align:right;">
+              <div class="chat-bubble bubble-user">How many leads did we get this week?</div>
+              <div class="chat-time">9:03 AM</div>
+            </div>
+          </div>
+
+          <!-- C.I. response 1 -->
+          <div class="chat-msg">
+            <div class="chat-avatar avatar-ci">&#x1F451;</div>
+            <div>
+              <div class="chat-bubble bubble-ci">
+                This week we received <span class="bubble-metric">47 new leads</span> — that's up 9% from last week's 43.
+                <br /><br />
+                Breakdown by source:
+                <br />
+                <span class="bubble-tag">Webinar</span> 21 leads (45%)
+                <span class="bubble-tag">VSL</span> 14 leads (30%)
+                <span class="bubble-tag">Opt-in</span> 12 leads (25%)
+                <br /><br />
+                Your best-performing day was Tuesday with 12 leads. Want me to break down quality scores or show which source has the highest close rate?
+              </div>
+              <div class="chat-time">9:03 AM</div>
+            </div>
+          </div>
+
+          <!-- User message 2 -->
+          <div class="chat-msg user">
+            <div class="chat-avatar avatar-user">JD</div>
+            <div style="text-align:right;">
+              <div class="chat-bubble bubble-user">Yes — which source closes best? And what should we focus on this week?</div>
+              <div class="chat-time">9:04 AM</div>
+            </div>
+          </div>
+
+          <!-- C.I. response 2 -->
+          <div class="chat-msg">
+            <div class="chat-avatar avatar-ci">&#x1F451;</div>
+            <div>
+              <div class="chat-bubble bubble-ci">
+                <strong>Close rate by source (last 90 days):</strong>
+                <br />
+                <span class="bubble-tag">Webinar</span> 18.4% close rate — highest quality
+                <span class="bubble-tag">VSL</span> 11.2% close rate
+                <span class="bubble-tag">Opt-in</span> 7.9% close rate
+                <br /><br />
+                <strong>My recommendation for this week:</strong>
+                <br />
+                1. Webinar leads are converting best — prioritize the 8 webinar leads that haven't booked yet with a same-day follow-up call.
+                <br /><br />
+                2. Pain point "cash flow" appeared in 7 of your last 12 sales calls — consider addressing this objection directly in your next VSL hook.
+                <br /><br />
+                3. Three members are at risk of going inactive. A quick check-in call this week could prevent churn.
+              </div>
+              <div class="chat-time">9:04 AM</div>
+            </div>
+          </div>
+
+          <!-- Typing indicator -->
+          <div class="chat-msg">
+            <div class="chat-avatar avatar-ci">&#x1F451;</div>
+            <div>
+              <div class="typing-indicator">
+                <div class="typing-dot"></div>
+                <div class="typing-dot" style="opacity:.6"></div>
+                <div class="typing-dot" style="opacity:.3"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Input bar -->
+        <div class="chat-input-bar">
+          <input class="chat-input" type="text" placeholder="Ask Central Intelligence anything — leads, members, content ideas, optimization..." />
+          <button class="chat-send-btn">&#x27A4;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     SCREEN 3 — LEADS DASHBOARD
+══════════════════════════════════════════════════════════════════ -->
+<div class="screen-label" style="margin-top:64px;">
+  <h2>Screen 3 — Leads Dashboard &nbsp;/&nbsp; Route: /sales/leads</h2>
+  <hr />
+</div>
+<div class="app-shell" id="screen-leads">
+  <div class="app-frame">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">&#x1F41D;</div>
+        <div>
+          <div class="logo-text">Central Intelligence</div>
+          <div class="logo-sub">AI Command Center</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item"><span class="nav-icon">&#x1F4CA;</span> Dashboard</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F451;</span> Central Intelligence Chat</div>
+        <div class="nav-section-label sales">Sales</div>
+        <div class="nav-item active"><span class="nav-icon">&#x1F9F2;</span> Leads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4DE;</span> Sales Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Appointments</div>
+        <div class="nav-section-label fulfillment">Fulfillment</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F465;</span> Members</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F3AF;</span> Coaching Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x2705;</span> Accountability</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F6E0;</span> Tech SOS</div>
+        <div class="nav-section-label marketing">Marketing</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4F1;</span> Social Media</div>
+        <div class="nav-item"><span class="nav-icon">&#x2709;</span> Email</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C8;</span> Funnels</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E2;</span> Ads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4AC;</span> DM</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F381;</span> Offers</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Promo Calendar</div>
+        <div class="nav-section-label admin">Admin</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E5;</span> Data Import</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-pill">
+          <div class="user-avatar">JD</div>
+          <div><div class="user-name">Jade Doe</div><div class="user-role">Admin</div></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- LEADS MAIN -->
+    <div class="main-content">
+      <div class="annotation-bar">
+        <div class="annotation-dot"></div>
+        Route: /sales/leads &nbsp;|&nbsp; Synced from GHL / Airtable — leads, appointments, applications, sales tracked in one view
+      </div>
+      <div class="topbar">
+        <div class="topbar-title">Leads</div>
+        <div class="topbar-right">
+          <button class="btn btn-ghost">&#x1F4E5; Export CSV</button>
+          <button class="btn btn-primary">+ Add Lead</button>
+        </div>
+      </div>
+
+      <div class="page-body" style="overflow-y:auto;">
+        <!-- KPI Row -->
+        <div class="grid-4 mb-4">
+          <div class="kpi-card" style="border-top: 3px solid var(--sales);">
+            <div class="kpi-label">Total Leads</div>
+            <div class="kpi-value">1,247</div>
+            <span class="kpi-badge badge-up">&#x2191; 14%</span>
+            <div class="kpi-sub">All time</div>
+          </div>
+          <div class="kpi-card" style="border-top: 3px solid var(--gold);">
+            <div class="kpi-label">This Week</div>
+            <div class="kpi-value">47</div>
+            <span class="kpi-badge badge-up">&#x2191; 9%</span>
+            <div class="kpi-sub">Mar 3 – Mar 9</div>
+          </div>
+          <div class="kpi-card" style="border-top: 3px solid var(--marketing);">
+            <div class="kpi-label">Conversion Rate</div>
+            <div class="kpi-value">12.3%</div>
+            <span class="kpi-badge badge-up">&#x2191; 1.2pt</span>
+            <div class="kpi-sub">Lead to sale</div>
+          </div>
+          <div class="kpi-card" style="border-top: 3px solid var(--fulfillment);">
+            <div class="kpi-label">Active Applications</div>
+            <div class="kpi-value">23</div>
+            <span class="kpi-badge badge-down">&#x2193; 4</span>
+            <div class="kpi-sub">Awaiting review</div>
+          </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid-2 mb-4">
+          <!-- Line Chart Card -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">Lead Volume — Last 8 Weeks</span></div>
+            <div class="card-body">
+              <svg class="line-chart" viewBox="0 0 400 120" preserveAspectRatio="none">
+                <!-- Grid lines -->
+                <line x1="0" y1="30" x2="400" y2="30" stroke="#F3F4F6" stroke-width="1"/>
+                <line x1="0" y1="60" x2="400" y2="60" stroke="#F3F4F6" stroke-width="1"/>
+                <line x1="0" y1="90" x2="400" y2="90" stroke="#F3F4F6" stroke-width="1"/>
+                <!-- Area fill -->
+                <defs>
+                  <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.2"/>
+                    <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.02"/>
+                  </linearGradient>
+                </defs>
+                <polygon
+                  points="0,90 50,78 100,85 150,60 200,70 250,45 300,55 350,30 400,38 400,120 0,120"
+                  fill="url(#lineGrad)"/>
+                <!-- Line -->
+                <polyline
+                  points="0,90 50,78 100,85 150,60 200,70 250,45 300,55 350,30 400,38"
+                  fill="none" stroke="#3B82F6" stroke-width="2.5" stroke-linejoin="round"/>
+                <!-- Data points -->
+                <circle cx="0"   cy="90" r="4" fill="#3B82F6"/>
+                <circle cx="50"  cy="78" r="4" fill="#3B82F6"/>
+                <circle cx="100" cy="85" r="4" fill="#3B82F6"/>
+                <circle cx="150" cy="60" r="4" fill="#3B82F6"/>
+                <circle cx="200" cy="70" r="4" fill="#3B82F6"/>
+                <circle cx="250" cy="45" r="4" fill="#3B82F6"/>
+                <circle cx="300" cy="55" r="4" fill="#3B82F6"/>
+                <circle cx="350" cy="30" r="4" fill="#3B82F6"/>
+                <circle cx="400" cy="38" r="5" fill="#1D4ED8" stroke="#DBEAFE" stroke-width="2"/>
+                <!-- X labels -->
+                <text x="0"   y="116" font-size="9" fill="#9CA3AF" text-anchor="middle">Wk 1</text>
+                <text x="50"  y="116" font-size="9" fill="#9CA3AF" text-anchor="middle">Wk 2</text>
+                <text x="100" y="116" font-size="9" fill="#9CA3AF" text-anchor="middle">Wk 3</text>
+                <text x="150" y="116" font-size="9" fill="#9CA3AF" text-anchor="middle">Wk 4</text>
+                <text x="200" y="116" font-size="9" fill="#9CA3AF" text-anchor="middle">Wk 5</text>
+                <text x="250" y="116" font-size="9" fill="#9CA3AF" text-anchor="middle">Wk 6</text>
+                <text x="300" y="116" font-size="9" fill="#9CA3AF" text-anchor="middle">Wk 7</text>
+                <text x="350" y="116" font-size="9" fill="#9CA3AF" text-anchor="middle">Wk 8</text>
+                <text x="400" y="116" font-size="9" fill="#1D4ED8" text-anchor="middle" font-weight="700">Now</text>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Pie Chart Card -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">Source Breakdown</span></div>
+            <div class="card-body">
+              <div class="pie-section">
+                <svg class="pie-svg" viewBox="0 0 120 120">
+                  <!-- Webinar 45% — from 0deg — gold -->
+                  <circle cx="60" cy="60" r="45" fill="none" stroke="#F59E0B" stroke-width="28"
+                    stroke-dasharray="127.2 155.8" stroke-dashoffset="0"/>
+                  <!-- VSL 30% — gold offset -->
+                  <circle cx="60" cy="60" r="45" fill="none" stroke="#3B82F6" stroke-width="28"
+                    stroke-dasharray="84.8 198.2" stroke-dashoffset="-127.2"/>
+                  <!-- Opt-in 25% -->
+                  <circle cx="60" cy="60" r="45" fill="none" stroke="#10B981" stroke-width="28"
+                    stroke-dasharray="70.7 212.3" stroke-dashoffset="-212"/>
+                  <circle cx="60" cy="60" r="32" fill="white"/>
+                  <text x="60" y="57" text-anchor="middle" font-size="13" font-weight="800" fill="#1F2937">1,247</text>
+                  <text x="60" y="70" text-anchor="middle" font-size="8" fill="#9CA3AF">total leads</text>
+                </svg>
+                <div class="legend">
+                  <div class="legend-item">
+                    <div class="legend-dot" style="background:#F59E0B;"></div>
+                    <span>Webinar — <strong>45%</strong> (561 leads)</span>
+                  </div>
+                  <div class="legend-item">
+                    <div class="legend-dot" style="background:#3B82F6;"></div>
+                    <span>VSL — <strong>30%</strong> (374 leads)</span>
+                  </div>
+                  <div class="legend-item">
+                    <div class="legend-dot" style="background:#10B981;"></div>
+                    <span>Opt-in — <strong>25%</strong> (312 leads)</span>
+                  </div>
+                  <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--gray-200);">
+                    <div style="font-size:11px;color:var(--gray-500);font-weight:600;">Best close rate</div>
+                    <div style="font-size:13px;font-weight:700;color:var(--gold-dark);">Webinar — 18.4%</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Funnel -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <span class="card-title">Sales Funnel Overview</span>
+            <span class="text-sm text-muted">All time &bull; Updated live</span>
+          </div>
+          <div class="card-body">
+            <div style="display:flex;gap:8px;align-items:stretch;">
+              <div class="funnel-wrap" style="flex:1;">
+                <div class="funnel-step" style="background:#3B82F6; width:100%;">
+                  <span class="funnel-num">1,247</span><span class="funnel-label">Leads</span>
+                </div>
+                <div class="funnel-arrow">&#x25BC;</div>
+                <div class="funnel-step" style="background:#8B5CF6; width:70%;">
+                  <span class="funnel-num">487</span><span class="funnel-label">Appointments</span><span class="conv-rate">39.1%</span>
+                </div>
+                <div class="funnel-arrow">&#x25BC;</div>
+                <div class="funnel-step" style="background:#F59E0B; width:48%;">
+                  <span class="funnel-num">198</span><span class="funnel-label">Applications</span><span class="conv-rate">40.7%</span>
+                </div>
+                <div class="funnel-arrow">&#x25BC;</div>
+                <div class="funnel-step" style="background:#10B981; width:30%;">
+                  <span class="funnel-num">62</span><span class="funnel-label">Sales</span><span class="conv-rate">31.3%</span>
+                </div>
+              </div>
+              <div style="width:180px;padding-left:20px;border-left:1px solid var(--gray-200);display:flex;flex-direction:column;justify-content:center;gap:16px;">
+                <div>
+                  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-400);">Overall Conv.</div>
+                  <div style="font-size:22px;font-weight:800;color:var(--gray-900);">4.97%</div>
+                  <div style="font-size:11px;color:var(--gray-500);">Lead to sale</div>
+                </div>
+                <div>
+                  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-400);">Avg Deal Value</div>
+                  <div style="font-size:22px;font-weight:800;color:var(--marketing);">$2,980</div>
+                  <div style="font-size:11px;color:var(--gray-500);">Per closed sale</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter + Table -->
+        <div class="card">
+          <div class="card-header" style="padding-bottom:14px;">
+            <span class="card-title">Lead Records</span>
+            <span class="text-sm text-muted">Showing 6 of 1,247</span>
+          </div>
+          <div style="padding: 0 20px 14px;">
+            <div class="filter-bar">
+              <input class="filter-input" type="text" placeholder="&#x1F50D; Search by name or email..." style="min-width:200px;"/>
+              <select class="filter-select">
+                <option>All Sources</option>
+                <option>Webinar</option>
+                <option>VSL</option>
+                <option>Opt-in</option>
+              </select>
+              <select class="filter-select">
+                <option>All Statuses</option>
+                <option>New</option>
+                <option>Booked</option>
+                <option>Applied</option>
+                <option>Closed</option>
+                <option>Lost</option>
+              </select>
+              <input class="filter-input" type="text" placeholder="Date range" style="width:150px;" value="Mar 1 – Mar 9"/>
+              <button class="btn btn-ghost" style="margin-left:auto;">Clear filters</button>
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Source</th>
+                  <th>Date Added</th>
+                  <th>Status</th>
+                  <th>Score</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Sarah Mitchell</strong><br/><span style="font-size:11px;color:var(--gray-400);">sarah@example.com</span></td>
+                  <td><span class="status-badge" style="background:#FEF3C7;color:#92400E;">Webinar</span></td>
+                  <td>Mar 7, 2026</td>
+                  <td><span class="status-badge badge-booked">&#x25CF; Booked</span></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;"></div></div>
+                      <span style="font-size:11px;font-weight:700;color:var(--gray-700);">85</span>
+                    </div>
+                  </td>
+                  <td><button class="mini-btn">Edit</button></td>
+                </tr>
+                <tr>
+                  <td><strong>James Torres</strong><br/><span style="font-size:11px;color:var(--gray-400);">jtorres@example.com</span></td>
+                  <td><span class="status-badge" style="background:#DBEAFE;color:#1E40AF;">VSL</span></td>
+                  <td>Mar 6, 2026</td>
+                  <td><span class="status-badge badge-new">&#x25CF; New</span></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <div class="score-bar-wrap"><div class="score-bar" style="width:62%;background:var(--sales);"></div></div>
+                      <span style="font-size:11px;font-weight:700;color:var(--gray-700);">62</span>
+                    </div>
+                  </td>
+                  <td><button class="mini-btn">Edit</button></td>
+                </tr>
+                <tr>
+                  <td><strong>Priya Nair</strong><br/><span style="font-size:11px;color:var(--gray-400);">priya@example.com</span></td>
+                  <td><span class="status-badge" style="background:#D1FAE5;color:#065F46;">Opt-in</span></td>
+                  <td>Mar 5, 2026</td>
+                  <td><span class="status-badge badge-applied">&#x25CF; Applied</span></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <div class="score-bar-wrap"><div class="score-bar" style="width:78%;background:var(--fulfillment);"></div></div>
+                      <span style="font-size:11px;font-weight:700;color:var(--gray-700);">78</span>
+                    </div>
+                  </td>
+                  <td><button class="mini-btn">Edit</button></td>
+                </tr>
+                <tr>
+                  <td><strong>Derek Owens</strong><br/><span style="font-size:11px;color:var(--gray-400);">derek@example.com</span></td>
+                  <td><span class="status-badge" style="background:#FEF3C7;color:#92400E;">Webinar</span></td>
+                  <td>Mar 4, 2026</td>
+                  <td><span class="status-badge badge-closed">&#x25CF; Closed Won</span></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <div class="score-bar-wrap"><div class="score-bar" style="width:91%;background:var(--marketing);"></div></div>
+                      <span style="font-size:11px;font-weight:700;color:var(--gray-700);">91</span>
+                    </div>
+                  </td>
+                  <td><button class="mini-btn">Edit</button></td>
+                </tr>
+                <tr>
+                  <td><strong>Amara Johnson</strong><br/><span style="font-size:11px;color:var(--gray-400);">amara@example.com</span></td>
+                  <td><span class="status-badge" style="background:#DBEAFE;color:#1E40AF;">VSL</span></td>
+                  <td>Mar 3, 2026</td>
+                  <td><span class="status-badge badge-lost">&#x25CF; Lost</span></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <div class="score-bar-wrap"><div class="score-bar" style="width:44%;background:var(--danger);"></div></div>
+                      <span style="font-size:11px;font-weight:700;color:var(--gray-700);">44</span>
+                    </div>
+                  </td>
+                  <td><button class="mini-btn">Edit</button></td>
+                </tr>
+                <tr>
+                  <td><strong>Carlos Reyes</strong><br/><span style="font-size:11px;color:var(--gray-400);">creyes@example.com</span></td>
+                  <td><span class="status-badge" style="background:#D1FAE5;color:#065F46;">Opt-in</span></td>
+                  <td>Mar 3, 2026</td>
+                  <td><span class="status-badge badge-active">&#x25CF; Active</span></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;"></div></div>
+                      <span style="font-size:11px;font-weight:700;color:var(--gray-700);">70</span>
+                    </div>
+                  </td>
+                  <td><button class="mini-btn">Edit</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     SCREEN 4 — SALES CALLS
+══════════════════════════════════════════════════════════════════ -->
+<div class="screen-label" style="margin-top:64px;">
+  <h2>Screen 4 — Sales Calls &nbsp;/&nbsp; Route: /sales/calls</h2>
+  <hr />
+</div>
+<div class="app-shell" id="screen-calls">
+  <div class="app-frame">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">&#x1F41D;</div>
+        <div>
+          <div class="logo-text">Central Intelligence</div>
+          <div class="logo-sub">AI Command Center</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item"><span class="nav-icon">&#x1F4CA;</span> Dashboard</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F451;</span> Central Intelligence Chat</div>
+        <div class="nav-section-label sales">Sales</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F9F2;</span> Leads</div>
+        <div class="nav-item active"><span class="nav-icon">&#x1F4DE;</span> Sales Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Appointments</div>
+        <div class="nav-section-label fulfillment">Fulfillment</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F465;</span> Members</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F3AF;</span> Coaching Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x2705;</span> Accountability</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F6E0;</span> Tech SOS</div>
+        <div class="nav-section-label marketing">Marketing</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4F1;</span> Social Media</div>
+        <div class="nav-item"><span class="nav-icon">&#x2709;</span> Email</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C8;</span> Funnels</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E2;</span> Ads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4AC;</span> DM</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F381;</span> Offers</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Promo Calendar</div>
+        <div class="nav-section-label admin">Admin</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E5;</span> Data Import</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-pill">
+          <div class="user-avatar">JD</div>
+          <div><div class="user-name">Jade Doe</div><div class="user-role">Admin</div></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CALLS MAIN -->
+    <div class="main-content">
+      <div class="annotation-bar">
+        <div class="annotation-dot"></div>
+        Route: /sales/calls &nbsp;|&nbsp; Video URL submitted → Python agent transcribes via Whisper API → AI extracts pain points + content ideas
+      </div>
+      <div class="topbar">
+        <div class="topbar-title">Sales Calls</div>
+        <div class="topbar-right">
+          <button class="btn btn-ghost">&#x1F4CA; Analytics</button>
+        </div>
+      </div>
+
+      <div class="page-body" style="overflow-y:auto;">
+
+        <!-- Upload Zone -->
+        <div class="upload-zone mb-4">
+          <div class="upload-icon">&#x1F4F9;</div>
+          <div class="upload-title">Submit Video for Transcription &amp; Analysis</div>
+          <div class="upload-sub">Paste a Loom, Google Drive, or direct video URL — AI will transcribe and extract insights automatically</div>
+          <div class="upload-input-row">
+            <input class="upload-url" type="text" placeholder="https://www.loom.com/share/... or drive.google.com/..." />
+            <button class="btn btn-primary">&#x1F680; Submit</button>
+          </div>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="grid-4 mb-4">
+          <div class="kpi-card" style="border-top:3px solid var(--sales);">
+            <div class="kpi-label">Total Calls</div>
+            <div class="kpi-value">142</div>
+            <div class="kpi-sub">Analyzed all time</div>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--gold);">
+            <div class="kpi-label">This Month</div>
+            <div class="kpi-value">18</div>
+            <span class="kpi-badge badge-up">&#x2191; 6</span>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--fulfillment);">
+            <div class="kpi-label">Pain Points Found</div>
+            <div class="kpi-value">317</div>
+            <div class="kpi-sub">Across all calls</div>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--marketing);">
+            <div class="kpi-label">Content Ideas</div>
+            <div class="kpi-value">89</div>
+            <div class="kpi-sub">Auto-generated</div>
+          </div>
+        </div>
+
+        <!-- Calls List -->
+        <div class="card">
+          <div class="card-header" style="padding-bottom:12px;">
+            <span class="card-title">Analyzed Calls</span>
+            <span class="text-sm text-muted">Most recent first</span>
+          </div>
+          <div style="padding:0 0 4px;">
+            <div class="calls-list" style="padding:0 16px 16px;">
+
+              <!-- Call 1 — Expanded -->
+              <div class="call-item">
+                <div class="call-header">
+                  <div class="call-avatar">SM</div>
+                  <div class="call-info">
+                    <div class="call-name">Sarah Mitchell — Discovery Call</div>
+                    <div class="call-meta">Mar 7, 2026 &bull; 38 min &bull; Webinar lead</div>
+                  </div>
+                  <div class="call-badges">
+                    <span class="status-badge badge-closed">&#x25CF; Closed Won</span>
+                    <span class="status-badge" style="background:#FEF3C7;color:#92400E;">5 pain points</span>
+                  </div>
+                  <span class="call-expand">&#x25B2;</span>
+                </div>
+                <div class="call-detail">
+                  <div class="detail-section">
+                    <div class="detail-label">Transcript Excerpt</div>
+                    <div class="transcript-block">
+                      <strong>Sarah:</strong> "My biggest challenge is honestly the <span class="highlight">cash flow situation</span>. I'm doing the work but the revenue is just not consistent enough. I feel like I'm constantly in feast or famine mode..."
+                      <br/><br/>
+                      <strong>Jade:</strong> "That's exactly what the program addresses. Our members typically see..."
+                    </div>
+                  </div>
+                  <div class="grid-2 mt-4" style="gap:12px;margin-top:12px;">
+                    <div class="detail-section">
+                      <div class="detail-label">&#x1F534; Extracted Pain Points</div>
+                      <div class="pain-points">
+                        <div class="pain-item"><span class="pain-dot">&#x25CF;</span> Cash flow inconsistency / feast or famine cycle</div>
+                        <div class="pain-item"><span class="pain-dot">&#x25CF;</span> No predictable lead source</div>
+                        <div class="pain-item"><span class="pain-dot">&#x25CF;</span> Overwhelmed doing everything alone</div>
+                        <div class="pain-item"><span class="pain-dot">&#x25CF;</span> Lack of a repeatable sales process</div>
+                        <div class="pain-item"><span class="pain-dot">&#x25CF;</span> Time vs. revenue ceiling</div>
+                      </div>
+                    </div>
+                    <div class="detail-section">
+                      <div class="detail-label">&#x1F7E2; Content Ideas Generated</div>
+                      <div class="content-ideas">
+                        <div class="idea-item"><span class="idea-icon">&#x1F4A1;</span> "The feast or famine trap — and how to escape it" (email hook)</div>
+                        <div class="idea-item"><span class="idea-icon">&#x1F4A1;</span> Carousel: "5 signs your business has a cash flow problem"</div>
+                        <div class="idea-item"><span class="idea-icon">&#x1F4A1;</span> VSL angle: "What if your revenue was predictable every single month?"</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Call 2 — Collapsed -->
+              <div class="call-item">
+                <div class="call-header">
+                  <div class="call-avatar" style="background:var(--fulfillment);">JT</div>
+                  <div class="call-info">
+                    <div class="call-name">James Torres — Strategy Call</div>
+                    <div class="call-meta">Mar 5, 2026 &bull; 52 min &bull; VSL lead</div>
+                  </div>
+                  <div class="call-badges">
+                    <span class="status-badge badge-lost">&#x25CF; Lost</span>
+                    <span class="status-badge" style="background:#FEF3C7;color:#92400E;">3 pain points</span>
+                  </div>
+                  <span class="call-expand">&#x25BC;</span>
+                </div>
+              </div>
+
+              <!-- Call 3 — Collapsed -->
+              <div class="call-item">
+                <div class="call-header">
+                  <div class="call-avatar" style="background:var(--marketing);">PN</div>
+                  <div class="call-info">
+                    <div class="call-name">Priya Nair — Application Review</div>
+                    <div class="call-meta">Mar 4, 2026 &bull; 27 min &bull; Opt-in lead</div>
+                  </div>
+                  <div class="call-badges">
+                    <span class="status-badge badge-booked">&#x25CF; Follow-up Booked</span>
+                    <span class="status-badge" style="background:#FEF3C7;color:#92400E;">4 pain points</span>
+                  </div>
+                  <span class="call-expand">&#x25BC;</span>
+                </div>
+              </div>
+
+              <!-- Call 4 — In progress -->
+              <div class="call-item" style="opacity:.75;">
+                <div class="call-header">
+                  <div class="call-avatar" style="background:var(--gray-400);">DK</div>
+                  <div class="call-info">
+                    <div class="call-name">Daniel Kim — Submitted Mar 3</div>
+                    <div class="call-meta">Processing... transcript 72% complete</div>
+                  </div>
+                  <div class="call-badges">
+                    <span class="status-badge" style="background:#E0E7FF;color:#3730A3;">&#x23F3; Processing</span>
+                  </div>
+                  <span class="call-expand" style="color:var(--gray-300);">&#x25BC;</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     SCREEN 5 — MEMBERS
+══════════════════════════════════════════════════════════════════ -->
+<div class="screen-label" style="margin-top:64px;">
+  <h2>Screen 5 — Members &nbsp;/&nbsp; Route: /fulfillment/members</h2>
+  <hr />
+</div>
+<div class="app-shell" id="screen-members" style="padding-bottom:80px;">
+  <div class="app-frame">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">&#x1F41D;</div>
+        <div>
+          <div class="logo-text">Central Intelligence</div>
+          <div class="logo-sub">AI Command Center</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item"><span class="nav-icon">&#x1F4CA;</span> Dashboard</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F451;</span> Central Intelligence Chat</div>
+        <div class="nav-section-label sales">Sales</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F9F2;</span> Leads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4DE;</span> Sales Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Appointments</div>
+        <div class="nav-section-label fulfillment">Fulfillment</div>
+        <div class="nav-item active"><span class="nav-icon">&#x1F465;</span> Members</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F3AF;</span> Coaching Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x2705;</span> Accountability</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F6E0;</span> Tech SOS</div>
+        <div class="nav-section-label marketing">Marketing</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4F1;</span> Social Media</div>
+        <div class="nav-item"><span class="nav-icon">&#x2709;</span> Email</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C8;</span> Funnels</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E2;</span> Ads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4AC;</span> DM</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F381;</span> Offers</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Promo Calendar</div>
+        <div class="nav-section-label admin">Admin</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E5;</span> Data Import</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-pill">
+          <div class="user-avatar">JD</div>
+          <div><div class="user-name">Jade Doe</div><div class="user-role">Admin</div></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MEMBERS MAIN -->
+    <div class="main-content">
+      <div class="annotation-bar">
+        <div class="annotation-dot"></div>
+        Route: /fulfillment/members &nbsp;|&nbsp; Member goals auto-extracted from accountability call transcripts via AI
+      </div>
+      <div class="topbar">
+        <div class="topbar-title">Members</div>
+        <div class="topbar-right">
+          <div class="search-bar">
+            <span class="search-icon">&#x1F50D;</span>
+            <input type="text" placeholder="Search members..." />
+          </div>
+          <button class="btn btn-ghost">All Status &#x25BE;</button>
+          <button class="btn btn-primary">+ Add Member</button>
+        </div>
+      </div>
+
+      <div class="page-body" style="overflow-y:auto;">
+
+        <!-- KPI Row -->
+        <div class="grid-4 mb-4">
+          <div class="kpi-card" style="border-top:3px solid var(--fulfillment);">
+            <div class="kpi-label">Active Members</div>
+            <div class="kpi-value">84</div>
+            <span class="kpi-badge badge-up">&#x2191; 6 this month</span>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--marketing);">
+            <div class="kpi-label">Avg. Satisfaction</div>
+            <div class="kpi-value">91%</div>
+            <span class="kpi-badge badge-up">&#x2191; 3%</span>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--gold);">
+            <div class="kpi-label">Weekly Submissions</div>
+            <div class="kpi-value">71</div>
+            <div class="kpi-sub">84% submit rate</div>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--danger);">
+            <div class="kpi-label">At-Risk Members</div>
+            <div class="kpi-value">3</div>
+            <span class="kpi-badge badge-down">Needs attention</span>
+          </div>
+        </div>
+
+        <!-- Member grid + Detail panel side by side -->
+        <div class="grid-2" style="grid-template-columns: 1fr 300px; gap:16px; align-items:start;">
+
+          <!-- Member Grid -->
+          <div class="card">
+            <div class="card-header" style="padding-bottom:14px;">
+              <span class="card-title">Member Directory</span>
+              <span class="text-sm text-muted">84 active</span>
+            </div>
+            <div style="padding:0 16px 16px;">
+              <div class="member-grid">
+                <!-- Member 1 — selected -->
+                <div class="member-card" style="border-color:var(--fulfillment);border-width:2px;">
+                  <div class="member-avatar-lg" style="background:linear-gradient(135deg,#F97316,#EA580C);">SR</div>
+                  <div class="member-name">Sofia Rodriguez</div>
+                  <div class="member-join">Joined Jan 12, 2026</div>
+                  <div class="member-status"><span class="status-badge badge-active">Active</span></div>
+                </div>
+                <div class="member-card">
+                  <div class="member-avatar-lg" style="background:linear-gradient(135deg,#3B82F6,#1D4ED8);">MK</div>
+                  <div class="member-name">Marcus King</div>
+                  <div class="member-join">Joined Feb 3, 2026</div>
+                  <div class="member-status"><span class="status-badge badge-active">Active</span></div>
+                </div>
+                <div class="member-card">
+                  <div class="member-avatar-lg" style="background:linear-gradient(135deg,#10B981,#059669);">AL</div>
+                  <div class="member-name">Aisha Lawson</div>
+                  <div class="member-join">Joined Nov 20, 2025</div>
+                  <div class="member-status"><span class="status-badge badge-active">Active</span></div>
+                </div>
+                <div class="member-card" style="border-color:var(--danger);border-width:1.5px;">
+                  <div class="member-avatar-lg" style="background:linear-gradient(135deg,#EF4444,#DC2626);">TN</div>
+                  <div class="member-name">Tyler Nguyen</div>
+                  <div class="member-join">Joined Dec 1, 2025</div>
+                  <div class="member-status"><span class="status-badge badge-lost">At Risk</span></div>
+                </div>
+                <div class="member-card">
+                  <div class="member-avatar-lg" style="background:linear-gradient(135deg,#8B5CF6,#6D28D9);">CW</div>
+                  <div class="member-name">Chloe Warren</div>
+                  <div class="member-join">Joined Oct 5, 2025</div>
+                  <div class="member-status"><span class="status-badge badge-active">Active</span></div>
+                </div>
+                <div class="member-card">
+                  <div class="member-avatar-lg" style="background:linear-gradient(135deg,#F59E0B,#D97706);">BP</div>
+                  <div class="member-name">Brian Park</div>
+                  <div class="member-join">Joined Jan 28, 2026</div>
+                  <div class="member-status"><span class="status-badge badge-active">Active</span></div>
+                </div>
+                <div class="member-card">
+                  <div class="member-avatar-lg" style="background:linear-gradient(135deg,#06B6D4,#0891B2);">LD</div>
+                  <div class="member-name">Layla Diaz</div>
+                  <div class="member-join">Joined Sep 14, 2025</div>
+                  <div class="member-status"><span class="status-badge badge-active">Active</span></div>
+                </div>
+                <div class="member-card">
+                  <div class="member-avatar-lg" style="background:linear-gradient(135deg,#6366F1,#4338CA);">RH</div>
+                  <div class="member-name">Ryan Howell</div>
+                  <div class="member-join">Joined Feb 18, 2026</div>
+                  <div class="member-status"><span class="status-badge badge-active">Active</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Member Detail Panel -->
+          <div style="display:flex;flex-direction:column;gap:14px;">
+
+            <!-- Profile -->
+            <div class="member-detail-card">
+              <div class="member-detail-header">
+                <div class="member-detail-avatar">SR</div>
+                <div>
+                  <div class="detail-name">Sofia Rodriguez</div>
+                  <div class="detail-sub">Member since Jan 12, 2026 &bull; 52 days active</div>
+                  <span class="status-badge badge-active" style="margin-top:5px;display:inline-flex;">Active</span>
+                </div>
+              </div>
+
+              <!-- Goals -->
+              <div style="margin-bottom:14px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--gray-500);margin-bottom:10px;">Goals Progress</div>
+                <div class="goal-item">
+                  <div class="goal-row">
+                    <span class="goal-label">Revenue Target ($5k/mo)</span>
+                    <span class="goal-pct">68%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-marketing" style="width:68%;"></div></div>
+                </div>
+                <div class="goal-item">
+                  <div class="goal-row">
+                    <span class="goal-label">Weekly Submissions</span>
+                    <span class="goal-pct">100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-gold" style="width:100%;"></div></div>
+                </div>
+                <div class="goal-item">
+                  <div class="goal-row">
+                    <span class="goal-label">Lead Generation System</span>
+                    <span class="goal-pct">45%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill fill-sales" style="width:45%;"></div></div>
+                </div>
+              </div>
+              <hr class="divider" />
+              <div style="font-size:11px;color:var(--gray-400);font-style:italic;">"Goals auto-extracted from accountability call transcripts via AI"</div>
+            </div>
+
+            <!-- Submission History -->
+            <div class="member-detail-card">
+              <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:10px;">Recent Submissions</div>
+              <div class="history-list">
+                <div class="history-item">
+                  <div class="history-dot" style="background:var(--marketing);"></div>
+                  Week 7 homework — submitted
+                  <span class="history-date">Mar 2</span>
+                </div>
+                <div class="history-item">
+                  <div class="history-dot" style="background:var(--marketing);"></div>
+                  Week 6 homework — submitted
+                  <span class="history-date">Feb 23</span>
+                </div>
+                <div class="history-item">
+                  <div class="history-dot" style="background:var(--gray-300);"></div>
+                  Week 5 homework — missing
+                  <span class="history-date">Feb 16</span>
+                </div>
+                <div class="history-item">
+                  <div class="history-dot" style="background:var(--marketing);"></div>
+                  Week 4 homework — submitted
+                  <span class="history-date">Feb 9</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Call History -->
+            <div class="member-detail-card">
+              <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:10px;">Call History</div>
+              <div class="history-list">
+                <div class="history-item">
+                  <div class="history-dot" style="background:var(--fulfillment);"></div>
+                  Accountability call
+                  <span class="history-date">Mar 1</span>
+                </div>
+                <div class="history-item">
+                  <div class="history-dot" style="background:var(--sales);"></div>
+                  Coaching call
+                  <span class="history-date">Feb 22</span>
+                </div>
+                <div class="history-item">
+                  <div class="history-dot" style="background:var(--fulfillment);"></div>
+                  Accountability call
+                  <span class="history-date">Feb 15</span>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /detail panel -->
+        </div><!-- /grid -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SCREEN 6 — DM (DIRECT MESSAGES)
+══════════════════════════════════════════════════════════════════ -->
+<div class="screen-label" style="margin-top:64px;">
+  <h2>Screen 6 — DM Dashboard &nbsp;/&nbsp; Route: /marketing/dm</h2>
+  <hr />
+</div>
+<div class="app-shell" id="screen-dm" style="padding-bottom:80px;">
+  <div class="app-frame">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">&#x1F41D;</div>
+        <div>
+          <div class="logo-text">Central Intelligence</div>
+          <div class="logo-sub">AI Command Center</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item"><span class="nav-icon">&#x1F4CA;</span> Dashboard</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F451;</span> Central Intelligence Chat</div>
+        <div class="nav-section-label sales">Sales</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F9F2;</span> Leads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4DE;</span> Sales Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Appointments</div>
+        <div class="nav-section-label fulfillment">Fulfillment</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F465;</span> Members</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F3AF;</span> Coaching Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x2705;</span> Accountability</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F6E0;</span> Tech SOS</div>
+        <div class="nav-section-label marketing">Marketing</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4F1;</span> Social Media</div>
+        <div class="nav-item"><span class="nav-icon">&#x2709;</span> Email</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C8;</span> Funnels</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E2;</span> Ads</div>
+        <div class="nav-item active"><span class="nav-icon">&#x1F4AC;</span> DM</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F381;</span> Offers</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Promo Calendar</div>
+        <div class="nav-section-label admin">Admin</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E5;</span> Data Import</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-pill">
+          <div class="user-avatar">JD</div>
+          <div><div class="user-name">Jade Doe</div><div class="user-role">Admin</div></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- DM MAIN -->
+    <div class="main-content">
+      <div class="annotation-bar">
+        <div class="annotation-dot"></div>
+        Route: /marketing/dm &nbsp;|&nbsp; DM automation across Instagram &amp; Facebook with AI-generated templates
+      </div>
+      <div class="topbar">
+        <div class="topbar-title">Direct Messages</div>
+        <div class="topbar-right">
+          <button class="btn btn-ghost">All Platforms &#x25BE;</button>
+          <button class="btn btn-primary">+ New Template</button>
+        </div>
+      </div>
+
+      <div class="page-body" style="overflow-y:auto;">
+
+        <!-- DM KPI Row -->
+        <div class="grid-4 mb-4">
+          <div class="kpi-card" style="border-top:3px solid var(--marketing);">
+            <div class="kpi-label">Active Conversations</div>
+            <div class="kpi-value">143</div>
+            <span class="kpi-badge badge-up">&#x2191; 22% this week</span>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--sales);">
+            <div class="kpi-label">Response Rate</div>
+            <div class="kpi-value">68%</div>
+            <span class="kpi-badge badge-up">&#x2191; 5%</span>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--gold);">
+            <div class="kpi-label">DM-to-Call Rate</div>
+            <div class="kpi-value">24%</div>
+            <span class="kpi-badge badge-up">&#x2191; 3%</span>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid #C13584;">
+            <div class="kpi-label">Avg Response Time</div>
+            <div class="kpi-value">4m</div>
+            <div class="kpi-sub">AI-assisted replies</div>
+          </div>
+        </div>
+
+        <!-- Two-column layout: Templates + AI Generator -->
+        <div class="grid-2" style="grid-template-columns: 1fr 340px; gap:16px; align-items:start;">
+
+          <!-- DM Template Library -->
+          <div class="card">
+            <div class="card-header" style="padding-bottom:14px;">
+              <span class="card-title">DM Template Library</span>
+              <span class="text-sm text-muted">12 templates</span>
+            </div>
+            <div class="card-body" style="padding-top:0;">
+              <div class="filter-bar" style="margin-bottom:12px;">
+                <input class="filter-input" type="text" placeholder="Search templates..." style="flex:1;" />
+                <select class="filter-select">
+                  <option>All Platforms</option>
+                  <option>Instagram</option>
+                  <option>Facebook</option>
+                </select>
+                <select class="filter-select">
+                  <option>All Types</option>
+                  <option>Cold Outreach</option>
+                  <option>Follow-up</option>
+                  <option>Nurture</option>
+                </select>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <!-- Template 1 -->
+                <div class="template-card">
+                  <div class="template-card-title">Cold Outreach — Pain Point Hook</div>
+                  <div class="template-card-preview">Hey {first_name}! I noticed you're a {industry} coach. Quick Q — are you still manually chasing leads or have you automated...</div>
+                  <div class="template-card-footer">
+                    <div class="template-tags">
+                      <span class="platform-tag tag-instagram">Instagram</span>
+                      <span class="platform-tag tag-facebook">Facebook</span>
+                    </div>
+                    <span class="template-perf">38% reply rate</span>
+                    <button class="copy-btn">Copy</button>
+                  </div>
+                </div>
+
+                <!-- Template 2 -->
+                <div class="template-card">
+                  <div class="template-card-title">Follow-up — After Story View</div>
+                  <div class="template-card-preview">Hey {first_name}! Thanks for checking out my story about {topic}. A lot of coaches I work with struggle with the same thing...</div>
+                  <div class="template-card-footer">
+                    <div class="template-tags">
+                      <span class="platform-tag tag-instagram">Instagram</span>
+                    </div>
+                    <span class="template-perf">52% reply rate</span>
+                    <button class="copy-btn">Copy</button>
+                  </div>
+                </div>
+
+                <!-- Template 3 -->
+                <div class="template-card">
+                  <div class="template-card-title">Nurture — Value Drop</div>
+                  <div class="template-card-preview">Thought of you when I saw this! Just released a free resource on {topic} that's helped 50+ coaches double their...</div>
+                  <div class="template-card-footer">
+                    <div class="template-tags">
+                      <span class="platform-tag tag-facebook">Facebook</span>
+                    </div>
+                    <span class="template-perf">41% reply rate</span>
+                    <button class="copy-btn">Copy</button>
+                  </div>
+                </div>
+
+                <!-- Template 4 -->
+                <div class="template-card">
+                  <div class="template-card-title">Re-engagement — Inactive Lead</div>
+                  <div class="template-card-preview">Hey {first_name}! We chatted a while back about {pain_point}. Curious — did you ever find a solution or is that still on...</div>
+                  <div class="template-card-footer">
+                    <div class="template-tags">
+                      <span class="platform-tag tag-instagram">Instagram</span>
+                      <span class="platform-tag tag-facebook">Facebook</span>
+                    </div>
+                    <span class="template-perf">29% reply rate</span>
+                    <button class="copy-btn">Copy</button>
+                  </div>
+                </div>
+
+                <!-- Template 5 -->
+                <div class="template-card">
+                  <div class="template-card-title">Warm Lead — Call Booking</div>
+                  <div class="template-card-preview">Really glad {result_context} resonated with you! I have a few spots open this week for a quick 15-min strategy chat...</div>
+                  <div class="template-card-footer">
+                    <div class="template-tags">
+                      <span class="platform-tag tag-instagram">Instagram</span>
+                    </div>
+                    <span class="template-perf">61% booking rate</span>
+                    <button class="copy-btn">Copy</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: AI Template Generator + Recent Conversations -->
+          <div style="display:flex;flex-direction:column;gap:14px;">
+
+            <!-- AI Template Generator -->
+            <div class="card">
+              <div class="card-header" style="padding-bottom:10px;">
+                <span class="card-title">AI Template Generator</span>
+              </div>
+              <div class="card-body" style="padding-top:8px;">
+                <div class="form-group">
+                  <label class="form-label">Platform</label>
+                  <select class="filter-select" style="width:100%;">
+                    <option>Instagram</option>
+                    <option>Facebook</option>
+                    <option>Both</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Template Type</label>
+                  <select class="filter-select" style="width:100%;">
+                    <option>Cold Outreach</option>
+                    <option>Follow-up</option>
+                    <option>Nurture</option>
+                    <option>Re-engagement</option>
+                    <option>Call Booking</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Target Pain Point</label>
+                  <input class="form-input" type="text" placeholder="e.g., struggling to get clients..." />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Tone</label>
+                  <select class="filter-select" style="width:100%;">
+                    <option>Casual &amp; Friendly</option>
+                    <option>Professional</option>
+                    <option>Direct &amp; Bold</option>
+                    <option>Empathetic</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary" style="width:100%;justify-content:center;">Generate Template with AI</button>
+
+                <!-- Generated Preview -->
+                <div style="margin-top:14px;padding:12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);">
+                  <div style="font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">AI Generated Preview</div>
+                  <div style="font-size:12.5px;color:var(--gray-700);line-height:1.55;font-style:italic;">
+                    "Hey {first_name}! I see you're building an amazing coaching business. Quick question — are you currently spending hours chasing leads manually? I just helped a coach go from 2 to 8 booked calls/week with a simple DM system. Happy to share if you're interested!"
+                  </div>
+                  <div style="margin-top:10px;display:flex;gap:6px;">
+                    <button class="copy-btn">Copy to Clipboard</button>
+                    <button class="mini-btn">Save as Template</button>
+                    <button class="mini-btn">Regenerate</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recent DM Conversations -->
+            <div class="card">
+              <div class="card-header" style="padding-bottom:10px;">
+                <span class="card-title">Recent Conversations</span>
+              </div>
+              <div class="card-body" style="padding-top:6px;">
+                <div class="history-list">
+                  <div class="history-item">
+                    <div class="history-dot" style="background:#C13584;"></div>
+                    <div style="flex:1;">
+                      <div style="font-size:12.5px;font-weight:600;color:var(--gray-800);">Maria Torres</div>
+                      <div style="font-size:11px;color:var(--gray-500);">Replied: "Yes, tell me more!"</div>
+                    </div>
+                    <span class="platform-tag tag-instagram" style="font-size:10px;padding:2px 6px;">IG</span>
+                  </div>
+                  <div class="history-item">
+                    <div class="history-dot" style="background:#1877F2;"></div>
+                    <div style="flex:1;">
+                      <div style="font-size:12.5px;font-weight:600;color:var(--gray-800);">Jake Williams</div>
+                      <div style="font-size:11px;color:var(--gray-500);">Booked a call</div>
+                    </div>
+                    <span class="platform-tag tag-facebook" style="font-size:10px;padding:2px 6px;">FB</span>
+                  </div>
+                  <div class="history-item">
+                    <div class="history-dot" style="background:#C13584;"></div>
+                    <div style="flex:1;">
+                      <div style="font-size:12.5px;font-weight:600;color:var(--gray-800);">Priya Sharma</div>
+                      <div style="font-size:11px;color:var(--gray-500);">Opened — awaiting reply</div>
+                    </div>
+                    <span class="platform-tag tag-instagram" style="font-size:10px;padding:2px 6px;">IG</span>
+                  </div>
+                  <div class="history-item">
+                    <div class="history-dot" style="background:#1877F2;"></div>
+                    <div style="flex:1;">
+                      <div style="font-size:12.5px;font-weight:600;color:var(--gray-800);">Carlos Mendez</div>
+                      <div style="font-size:11px;color:var(--gray-500);">Replied: "What's the cost?"</div>
+                    </div>
+                    <span class="platform-tag tag-facebook" style="font-size:10px;padding:2px 6px;">FB</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /right column -->
+        </div><!-- /grid -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SCREEN 7 — OFFERS
+══════════════════════════════════════════════════════════════════ -->
+<div class="screen-label" style="margin-top:64px;">
+  <h2>Screen 7 — Offers &nbsp;/&nbsp; Route: /marketing/offers</h2>
+  <hr />
+</div>
+<div class="app-shell" id="screen-offers" style="padding-bottom:80px;">
+  <div class="app-frame">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">&#x1F41D;</div>
+        <div>
+          <div class="logo-text">Central Intelligence</div>
+          <div class="logo-sub">AI Command Center</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item"><span class="nav-icon">&#x1F4CA;</span> Dashboard</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F451;</span> Central Intelligence Chat</div>
+        <div class="nav-section-label sales">Sales</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F9F2;</span> Leads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4DE;</span> Sales Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Appointments</div>
+        <div class="nav-section-label fulfillment">Fulfillment</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F465;</span> Members</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F3AF;</span> Coaching Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x2705;</span> Accountability</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F6E0;</span> Tech SOS</div>
+        <div class="nav-section-label marketing">Marketing</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4F1;</span> Social Media</div>
+        <div class="nav-item"><span class="nav-icon">&#x2709;</span> Email</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C8;</span> Funnels</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E2;</span> Ads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4AC;</span> DM</div>
+        <div class="nav-item active"><span class="nav-icon">&#x1F381;</span> Offers</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Promo Calendar</div>
+        <div class="nav-section-label admin">Admin</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E5;</span> Data Import</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-pill">
+          <div class="user-avatar">JD</div>
+          <div><div class="user-name">Jade Doe</div><div class="user-role">Admin</div></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- OFFERS MAIN -->
+    <div class="main-content">
+      <div class="annotation-bar">
+        <div class="annotation-dot"></div>
+        Route: /marketing/offers &nbsp;|&nbsp; Offer library with AI-powered optimization and ICP alignment scoring
+      </div>
+      <div class="topbar">
+        <div class="topbar-title">Offers</div>
+        <div class="topbar-right">
+          <button class="btn btn-ghost">All Status &#x25BE;</button>
+          <button class="btn btn-primary">+ Create Offer</button>
+        </div>
+      </div>
+
+      <div class="page-body" style="overflow-y:auto;">
+
+        <!-- Offers KPI Row -->
+        <div class="grid-4 mb-4">
+          <div class="kpi-card" style="border-top:3px solid var(--marketing);">
+            <div class="kpi-label">Active Offers</div>
+            <div class="kpi-value">4</div>
+            <div class="kpi-sub">2 drafts, 1 archived</div>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--gold);">
+            <div class="kpi-label">Avg ICP Score</div>
+            <div class="kpi-value">87%</div>
+            <span class="kpi-badge badge-up">&#x2191; 12%</span>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--sales);">
+            <div class="kpi-label">Conversion Rate</div>
+            <div class="kpi-value">18%</div>
+            <span class="kpi-badge badge-up">&#x2191; 4%</span>
+          </div>
+          <div class="kpi-card" style="border-top:3px solid var(--fulfillment);">
+            <div class="kpi-label">Revenue / Offer</div>
+            <div class="kpi-value">$4.2k</div>
+            <span class="kpi-badge badge-up">&#x2191; $800</span>
+          </div>
+        </div>
+
+        <!-- Two-column layout: Offer Library + Offer Builder -->
+        <div class="grid-2" style="grid-template-columns: 1fr 380px; gap:16px; align-items:start;">
+
+          <!-- Offer Library -->
+          <div class="card">
+            <div class="card-header" style="padding-bottom:14px;">
+              <span class="card-title">Offer Library</span>
+              <span class="text-sm text-muted">7 offers</span>
+            </div>
+            <div class="card-body" style="padding-top:0;">
+              <div style="display:flex;flex-direction:column;gap:12px;">
+
+                <!-- Offer 1: Active -->
+                <div class="offer-card" style="border-left:3px solid var(--marketing);">
+                  <div class="offer-card-header">
+                    <div>
+                      <div class="offer-card-title">90-Day Coaching Accelerator</div>
+                      <span class="status-badge badge-active" style="margin-top:4px;">Active</span>
+                    </div>
+                    <div class="offer-card-price">$2,997</div>
+                  </div>
+                  <div class="offer-features">
+                    <div class="offer-feature"><span class="offer-feature-icon">&#x2713;</span> 12 weekly group coaching calls</div>
+                    <div class="offer-feature"><span class="offer-feature-icon">&#x2713;</span> Private community access</div>
+                    <div class="offer-feature"><span class="offer-feature-icon">&#x2713;</span> Done-for-you funnel templates</div>
+                    <div class="offer-feature"><span class="offer-feature-icon">&#x2713;</span> 1:1 onboarding call</div>
+                  </div>
+                  <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px;"><strong>Guarantee:</strong> Full refund if no results in 30 days</div>
+                  <div class="icp-score-wrap">
+                    <span class="icp-score-label">ICP Alignment</span>
+                    <div class="icp-score-bar"><div class="icp-score-fill" style="width:92%;"></div></div>
+                    <span class="icp-score-value">92%</span>
+                  </div>
+                </div>
+
+                <!-- Offer 2: Active -->
+                <div class="offer-card" style="border-left:3px solid var(--marketing);">
+                  <div class="offer-card-header">
+                    <div>
+                      <div class="offer-card-title">VIP Day Intensive</div>
+                      <span class="status-badge badge-active" style="margin-top:4px;">Active</span>
+                    </div>
+                    <div class="offer-card-price">$4,997</div>
+                  </div>
+                  <div class="offer-features">
+                    <div class="offer-feature"><span class="offer-feature-icon">&#x2713;</span> Full-day 1:1 strategy session</div>
+                    <div class="offer-feature"><span class="offer-feature-icon">&#x2713;</span> Custom marketing plan</div>
+                    <div class="offer-feature"><span class="offer-feature-icon">&#x2713;</span> 30-day Voxer support</div>
+                  </div>
+                  <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px;"><strong>Guarantee:</strong> 2x ROI or second session free</div>
+                  <div class="icp-score-wrap">
+                    <span class="icp-score-label">ICP Alignment</span>
+                    <div class="icp-score-bar"><div class="icp-score-fill" style="width:88%;"></div></div>
+                    <span class="icp-score-value">88%</span>
+                  </div>
+                </div>
+
+                <!-- Offer 3: Draft -->
+                <div class="offer-card" style="border-left:3px solid #D97706;opacity:.85;">
+                  <div class="offer-card-header">
+                    <div>
+                      <div class="offer-card-title">Lead Gen Masterclass (Self-Paced)</div>
+                      <span class="status-badge badge-draft" style="margin-top:4px;">Draft</span>
+                    </div>
+                    <div class="offer-card-price" style="color:var(--gray-400);">$497</div>
+                  </div>
+                  <div class="offer-features">
+                    <div class="offer-feature"><span class="offer-feature-icon">&#x2713;</span> 8-module video course</div>
+                    <div class="offer-feature"><span class="offer-feature-icon">&#x2713;</span> Swipe file library</div>
+                    <div class="offer-feature"><span class="offer-feature-icon" style="color:var(--gray-400);">&#x2717;</span> <span style="color:var(--gray-400);">Bonus TBD</span></div>
+                  </div>
+                  <div class="icp-score-wrap">
+                    <span class="icp-score-label">ICP Alignment</span>
+                    <div class="icp-score-bar"><div class="icp-score-fill" style="width:74%;"></div></div>
+                    <span class="icp-score-value">74%</span>
+                  </div>
+                </div>
+
+                <!-- Offer 4: Archived -->
+                <div class="offer-card" style="border-left:3px solid var(--gray-300);opacity:.6;">
+                  <div class="offer-card-header">
+                    <div>
+                      <div class="offer-card-title">Beta Coaching Cohort</div>
+                      <span class="status-badge badge-archived" style="margin-top:4px;">Archived</span>
+                    </div>
+                    <div class="offer-card-price" style="color:var(--gray-400);">$997</div>
+                  </div>
+                  <div class="offer-features">
+                    <div class="offer-feature" style="color:var(--gray-400);"><span class="offer-feature-icon" style="color:var(--gray-400);">&#x2713;</span> 6-week group program</div>
+                    <div class="offer-feature" style="color:var(--gray-400);"><span class="offer-feature-icon" style="color:var(--gray-400);">&#x2713;</span> Weekly Q&amp;A calls</div>
+                  </div>
+                  <div class="icp-score-wrap">
+                    <span class="icp-score-label">ICP Alignment</span>
+                    <div class="icp-score-bar"><div class="icp-score-fill" style="width:61%;background:var(--gray-300);"></div></div>
+                    <span class="icp-score-value" style="color:var(--gray-400);">61%</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Offer Builder + Optimization Suggestions -->
+          <div style="display:flex;flex-direction:column;gap:14px;">
+
+            <!-- Offer Builder Form -->
+            <div class="card">
+              <div class="card-header" style="padding-bottom:10px;">
+                <span class="card-title">Offer Builder</span>
+              </div>
+              <div class="card-body" style="padding-top:8px;">
+                <div class="form-group">
+                  <label class="form-label">Offer Name</label>
+                  <input class="form-input" type="text" placeholder="e.g., 90-Day Accelerator" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Price</label>
+                  <input class="form-input" type="text" placeholder="$2,997" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Core Features (one per line)</label>
+                  <textarea class="form-textarea" rows="3" placeholder="Weekly group coaching calls&#10;Private community&#10;Done-for-you templates"></textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Bonuses</label>
+                  <textarea class="form-textarea" rows="2" placeholder="Bonus 1: Free onboarding call&#10;Bonus 2: Swipe file library"></textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Guarantee</label>
+                  <input class="form-input" type="text" placeholder="e.g., Full refund if no results in 30 days" />
+                </div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-primary" style="flex:1;justify-content:center;">Save Offer</button>
+                  <button class="btn btn-ghost" style="flex:1;justify-content:center;">AI Suggestions</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Optimization Suggestions -->
+            <div class="suggestion-panel">
+              <div class="suggestion-title">
+                <span>&#x1F4A1;</span> AI Optimization Suggestions
+              </div>
+              <div class="suggestion-item">
+                <span class="suggestion-icon">&#x2192;</span>
+                <div><strong>Add a time-based bonus</strong> — Offers with urgency bonuses convert 23% higher. Consider: "Book this week and get a free 1:1 strategy session."</div>
+              </div>
+              <div class="suggestion-item">
+                <span class="suggestion-icon">&#x2192;</span>
+                <div><strong>Strengthen your guarantee</strong> — Your ICP values risk reduction. Try: "Double your leads in 90 days or your next month is free."</div>
+              </div>
+              <div class="suggestion-item">
+                <span class="suggestion-icon">&#x2192;</span>
+                <div><strong>Price anchoring opportunity</strong> — Position against the VIP Day ($4,997) to make the Accelerator ($2,997) feel like a better deal.</div>
+              </div>
+              <div class="suggestion-item">
+                <span class="suggestion-icon">&#x2192;</span>
+                <div><strong>Missing social proof</strong> — Add a "X coaches enrolled" counter. Templates with social proof see 31% more conversions.</div>
+              </div>
+            </div>
+
+          </div><!-- /right column -->
+        </div><!-- /grid -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SCREEN 8 — PROMOTIONAL CALENDAR
+══════════════════════════════════════════════════════════════════ -->
+<div class="screen-label" style="margin-top:64px;">
+  <h2>Screen 8 — Promotional Calendar &nbsp;/&nbsp; Route: /marketing/calendar</h2>
+  <hr />
+</div>
+<div class="app-shell" id="screen-calendar" style="padding-bottom:80px;">
+  <div class="app-frame">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">&#x1F41D;</div>
+        <div>
+          <div class="logo-text">Central Intelligence</div>
+          <div class="logo-sub">AI Command Center</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item"><span class="nav-icon">&#x1F4CA;</span> Dashboard</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F451;</span> Central Intelligence Chat</div>
+        <div class="nav-section-label sales">Sales</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F9F2;</span> Leads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4DE;</span> Sales Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C5;</span> Appointments</div>
+        <div class="nav-section-label fulfillment">Fulfillment</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F465;</span> Members</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F3AF;</span> Coaching Calls</div>
+        <div class="nav-item"><span class="nav-icon">&#x2705;</span> Accountability</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F6E0;</span> Tech SOS</div>
+        <div class="nav-section-label marketing">Marketing</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4F1;</span> Social Media</div>
+        <div class="nav-item"><span class="nav-icon">&#x2709;</span> Email</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4C8;</span> Funnels</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E2;</span> Ads</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4AC;</span> DM</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F381;</span> Offers</div>
+        <div class="nav-item active"><span class="nav-icon">&#x1F4C5;</span> Promo Calendar</div>
+        <div class="nav-section-label admin">Admin</div>
+        <div class="nav-item"><span class="nav-icon">&#x1F4E5;</span> Data Import</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-pill">
+          <div class="user-avatar">JD</div>
+          <div><div class="user-name">Jade Doe</div><div class="user-role">Admin</div></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CALENDAR MAIN -->
+    <div class="main-content">
+      <div class="annotation-bar">
+        <div class="annotation-dot"></div>
+        Route: /marketing/calendar &nbsp;|&nbsp; Cross-department promotional calendar — shared view for all specialists
+      </div>
+      <div class="topbar">
+        <div class="topbar-title">Promotional Calendar</div>
+        <div class="topbar-right">
+          <span class="topbar-date">March 2026</span>
+          <button class="btn btn-ghost">&#x25C0; Prev</button>
+          <button class="btn btn-ghost">Next &#x25B6;</button>
+          <button class="btn btn-primary">+ Add Event</button>
+        </div>
+      </div>
+
+      <div class="page-body" style="overflow-y:auto;">
+
+        <!-- Legend -->
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gray-600);">
+            <div style="width:12px;height:12px;border-radius:3px;background:#D1FAE5;border:1px solid #BBF7D0;"></div> Marketing
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gray-600);">
+            <div style="width:12px;height:12px;border-radius:3px;background:#DBEAFE;border:1px solid #BFDBFE;"></div> Sales
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gray-600);">
+            <div style="width:12px;height:12px;border-radius:3px;background:#FED7AA;border:1px solid #FDBA74;"></div> Fulfillment
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gray-600);">
+            <div style="width:12px;height:12px;border-radius:3px;background:#EDE9FE;border:1px solid #DDD6FE;"></div> Promo / Launch
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gray-600);">
+            <div style="width:12px;height:12px;border-radius:3px;background:#FCEEF3;border:1px solid #F0C0D4;"></div> DM Campaign
+          </div>
+        </div>
+
+        <!-- Calendar Grid -->
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="cal-grid">
+            <!-- Header Row -->
+            <div class="cal-header-cell">Sun</div>
+            <div class="cal-header-cell">Mon</div>
+            <div class="cal-header-cell">Tue</div>
+            <div class="cal-header-cell">Wed</div>
+            <div class="cal-header-cell">Thu</div>
+            <div class="cal-header-cell">Fri</div>
+            <div class="cal-header-cell">Sat</div>
+
+            <!-- Week 1: Mar 1-7 -->
+            <div class="cal-cell">
+              <div class="cal-day">1</div>
+              <div class="cal-event marketing">Email blast</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">2</div>
+              <div class="cal-event sales">Follow-up calls</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">3</div>
+              <div class="cal-event marketing">Blog post</div>
+              <div class="cal-event dm">DM campaign</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">4</div>
+              <div class="cal-event fulfillment">Coaching call</div>
+            </div>
+            <div class="cal-cell today">
+              <div class="cal-day">5</div>
+              <div class="cal-event promo">Webinar prep</div>
+              <div class="cal-event marketing">Social posts</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">6</div>
+              <div class="cal-event promo">WEBINAR</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">7</div>
+            </div>
+
+            <!-- Week 2: Mar 8-14 -->
+            <div class="cal-cell">
+              <div class="cal-day">8</div>
+              <div class="cal-event dm">IG outreach</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">9</div>
+              <div class="cal-event marketing">Email nurture</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">10</div>
+              <div class="cal-event sales">Sales blitz</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">11</div>
+              <div class="cal-event fulfillment">Accountability</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">12</div>
+              <div class="cal-event marketing">Podcast drop</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">13</div>
+              <div class="cal-event promo">Launch email #1</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">14</div>
+            </div>
+
+            <!-- Week 3: Mar 15-21 -->
+            <div class="cal-cell">
+              <div class="cal-day">15</div>
+              <div class="cal-event promo">Launch email #2</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">16</div>
+              <div class="cal-event promo">Cart open!</div>
+              <div class="cal-event dm">DM follow-ups</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">17</div>
+              <div class="cal-event marketing">Social proof</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">18</div>
+              <div class="cal-event fulfillment">Coaching call</div>
+              <div class="cal-event promo">Bonus expires</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">19</div>
+              <div class="cal-event sales">Objection calls</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">20</div>
+              <div class="cal-event promo">Cart close!</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">21</div>
+            </div>
+
+            <!-- Week 4: Mar 22-28 -->
+            <div class="cal-cell">
+              <div class="cal-day">22</div>
+              <div class="cal-event marketing">Debrief post</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">23</div>
+              <div class="cal-event fulfillment">Onboarding</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">24</div>
+              <div class="cal-event marketing">Email recap</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">25</div>
+              <div class="cal-event fulfillment">Coaching call</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">26</div>
+              <div class="cal-event dm">FB outreach</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">27</div>
+              <div class="cal-event marketing">Content plan</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">28</div>
+            </div>
+
+            <!-- Week 5: Mar 29-31 + Apr -->
+            <div class="cal-cell">
+              <div class="cal-day">29</div>
+              <div class="cal-event marketing">April prep</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">30</div>
+              <div class="cal-event sales">Pipeline review</div>
+            </div>
+            <div class="cal-cell">
+              <div class="cal-day">31</div>
+              <div class="cal-event promo">Q1 retro</div>
+            </div>
+            <div class="cal-cell other-month">
+              <div class="cal-day" style="color:var(--gray-300);">1</div>
+            </div>
+            <div class="cal-cell other-month">
+              <div class="cal-day" style="color:var(--gray-300);">2</div>
+            </div>
+            <div class="cal-cell other-month">
+              <div class="cal-day" style="color:var(--gray-300);">3</div>
+            </div>
+            <div class="cal-cell other-month">
+              <div class="cal-day" style="color:var(--gray-300);">4</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upcoming Events Summary -->
+        <div class="grid-2 mt-4" style="grid-template-columns: 1fr 1fr; gap:16px;">
+          <div class="card">
+            <div class="card-header" style="padding-bottom:10px;">
+              <span class="card-title">This Week's Events</span>
+            </div>
+            <div class="card-body" style="padding-top:4px;">
+              <div class="history-list">
+                <div class="history-item">
+                  <div class="history-dot" style="background:#5B21B6;"></div>
+                  <div style="flex:1;">
+                    <div style="font-size:12.5px;font-weight:600;color:var(--gray-800);">Webinar Prep + Live Session</div>
+                    <div style="font-size:11px;color:var(--gray-500);">Mar 5-6 &bull; Promo / Launch</div>
+                  </div>
+                </div>
+                <div class="history-item">
+                  <div class="history-dot" style="background:var(--marketing);"></div>
+                  <div style="flex:1;">
+                    <div style="font-size:12.5px;font-weight:600;color:var(--gray-800);">Social Posts — Launch Teaser</div>
+                    <div style="font-size:11px;color:var(--gray-500);">Mar 5 &bull; Marketing</div>
+                  </div>
+                </div>
+                <div class="history-item">
+                  <div class="history-dot" style="background:#C13584;"></div>
+                  <div style="flex:1;">
+                    <div style="font-size:12.5px;font-weight:600;color:var(--gray-800);">DM Campaign — Cold Outreach</div>
+                    <div style="font-size:11px;color:var(--gray-500);">Mar 3 &bull; DM</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header" style="padding-bottom:10px;">
+              <span class="card-title">Upcoming Launch Timeline</span>
+            </div>
+            <div class="card-body" style="padding-top:4px;">
+              <div class="history-list">
+                <div class="history-item" style="background:#EDE9FE;border-color:#DDD6FE;">
+                  <div class="history-dot" style="background:#5B21B6;"></div>
+                  <div style="flex:1;">
+                    <div style="font-size:12.5px;font-weight:600;color:#5B21B6;">Launch Emails</div>
+                    <div style="font-size:11px;color:#7C3AED;">Mar 13-15 &bull; 3-email sequence</div>
+                  </div>
+                </div>
+                <div class="history-item" style="background:#EDE9FE;border-color:#DDD6FE;">
+                  <div class="history-dot" style="background:#5B21B6;"></div>
+                  <div style="flex:1;">
+                    <div style="font-size:12.5px;font-weight:600;color:#5B21B6;">Cart Open</div>
+                    <div style="font-size:11px;color:#7C3AED;">Mar 16 &bull; 90-Day Accelerator</div>
+                  </div>
+                </div>
+                <div class="history-item" style="background:#EDE9FE;border-color:#DDD6FE;">
+                  <div class="history-dot" style="background:#5B21B6;"></div>
+                  <div style="flex:1;">
+                    <div style="font-size:12.5px;font-weight:600;color:#5B21B6;">Cart Close</div>
+                    <div style="font-size:11px;color:#7C3AED;">Mar 20 &bull; Early bird bonus ends Mar 18</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Page Footer ─────────────────────────────────────────────── -->
+<div style="background:var(--gray-800);padding:20px 24px;text-align:center;margin-top:0;">
+  <div style="font-size:12px;color:var(--gray-500);">Central Intelligence Web App Mockup &bull; 8 screens &bull; Central Intelligence V2 &bull; Client Presentation Reference &bull; March 2026</div>
+  <div style="font-size:11px;color:var(--gray-600);margin-top:4px;">Routes: / &bull; /chat &bull; /sales/leads &bull; /sales/calls &bull; /fulfillment/members &bull; /marketing/dm &bull; /marketing/offers &bull; /marketing/calendar</div>
+</div>
+
+<!-- ─── Iframe Embed Mode ──────────────────────────────────────── -->
+<script>
+(function() {
+  if (window.self === window.top) return; // Not in an iframe
+  var hash = window.location.hash;
+  if (!hash) return;
+
+  // Add iframe-mode class
+  document.documentElement.classList.add('iframe-mode');
+
+  // Hide header, footer, and all screen-labels
+  var hide = document.querySelectorAll('.page-top-header, .screen-label, [style*="Page Footer"]');
+  hide.forEach(function(el) { el.style.display = 'none'; });
+
+  // Hide the page footer (inline styled div)
+  var allDivs = document.querySelectorAll('body > div');
+  allDivs.forEach(function(el) {
+    if (el.textContent.indexOf('Client Presentation Reference') !== -1 && !el.classList.contains('app-shell')) {
+      el.style.display = 'none';
+    }
+  });
+
+  // Hide all app-shell screens except the target
+  var screens = document.querySelectorAll('.app-shell');
+  screens.forEach(function(el) {
+    if ('#' + el.id !== hash) {
+      el.style.display = 'none';
+    } else {
+      el.style.padding = '0';
+      el.style.margin = '0';
+    }
+  });
+
+  // Clean up body styling for iframe
+  document.body.style.background = 'transparent';
+  document.body.style.margin = '0';
+  document.body.style.padding = '0';
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Greg CI Docs — Technical Documentation</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    margin: 0; padding: 0;
+    color: #2d3748; line-height: 1.7;
+    background: #f7f8fc;
+  }
+
+  /* ── Layout ── */
+  .layout {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: #1a2332;
+    color: #cbd5e0;
+    padding: 24px 0;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    overflow-y: auto;
+    z-index: 100;
+  }
+  .sidebar-header {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid #2d3e50;
+    margin-bottom: 12px;
+  }
+  .sidebar-header h2 {
+    color: #fff;
+    font-size: 16px;
+    margin: 0 0 4px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .sidebar-header .subtitle {
+    font-size: 11px;
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .nav-section {
+    padding: 8px 0;
+  }
+  .nav-section-title {
+    padding: 6px 20px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #4a6785;
+    font-weight: 700;
+  }
+  .nav-link {
+    display: block;
+    padding: 7px 20px 7px 28px;
+    color: #a0aec0;
+    text-decoration: none;
+    font-size: 13px;
+    transition: all 0.15s;
+    border-left: 3px solid transparent;
+  }
+  .nav-link:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.05);
+    border-left-color: #4299e1;
+  }
+  .nav-link.indent {
+    padding-left: 40px;
+    font-size: 12px;
+    color: #718096;
+  }
+  .nav-link.indent:hover { color: #a0aec0; }
+
+  /* ── Main Content ── */
+  .main {
+    margin-left: 280px;
+    flex: 1;
+    padding: 40px 56px 80px;
+    max-width: 960px;
+  }
+
+  /* ── Typography ── */
+  h1 {
+    font-size: 32px;
+    color: #1a365d;
+    margin: 0 0 8px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .page-subtitle {
+    color: #718096;
+    font-size: 15px;
+    margin: 0 0 32px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid #e2e8f0;
+  }
+
+  h2 {
+    font-size: 24px;
+    color: #1a365d;
+    margin: 48px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #4299e1;
+    font-weight: 700;
+  }
+  h3 {
+    font-size: 18px;
+    color: #2b6cb0;
+    margin: 32px 0 12px;
+    font-weight: 700;
+  }
+  h4 {
+    font-size: 15px;
+    color: #4a5568;
+    margin: 24px 0 8px;
+    font-weight: 700;
+  }
+  p { margin: 8px 0 12px; font-size: 14.5px; }
+
+  /* ── Tables ── */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 16px 0 24px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13.5px;
+  }
+  th {
+    background: #edf2f7;
+    color: #1a365d;
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 2px solid #cbd5e0;
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid #edf2f7;
+    vertical-align: top;
+  }
+  tr:nth-child(even) { background: #f7fafc; }
+  tr:hover { background: #edf2f7; }
+  td code {
+    background: #edf2f7;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #c53030;
+    white-space: nowrap;
+  }
+
+  /* ── Code Blocks ── */
+  pre {
+    background: #1a2332;
+    color: #e2e8f0;
+    padding: 20px 24px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 12px 0 20px;
+    border: 1px solid #2d3e50;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+    white-space: pre;
+  }
+
+  /* Inline code */
+  code {
+    background: #edf2f7;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 13px;
+    color: #c53030;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  a { color: #4299e1; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  ul, ol {
+    margin-bottom: 16px;
+    padding-left: 24px;
+  }
+  li { margin-bottom: 8px; }
+
+  /* ── Section boxes ── */
+  .info-box {
+    background: #edf2f7;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+  .info-box h4 {
+    margin-top: 0;
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h2>Greg CI Docs</h2>
+    <p class="subtitle">Technical Documentation</p>
+  </div>
+  <nav>
+    <div class="nav-section">
+      <div class="nav-section-title">Overview</div>
+      <a href="#architecture" class="nav-link">System Architecture</a>
+      <a href="#agent-hierarchy" class="nav-link">Agent Hierarchy</a>
+      <a href="#data-schema" class="nav-link">Data Schema</a>
+      <a href="#repository-pattern" class="nav-link">Repository Pattern</a>
+      <a href="#api-overview" class="nav-link">API Reference</a>
+      <a href="#authentication" class="nav-link">Authentication</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Cross-References</div>
+      <a href="PRD.md" class="nav-link">PRD.md</a>
+      <a href="implementation-strategy.md" class="nav-link">Implementation Strategy</a>
+      <a href="api-contract-enhanced.md" class="nav-link">API Contract</a>
+      <a href="data-schema-enhanced.md" class="nav-link">Data Schema</a>
+      <a href="feature-breakdown-enhanced.md" class="nav-link">Features</a>
+      <a href="project-flow.html" class="nav-link">Project Flow</a>
+      <a href="workflow-documentation.html" class="nav-link">Workflows</a>
+      <a href="client-overview.html" class="nav-link">Client Overview</a>
+      <a href="webapp-mockup.html" class="nav-link">Mockup</a>
+    </div>
+  </nav>
+</aside>
+
+<!-- ===== MAIN ===== -->
+<div class="main">
+
+  <h1>Greg CI Docs — Technical Documentation</h1>
+  <p class="page-subtitle">Central Intelligence v3.0.0 · Architecture, Data, API Reference · Last Updated: 2026-04-29</p>
+
+  <!-- ===== 1. ARCHITECTURE ===== -->
+  <section id="architecture">
+    <h2>1. System Architecture Overview</h2>
+
+    <p>The Central Intelligence system is a distributed AI automation platform built on two complementary components:</p>
+
+    <div class="info-box">
+      <h4>Core Architecture</h4>
+      <p><strong>Backend:</strong> Python 3.11+ | FastAPI | Claude SDK<br>
+      <strong>Frontend:</strong> Next.js 14+ | TypeScript | Vercel<br>
+      <strong>Database:</strong> Supabase PostgreSQL | 26 Tables | RLS Policies<br>
+      <strong>Queue:</strong> Celery + Redis for async task execution</p>
+    </div>
+
+    <h3>Key Design Principles</h3>
+    <ul>
+      <li><strong>Database-Agnostic:</strong> Repository Pattern ensures all data access flows through a standardized interface. Swappable storage backends (PostgreSQL, MySQL, MongoDB) without agent code changes.</li>
+      <li><strong>Async-First:</strong> All I/O operations (database, API calls, message queues) use async/await for non-blocking scalability.</li>
+      <li><strong>Role-Based Access Control:</strong> Supabase RLS policies enforce row-level authorization. Users see only data they own or are explicitly granted.</li>
+      <li><strong>Event-Driven:</strong> WebSocket subscriptions enable real-time UI updates. FastAPI webhooks trigger agent workflows asynchronously via Celery.</li>
+    </ul>
+
+  </section>
+
+  <!-- ===== 2. AGENT HIERARCHY ===== -->
+  <section id="agent-hierarchy">
+    <h2>2. Agent Hierarchy & Specialization</h2>
+
+    <p>Central Intelligence operates as a multi-tier agent system, mirroring organizational structure:</p>
+
+    <h3>Tier 1: Central Intelligence (Orchestrator)</h3>
+    <p>Role: Intent interpretation, workflow routing, chat inference via Claude SDK. Receives user input (dashboard chat, API requests) and routes to appropriate Director or Specialist.</p>
+
+    <h3>Tier 2: 3 Directors</h3>
+    <ul>
+      <li><strong>Marketing Director (CI-MKT-01):</strong> Content calendars, social metrics, audience targeting, brand voice</li>
+      <li><strong>Sales Director (CI-SAL-01):</strong> Lead scoring, pipeline management, objection handling, conversion optimization</li>
+      <li><strong>Fulfillment Director (CI-FUL-01):</strong> Member onboarding, coaching logistics, accountability tracking, win capture</li>
+    </ul>
+
+    <h3>Tier 3: 15+ Specialists</h3>
+    <p>Each Specialist owns a domain (social media, email, funnels, calls, etc.) and executes specialized tasks. Example: Marketing Social Specialist (CI-MKT-03) manages LinkedIn, Instagram, TikTok metrics and scheduling.</p>
+
+    <h3>Tier 4: 7 Operators</h3>
+    <p>Shared utility workers: transcription, ICP generation, offer creation, stats aggregation, error recovery, data sync, webhook relay.</p>
+
+  </section>
+
+  <!-- ===== 3. DATA SCHEMA OVERVIEW ===== -->
+  <section id="data-schema">
+    <h2>3. Data Schema Overview</h2>
+
+    <p>Central Intelligence consolidates three data sources into a unified PostgreSQL schema: 26 tables organized into operational, intelligence, configuration, and audit tiers.</p>
+
+    <h3>Design Philosophy</h3>
+    <p>The schema enforces the <strong>Repository Pattern</strong>: all database operations flow through type-safe Repositories. Agents never execute raw SQL. This ensures:</p>
+    <ul>
+      <li><strong>Swappable Storage:</strong> Implement a new Repository concrete class → instant MySQL/MongoDB support</li>
+      <li><strong>Consistent Contracts:</strong> All CRUD operations return predictable Pydantic schemas</li>
+      <li><strong>Centralized Access Control:</strong> Only Repository classes hold credentials</li>
+      <li><strong>Async-First:</strong> All methods use async/await for non-blocking I/O</li>
+    </ul>
+
+    <h3>Core Strategy: Soft Deletes & Multi-Tenant Isolation</h3>
+    <ul>
+      <li><strong>Soft Deletes:</strong> Records marked <code>deleted_at</code> instead of hard-deleted. Enables data recovery and audit trails.</li>
+      <li><strong>RLS Policies:</strong> Supabase enforces row-level security so users see only their data.</li>
+      <li><strong>Idempotency Keys:</strong> Deduplication table prevents duplicate inserts on retried requests (24-hour window).</li>
+    </ul>
+
+    <h3>26-Table Unified Schema</h3>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Layer</th>
+          <th>Table</th>
+          <th>Purpose</th>
+          <th>Est. Rows</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td rowspan="9"><strong>Core Operational</strong></td>
+          <td><code>leads</code></td>
+          <td>Sales pipeline prospects</td>
+          <td>10K</td>
+        </tr>
+        <tr>
+          <td><code>members</code></td>
+          <td>Active cohort members</td>
+          <td>500</td>
+        </tr>
+        <tr>
+          <td><code>calls</code></td>
+          <td>Unified transcripts (CI + Sales + Coaching)</td>
+          <td>50K</td>
+        </tr>
+        <tr>
+          <td><code>insights</code></td>
+          <td>Voice-of-customer signals extracted from calls</td>
+          <td>100K</td>
+        </tr>
+        <tr>
+          <td><code>content_ideas</code></td>
+          <td>Generated content opportunities (email, social, webinar)</td>
+          <td>5K</td>
+        </tr>
+        <tr>
+          <td><code>goals</code></td>
+          <td>Member / lead goals and targets</td>
+          <td>2K</td>
+        </tr>
+        <tr>
+          <td><code>pain_points</code></td>
+          <td>Customer pain points and frustrations</td>
+          <td>10K</td>
+        </tr>
+        <tr>
+          <td><code>wins</code></td>
+          <td>Member achievements and wins</td>
+          <td>5K</td>
+        </tr>
+        <tr>
+          <td><code>objections</code></td>
+          <td>Sales objections encountered</td>
+          <td>3K</td>
+        </tr>
+        <tr>
+          <td rowspan="2"><strong>Meta & Config</strong></td>
+          <td><code>users</code></td>
+          <td>System users, coaches, admins</td>
+          <td>50</td>
+        </tr>
+        <tr>
+          <td><code>teams</code></td>
+          <td>Team / group associations</td>
+          <td>10</td>
+        </tr>
+        <tr>
+          <td rowspan="6"><strong>Intelligence & Marketing</strong></td>
+          <td><code>insight_tags</code></td>
+          <td>Tag assignments to insights</td>
+          <td>50K</td>
+        </tr>
+        <tr>
+          <td><code>tag_dictionary</code></td>
+          <td>Canonical tag vocabulary</td>
+          <td>200</td>
+        </tr>
+        <tr>
+          <td><code>market_signals</code></td>
+          <td>Aggregated trends (pains, goals, objections)</td>
+          <td>2K</td>
+        </tr>
+        <tr>
+          <td><code>offers</code></td>
+          <td>Products, services, promotions</td>
+          <td>50</td>
+        </tr>
+        <tr>
+          <td><code>business_profile</code></td>
+          <td>Brand voice, mission, differentiators (1 row)</td>
+          <td>1</td>
+        </tr>
+        <tr>
+          <td><code>monthly_preferences</code></td>
+          <td>Email calendar configuration per month</td>
+          <td>12</td>
+        </tr>
+        <tr>
+          <td rowspan="4"><strong>Audit & Logging</strong></td>
+          <td><code>audit_log</code></td>
+          <td>All CREATE / UPDATE / DELETE / EXPORT events</td>
+          <td>1M+</td>
+        </tr>
+        <tr>
+          <td><code>error_log</code></td>
+          <td>Workflow errors, exceptions, stack traces</td>
+          <td>100K</td>
+        </tr>
+        <tr>
+          <td><code>sync_log</code></td>
+          <td>Migration and data sync events</td>
+          <td>50K</td>
+        </tr>
+        <tr>
+          <td><code>idempotency_keys</code></td>
+          <td>Deduplication (24-hour TTL)</td>
+          <td>100K</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+  </section>
+
+  <!-- ===== 4. REPOSITORY PATTERN ===== -->
+  <section id="repository-pattern">
+    <h2>4. Repository Pattern & Data Access</h2>
+
+    <p>All database operations flow through typed Repository classes. Agents depend on Repository interfaces, never raw SQL.</p>
+
+    <h3>Base Repository Interface</h3>
+    <pre><code>class RepositoryBase(Generic[T]):
+    async def get(id: Any) -> Optional[T]
+    async def list(skip: int, limit: int, filters: Dict) -> List[T]
+    async def create(obj_in: CreateSchema) -> T
+    async def update(id: Any, obj_in: UpdateSchema) -> Optional[T]
+    async def delete(id: Any) -> bool
+    async def soft_delete(id: Any) -> Optional[T]  # Marks deleted_at
+    async def exists(id: Any) -> bool</code></pre>
+
+    <h3>Concrete Implementation Example</h3>
+    <pre><code>class LeadRepository(RepositoryBase[Lead]):
+    async def get_by_email(email: str) -> Optional[Lead]:
+        stmt = select(Lead).where(
+            and_(Lead.email == email.lower(), Lead.deleted_at == None)
+        )
+        result = await self.db_session.execute(stmt)
+        return result.scalars().first()
+
+    async def list_by_status(status: str, skip: int, limit: int):
+        stmt = select(Lead).where(
+            and_(Lead.status == status, Lead.deleted_at == None)
+        ).offset(skip).limit(limit)
+        result = await self.db_session.execute(stmt)
+        return result.scalars().all()</code></pre>
+
+    <p class="info-box"><strong>Key Guarantee:</strong> Similar repositories exist for Member, Call, Insight, ContentIdea, and all 26 tables. Agents call repository methods; never databases directly.</p>
+
+  </section>
+
+  <!-- ===== 5. API OVERVIEW ===== -->
+  <section id="api-overview">
+    <h2>5. REST API Contract & WebSocket</h2>
+
+    <h3>Base URL</h3>
+    <p><code>https://api.centralintelligence.dev/v1</code></p>
+
+    <h3>Endpoint Categories (33+ Total)</h3>
+    <ul>
+      <li><strong>Calls & Transcripts:</strong> Upload, process, query CI calls</li>
+      <li><strong>Insights & Market Signals:</strong> Voice-of-customer extraction, trend analysis</li>
+      <li><strong>Content Ideas:</strong> CRUD on generated content opportunities</li>
+      <li><strong>Leads & Sales:</strong> Pipeline management, status updates, appointments</li>
+      <li><strong>Members & Coaching:</strong> Cohort management, goal tracking, wins</li>
+      <li><strong>Tags & Configuration:</strong> Tag vocabulary, offers, preferences</li>
+      <li><strong>Admin & Auth:</strong> User management, authentication, role-based access</li>
+    </ul>
+
+    <h3>Calls & Transcripts</h3>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Endpoint</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>POST</strong></td>
+          <td><code>/v1/ci/transcripts/upload</code></td>
+          <td>Upload transcript file for processing (202 Accepted)</td>
+        </tr>
+        <tr>
+          <td><strong>POST</strong></td>
+          <td><code>/v1/ci/transcripts/process</code></td>
+          <td>Trigger transcript processing</td>
+        </tr>
+        <tr>
+          <td><strong>GET</strong></td>
+          <td><code>/v1/ci/calls</code></td>
+          <td>List calls with filters (page, limit, call_type, date_range)</td>
+        </tr>
+        <tr>
+          <td><strong>GET</strong></td>
+          <td><code>/v1/ci/calls/:call_id</code></td>
+          <td>Get call detail with insights and content ideas</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Insights & Market Signals</h3>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Endpoint</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>GET</strong></td>
+          <td><code>/v1/ci/insights</code></td>
+          <td>List insights with filters (insight_type, signal_family, date_range)</td>
+        </tr>
+        <tr>
+          <td><strong>GET</strong></td>
+          <td><code>/v1/ci/insights/:insight_id</code></td>
+          <td>Get insight detail with tags and related content</td>
+        </tr>
+        <tr>
+          <td><strong>GET</strong></td>
+          <td><code>/v1/ci/market-signals</code></td>
+          <td>Aggregated market trends (Pain, Goal, Objection, etc.)</td>
+        </tr>
+        <tr>
+          <td><strong>GET</strong></td>
+          <td><code>/v1/ci/tags</code></td>
+          <td>Tag dictionary (canonical vocabulary)</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Content Ideas</h3>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Endpoint</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>GET</strong></td>
+          <td><code>/v1/ci/content-ideas</code></td>
+          <td>List content ideas (status, format, priority)</td>
+        </tr>
+        <tr>
+          <td><strong>PUT</strong></td>
+          <td><code>/v1/ci/content-ideas/:content_id</code></td>
+          <td>Update idea status (Idea → Scheduled → Written → Sent → Archived)</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Configuration & Reference Data</h3>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Endpoint</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>GET</strong></td>
+          <td><code>/v1/ci/offers</code></td>
+          <td>List CI offers (Active, Inactive, Coming Soon)</td>
+        </tr>
+        <tr>
+          <td><strong>GET</strong></td>
+          <td><code>/v1/ci/monthly-preferences/:year/:month</code></td>
+          <td>Get email calendar configuration</td>
+        </tr>
+        <tr>
+          <td><strong>PUT</strong></td>
+          <td><code>/v1/ci/monthly-preferences/:year/:month</code></td>
+          <td>Create/update monthly preferences</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+  </section>
+
+  <!-- ===== 6. AUTHENTICATION ===== -->
+  <section id="authentication">
+    <h2>6. Authentication & Authorization</h2>
+
+    <h3>Two-Layer Auth Model</h3>
+
+    <h4>Layer 1: User → App (Supabase Auth)</h4>
+    <p>Users authenticate via email/password or OAuth provider. Supabase Auth issues a JWT stored in an HttpOnly cookie.</p>
+
+    <h4>Layer 2: App → API (Bearer Token)</h4>
+    <p>Every FastAPI request includes the JWT in the Authorization header:</p>
+    <pre><code>Authorization: Bearer &lt;supabase-jwt-token&gt;
+X-User-Id: user_abc123
+X-Request-Id: req_xyz789
+Content-Type: application/json</code></pre>
+
+    <h3>Required Headers</h3>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Header</th>
+          <th>Required</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>Authorization</code></td>
+          <td><strong>Yes</strong></td>
+          <td>Bearer token from Supabase Auth</td>
+        </tr>
+        <tr>
+          <td><code>Content-Type</code></td>
+          <td><strong>Yes</strong></td>
+          <td><code>application/json</code></td>
+        </tr>
+        <tr>
+          <td><code>X-User-Id</code></td>
+          <td><strong>Yes*</strong></td>
+          <td>User ID from JWT claims (*except /auth and /health)</td>
+        </tr>
+        <tr>
+          <td><code>X-Request-Id</code></td>
+          <td><strong>Recommended</strong></td>
+          <td>UUID for request tracing and idempotency</td>
+        </tr>
+        <tr>
+          <td><code>X-Idempotency-Key</code></td>
+          <td><strong>Optional</strong></td>
+          <td>UUID to prevent duplicate processing (5-min window)</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Security & Authorization Layers</h3>
+    <ul>
+      <li><strong>Supabase JWT:</strong> Users authenticate with email/password. Supabase issues signed JWT. Token claims include user ID, email, role.</li>
+      <li><strong>FastAPI Middleware:</strong> Every request verifies JWT signature and extracts user context. Failed verification returns 401 Unauthorized.</li>
+      <li><strong>Row-Level Security (RLS):</strong> Supabase PostgreSQL enforces RLS policies on all queries. Users see only rows matching their user_id.</li>
+      <li><strong>Role-Based Access:</strong> Roles (admin, coach, agent, viewer) control feature access. Admin-only endpoints require role = 'admin'.</li>
+    </ul>
+
+    <h3>Credential Rotation Strategy</h3>
+    <ul>
+      <li><strong>API Keys:</strong> Stored as hashed values in database. Never logged or exposed in error messages.</li>
+      <li><strong>Database Credentials:</strong> Managed by Supabase. Automatic rotation available via dashboard.</li>
+      <li><strong>JWT Expiration:</strong> Supabase JWTs expire in 1 hour. Client refreshes token using refresh token endpoint.</li>
+    </ul>
+
+  </section>
+
+  <!-- ===== 7. ERROR HANDLING ===== -->
+  <section id="error-handling">
+    <h2>7. Error Handling & Status Codes</h2>
+
+    <h3>Standard Error Response Format</h3>
+    <pre><code>{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Email must be a valid email address",
+    "field": "email",
+    "timestamp": "2026-04-29T12:00:00.000Z",
+    "requestId": "req_abc123"
+  }
+}</code></pre>
+
+    <h3>HTTP Status Codes & Error Codes</h3>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Code</th>
+          <th>Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>400</td>
+          <td><code>VALIDATION_ERROR</code></td>
+          <td>Request body failed Pydantic validation</td>
+        </tr>
+        <tr>
+          <td>401</td>
+          <td><code>UNAUTHORIZED</code></td>
+          <td>Missing or invalid Bearer token</td>
+        </tr>
+        <tr>
+          <td>403</td>
+          <td><code>FORBIDDEN</code></td>
+          <td>Token valid but user lacks permission</td>
+        </tr>
+        <tr>
+          <td>404</td>
+          <td><code>NOT_FOUND</code></td>
+          <td>Resource does not exist</td>
+        </tr>
+        <tr>
+          <td>409</td>
+          <td><code>CONFLICT</code></td>
+          <td>Duplicate resource or version conflict</td>
+        </tr>
+        <tr>
+          <td>429</td>
+          <td><code>RATE_LIMIT_EXCEEDED</code></td>
+          <td>Too many requests in time window</td>
+        </tr>
+        <tr>
+          <td>500</td>
+          <td><code>INTERNAL_ERROR</code></td>
+          <td>Unexpected server-side failure</td>
+        </tr>
+        <tr>
+          <td>503</td>
+          <td><code>SERVICE_UNAVAILABLE</code></td>
+          <td>API temporarily unavailable</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Structured Logging</h3>
+    <p>All errors logged via Sentry with structured context: user_id, request_id, endpoint, error_code, stack_trace. Enable Sentry integration for real-time alerting on critical errors.</p>
+
+    <h3>Error Recovery Agent</h3>
+    <p>Operator CI-CORE-05 (Error Handler) monitors error_log table and automatically retries failed tasks with exponential backoff. Critical failures escalate to admin queue.</p>
+
+  </section>
+
+  <!-- ===== 8. TECH STACK ===== -->
+  <section id="tech-stack">
+    <h2>8. Technology Stack</h2>
+
+    <h3>Backend (Python)</h3>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Technology</th>
+          <th>Version</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Runtime</strong></td>
+          <td>Python</td>
+          <td>3.11+</td>
+        </tr>
+        <tr>
+          <td><strong>Web Framework</strong></td>
+          <td>FastAPI</td>
+          <td>0.104+</td>
+        </tr>
+        <tr>
+          <td><strong>AI Integration</strong></td>
+          <td>Claude SDK (Anthropic)</td>
+          <td>Latest</td>
+        </tr>
+        <tr>
+          <td><strong>ORM</strong></td>
+          <td>SQLAlchemy</td>
+          <td>2.0+</td>
+        </tr>
+        <tr>
+          <td><strong>Database Driver</strong></td>
+          <td>asyncpg</td>
+          <td>0.29+</td>
+        </tr>
+        <tr>
+          <td><strong>Migrations</strong></td>
+          <td>Alembic</td>
+          <td>1.13+</td>
+        </tr>
+        <tr>
+          <td><strong>Task Queue</strong></td>
+          <td>Celery</td>
+          <td>5.3+</td>
+        </tr>
+        <tr>
+          <td><strong>Message Broker</strong></td>
+          <td>Redis</td>
+          <td>7.0+</td>
+        </tr>
+        <tr>
+          <td><strong>Data Validation</strong></td>
+          <td>Pydantic</td>
+          <td>2.0+</td>
+        </tr>
+        <tr>
+          <td><strong>Rate Limiting</strong></td>
+          <td>SlowAPI</td>
+          <td>Latest</td>
+        </tr>
+        <tr>
+          <td><strong>Error Tracking</strong></td>
+          <td>Sentry</td>
+          <td>1.40+</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Frontend (Next.js)</h3>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Technology</th>
+          <th>Version</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Framework</strong></td>
+          <td>Next.js</td>
+          <td>14+</td>
+        </tr>
+        <tr>
+          <td><strong>Language</strong></td>
+          <td>TypeScript</td>
+          <td>5.3+</td>
+        </tr>
+        <tr>
+          <td><strong>State Management</strong></td>
+          <td>React Query</td>
+          <td>5.0+</td>
+        </tr>
+        <tr>
+          <td><strong>AI Streaming</strong></td>
+          <td>Vercel AI SDK</td>
+          <td>3.0+</td>
+        </tr>
+        <tr>
+          <td><strong>UI Components</strong></td>
+          <td>shadcn/ui</td>
+          <td>Latest</td>
+        </tr>
+        <tr>
+          <td><strong>Styling</strong></td>
+          <td>Tailwind CSS</td>
+          <td>3.4+</td>
+        </tr>
+        <tr>
+          <td><strong>Auth</strong></td>
+          <td>Supabase Auth</td>
+          <td>Latest</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Data & Infrastructure</h3>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Technology</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Primary Database</strong></td>
+          <td>Supabase (PostgreSQL)</td>
+          <td>Unified data store, RLS, Auth</td>
+        </tr>
+        <tr>
+          <td><strong>Caching Layer</strong></td>
+          <td>Redis</td>
+          <td>Hot data, sessions, rate limiting</td>
+        </tr>
+        <tr>
+          <td><strong>Observability</strong></td>
+          <td>Sentry + Structured Logging</td>
+          <td>Error tracking, performance monitoring</td>
+        </tr>
+        <tr>
+          <td><strong>Deployment (Backend)</strong></td>
+          <td>Cloud Run / Render</td>
+          <td>Scalable FastAPI hosting</td>
+        </tr>
+        <tr>
+          <td><strong>Deployment (Frontend)</strong></td>
+          <td>Vercel</td>
+          <td>Next.js edge deployment, CDN</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+  </section>
+
+  <!-- ===== 9. SECURITY & OPERATIONS ===== -->
+  <section id="security-operations">
+    <h2>9. Security & Operations</h2>
+
+    <h3>Authentication & Authorization Layers</h3>
+    <ul>
+      <li><strong>Supabase JWT:</strong> Users authenticate with email/password. Supabase issues signed JWT. Token claims include user ID, email, role.</li>
+      <li><strong>FastAPI Middleware:</strong> Every request verifies JWT signature and extracts user context. Failed verification returns 401 Unauthorized.</li>
+      <li><strong>Row-Level Security (RLS):</strong> Supabase PostgreSQL enforces RLS policies on all queries. Users see only rows matching their user_id.</li>
+      <li><strong>Role-Based Access:</strong> Roles (admin, coach, agent, viewer) control feature access. Admin-only endpoints require role = 'admin'.</li>
+    </ul>
+
+    <h3>Request Signing & HMAC (Optional)</h3>
+    <p>For high-security workflows, clients can sign requests with HMAC-SHA256 using a shared secret. FastAPI middleware verifies signature before processing.</p>
+
+    <h3>Data Protection</h3>
+    <ul>
+      <li>All data in transit over HTTPS with TLS 1.3</li>
+      <li>At-rest encryption via Supabase default configuration</li>
+      <li>Passwords hashed with bcrypt via Supabase Auth</li>
+      <li>API keys and credentials stored in .env (never committed)</li>
+    </ul>
+
+    <h3>Observability & Monitoring</h3>
+    <ul>
+      <li>Sentry captures exceptions, performance issues, and error trends</li>
+      <li>Custom agent telemetry tracks Claude SDK usage (tokens, latency)</li>
+      <li>Structured logging to error_log table for debugging</li>
+      <li>Health check endpoint (GET /health) monitors API availability</li>
+    </ul>
+
+  </section>
+
+</div><!-- .main -->
+
+</body>
+</html>

@@ -1,0 +1,1 @@
+{"nodes": [{"id": "error", "label": "error.tsx", "file_type": "code", "source_file": "projects/workerbee/frontend/src/app/(app)/error.tsx", "source_location": "L1"}], "edges": [{"source": "error", "target": "link", "relation": "imports_from", "confidence": "EXTRACTED", "source_file": "projects/workerbee/frontend/src/app/(app)/error.tsx", "source_location": "L10", "weight": 1.0}]}

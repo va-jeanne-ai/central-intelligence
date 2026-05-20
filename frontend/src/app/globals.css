@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design Tokens ─────────────────────────────────────────────────────────── */
+:root {
+  /* Brand / Accent */
+  --brand: #6366F1;
+  --brand-light: #A5B4FC;
+  --brand-dark: #4F46E5;
+
+  /* Department Colors */
+  --marketing: #10B981;
+  --sales: #3B82F6;
+  --fulfillment: #F97316;
+
+  /* Layout */
+  --sidebar-width: 228px;
+  --header-height: 60px;
+
+  /* Surface */
+  --background: #F9FAFB;
+  --foreground: #111827;
+  --surface: #FFFFFF;
+  --border: #E5E7EB;
+}
+
+/* ─── Base Reset ─────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Scrollbar Styling ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* ─── Utilities ─────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

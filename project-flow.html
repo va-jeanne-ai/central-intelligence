@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Greg CI Docs — Project Flow</title>
+<style>
+  :root {
+    --phase1: #16a34a;
+    --phase1-bg: #f0fdf4;
+    --phase1-border: #bbf7d0;
+    --phase2: #2563eb;
+    --phase2-bg: #eff6ff;
+    --phase2-border: #bfdbfe;
+    --phase3: #ea580c;
+    --phase3-bg: #fff7ed;
+    --phase3-border: #fed7aa;
+    --phase4: #7c3aed;
+    --phase4-bg: #f5f3ff;
+    --phase4-border: #ddd6fe;
+    --phase5: #57534e;
+    --phase5-bg: #fafaf9;
+    --phase5-border: #d6d3d1;
+    --phase6: #db2777;
+    --phase6-bg: #fdf2f8;
+    --phase6-border: #fbcfe8;
+    --accent: #1a73e8;
+    --text: #1e293b;
+    --text-light: #64748b;
+    --bg: #ffffff;
+    --sidebar-bg: #f8fafc;
+    --border: #e2e8f0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: var(--text);
+    line-height: 1.7;
+    background: #f1f5f9;
+  }
+
+  /* Layout */
+  .layout {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 280px;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    padding: 32px 20px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    overflow-y: auto;
+    z-index: 100;
+  }
+
+  .sidebar-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-light);
+    margin-bottom: 16px;
+  }
+
+  .sidebar nav a {
+    display: block;
+    padding: 8px 12px;
+    color: var(--text-light);
+    text-decoration: none;
+    font-size: 14px;
+    border-radius: 6px;
+    margin-bottom: 2px;
+    transition: all 0.15s;
+  }
+
+  .sidebar nav a:hover {
+    background: #e2e8f0;
+    color: var(--text);
+  }
+
+  .sidebar nav a.indent {
+    padding-left: 28px;
+    font-size: 13px;
+  }
+
+  .sidebar .phase-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  /* Main Content */
+  .main {
+    margin-left: 280px;
+    flex: 1;
+    padding: 0;
+    background: var(--bg);
+  }
+
+  .header {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff;
+    padding: 48px 60px;
+    border-bottom: 4px solid var(--accent);
+  }
+
+  .header h1 {
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+
+  .header .subtitle {
+    font-size: 16px;
+    color: #94a3b8;
+    font-weight: 400;
+  }
+
+  .header .date {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 12px;
+  }
+
+  .content {
+    max-width: 1100px;
+    padding: 48px 60px 80px;
+  }
+
+  h2 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 56px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  h2:first-child { margin-top: 0; }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 32px;
+    margin-bottom: 12px;
+  }
+
+  p { margin-bottom: 16px; font-size: 15px; }
+
+  ul, ol {
+    margin-bottom: 16px;
+    padding-left: 24px;
+  }
+
+  li { margin-bottom: 6px; font-size: 15px; }
+
+  code {
+    background: #f0f4ff;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.88em;
+    color: #d63384;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .note {
+    background: #eff6ff;
+    border-left: 4px solid var(--accent);
+    padding: 14px 18px;
+    margin: 20px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 14px;
+  }
+
+  /* Tables */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 20px 0 28px;
+    font-size: 14px;
+  }
+
+  th, td {
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    background: #f0f4ff;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  tr:nth-child(even) { background: #fafbfc; }
+
+  td code { font-size: 0.85em; }
+
+  /* Phase badges */
+  .phase-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .phase-badge.p1 { background: var(--phase1-bg); color: var(--phase1); border: 1px solid var(--phase1-border); }
+  .phase-badge.p2 { background: var(--phase2-bg); color: var(--phase2); border: 1px solid var(--phase2-border); }
+  .phase-badge.p3 { background: var(--phase3-bg); color: var(--phase3); border: 1px solid var(--phase3-border); }
+  .phase-badge.p4 { background: var(--phase4-bg); color: var(--phase4); border: 1px solid var(--phase4-border); }
+  .phase-badge.p5 { background: var(--phase5-bg); color: var(--phase5); border: 1px solid var(--phase5-border); }
+  .phase-badge.p6 { background: var(--phase6-bg); color: var(--phase6); border: 1px solid var(--phase6-border); }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 20px 0 32px;
+    padding: 16px 20px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .legend-color {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+  }
+
+  /* Flow Diagram */
+  .flow-diagram {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px 32px 48px;
+    margin: 24px 0 36px;
+    overflow-x: auto;
+  }
+
+  .flow-row {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 0;
+    position: relative;
+    margin-bottom: 24px;
+  }
+
+  .flow-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .flow-node {
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    min-width: 200px;
+    max-width: 260px;
+    line-height: 1.4;
+    position: relative;
+    border: 2px solid;
+  }
+
+  .flow-node.wide {
+    min-width: 280px;
+    max-width: 320px;
+  }
+
+  .flow-node-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    opacity: 0.7;
+  }
+
+  .flow-node-text {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .flow-node-sub {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.8;
+    margin-top: 3px;
+  }
+
+  /* Phase coloring for nodes */
+  .fn-p1 { background: var(--phase1-bg); border-color: var(--phase1); color: var(--phase1); }
+  .fn-p2 { background: var(--phase2-bg); border-color: var(--phase2); color: var(--phase2); }
+  .fn-p3 { background: var(--phase3-bg); border-color: var(--phase3); color: var(--phase3); }
+  .fn-p4 { background: var(--phase4-bg); border-color: var(--phase4); color: var(--phase4); }
+  .fn-p5 { background: var(--phase5-bg); border-color: var(--phase5); color: var(--phase5); }
+  .fn-p6 { background: var(--phase6-bg); border-color: var(--phase6); color: var(--phase6); opacity: 0.55; }
+
+  /* Arrows */
+  .flow-arrow {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 36px;
+    position: relative;
+  }
+
+  .flow-arrow::after {
+    content: '';
+    display: block;
+    width: 2px;
+    height: 20px;
+    background: #94a3b8;
+  }
+
+  .flow-arrow::before {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #94a3b8;
+  }
+
+  .flow-arrow-label {
+    position: absolute;
+    right: -48px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .flow-arrow-label.left {
+    right: auto;
+    left: -40px;
+  }
+
+  /* Section boxes */
+  .section-box {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 16px 0;
+  }
+
+  .phase-section {
+    border-left: 4px solid;
+    border-radius: 0 8px 8px 0;
+    padding: 20px 24px;
+    margin: 20px 0;
+    background: white;
+  }
+
+  .phase-section.ps1 { border-left-color: var(--phase1); }
+  .phase-section.ps2 { border-left-color: var(--phase2); }
+  .phase-section.ps3 { border-left-color: var(--phase3); }
+  .phase-section.ps4 { border-left-color: var(--phase4); }
+  .phase-section.ps5 { border-left-color: var(--phase5); }
+  .phase-section.ps6 { border-left-color: var(--phase6); }
+
+  .phase-section h3 {
+    margin-top: 0;
+  }
+
+  /* Responsive */
+  @media (max-width: 1024px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .header { padding: 32px 24px; }
+    .content { padding: 32px 24px 60px; }
+    .flow-diagram { padding: 24px 16px; }
+  }
+
+  /* Data flow table special styling */
+  .data-flow-table td:first-child {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .data-flow-table td { font-size: 13px; }
+
+  .cell-empty {
+    color: #cbd5e1;
+    font-style: italic;
+  }
+
+  .cell-transform {
+    color: var(--phase4);
+    font-weight: 500;
+  }
+
+  /* Horizontal arrow connector for inline flows */
+  .h-arrow {
+    display: inline-block;
+    color: #94a3b8;
+    font-size: 14px;
+    margin: 0 4px;
+    font-weight: 700;
+  }
+
+  /* Document grid styling for doc-card sections */
+  .doc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+
+  .doc-card {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    transition: all 0.15s;
+  }
+
+  .doc-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 1px 3px rgba(26, 115, 232, 0.1);
+  }
+
+  .doc-card h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .doc-card p {
+    font-size: 13px;
+    color: var(--text-light);
+    margin-bottom: 12px;
+  }
+
+  .doc-card a {
+    display: inline-block;
+    padding: 4px 8px;
+    background: #eff6ff;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--accent);
+    border: 1px solid #bfdbfe;
+  }
+
+  .doc-card a:hover {
+    background: #dbeafe;
+  }
+
+  /* Tech grid styling */
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+
+  .tech-section {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .tech-section h4 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+
+  .tech-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .tech-section li {
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text-light);
+  }
+
+  .tech-section li::before {
+    content: "→ ";
+    color: var(--accent);
+    margin-right: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-title">Project Flow</div>
+  <nav>
+    <a href="#purpose"><span class="phase-dot" style="background:#1a73e8"></span>Project Purpose</a>
+    <a href="#hierarchy"><span class="phase-dot" style="background:#334155"></span>Agent Hierarchy</a>
+    <a href="#docs"><span class="phase-dot" style="background:#334155"></span>Documentation Map</a>
+    <a href="#tech-stack" class="indent"><span class="phase-dot" style="background:var(--phase1)"></span>Technology Stack</a>
+    <a href="#concepts" class="indent"><span class="phase-dot" style="background:var(--phase2)"></span>Key Concepts</a>
+    <a href="#references" class="indent"><span class="phase-dot" style="background:var(--phase3)"></span>Quick References</a>
+    <a href="#getting-started" class="indent"><span class="phase-dot" style="background:var(--phase4)"></span>Getting Started</a>
+  </nav>
+</aside>
+
+<!-- Main Content -->
+<div class="main">
+
+<div class="header">
+  <h1>Greg CI Docs — Project Flow</h1>
+  <div class="subtitle">Central Intelligence · Documentation Suite Navigation Map</div>
+  <div class="date">Last updated: 2026-04-29</div>
+</div>
+
+<div class="content">
+
+<!-- Section 1: Project Purpose -->
+<h2 id="purpose">1. Project Purpose</h2>
+
+<p>
+  Central Intelligence is a unified AI automation platform that orchestrates business intelligence across three departments (Marketing, Sales, Fulfillment). Built on a three-level agent hierarchy, the system enables cross-domain insights, automated data flows, and strategic decision-making through a single interface.
+</p>
+
+<p>
+  The platform replaces isolated single-purpose AI tools with integrated specialist agents that share a common intelligence pool, enabling marketing to leverage sales insights, fulfillment wins to inform content strategy, and leadership to make data-driven priorities based on unified visibility.
+</p>
+
+<!-- Section 2: Agent Hierarchy -->
+<h2 id="hierarchy">2. Three-Level Agent Hierarchy</h2>
+
+<div class="flow-diagram">
+  <div class="flow-col">
+    <!-- Tier 1: Central Intelligence -->
+    <div class="flow-node" style="min-width: 240px; background: var(--phase1-bg); border-color: var(--phase1); color: var(--phase1);">
+      <div class="flow-node-label">Tier 1</div>
+      <div class="flow-node-text">Central Intelligence</div>
+      <div class="flow-node-sub">CEO-Level Orchestrator</div>
+    </div>
+
+    <div class="flow-arrow"></div>
+
+    <!-- Tier 2: Directors -->
+    <div class="flow-row" style="margin: 16px 0; gap: 24px; justify-content: center;">
+      <div class="flow-node" style="background: var(--phase2-bg); border-color: var(--phase2); color: var(--phase2);">
+        <div class="flow-node-label">Tier 2</div>
+        <div class="flow-node-text">Marketing Director</div>
+        <div class="flow-node-sub">6 Specialists</div>
+      </div>
+      <div class="flow-node" style="background: var(--phase2-bg); border-color: var(--phase2); color: var(--phase2);">
+        <div class="flow-node-label">Tier 2</div>
+        <div class="flow-node-text">Sales Director</div>
+        <div class="flow-node-sub">3 Specialists</div>
+      </div>
+      <div class="flow-node" style="background: var(--phase2-bg); border-color: var(--phase2); color: var(--phase2);">
+        <div class="flow-node-label">Tier 2</div>
+        <div class="flow-node-text">Fulfillment Director</div>
+        <div class="flow-node-sub">4 Specialists</div>
+      </div>
+    </div>
+
+    <div class="flow-arrow"></div>
+
+    <!-- Tier 3: Specialists (Marketing) -->
+    <div class="flow-row" style="margin: 16px 0; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <div class="flow-node" style="min-width: 120px; background: var(--phase3-bg); border-color: var(--phase3); color: var(--phase3);">
+        <div class="flow-node-text">Social Media</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase3-bg); border-color: var(--phase3); color: var(--phase3);">
+        <div class="flow-node-text">Email</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase3-bg); border-color: var(--phase3); color: var(--phase3);">
+        <div class="flow-node-text">Funnels</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase3-bg); border-color: var(--phase3); color: var(--phase3);">
+        <div class="flow-node-text">Ads</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase3-bg); border-color: var(--phase3); color: var(--phase3);">
+        <div class="flow-node-text">DM</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase3-bg); border-color: var(--phase3); color: var(--phase3);">
+        <div class="flow-node-text">Offers</div>
+      </div>
+    </div>
+
+    <!-- Tier 3: Specialists (Sales) -->
+    <div class="flow-row" style="margin: 8px 0; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <div class="flow-node" style="min-width: 120px; background: var(--phase4-bg); border-color: var(--phase4); color: var(--phase4);">
+        <div class="flow-node-text">Appointments</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase4-bg); border-color: var(--phase4); color: var(--phase4);">
+        <div class="flow-node-text">Leads</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase4-bg); border-color: var(--phase4); color: var(--phase4);">
+        <div class="flow-node-text">Call Analysis</div>
+      </div>
+    </div>
+
+    <!-- Tier 3: Specialists (Fulfillment) -->
+    <div class="flow-row" style="margin: 8px 0; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <div class="flow-node" style="min-width: 120px; background: var(--phase5-bg); border-color: var(--phase5); color: var(--phase5);">
+        <div class="flow-node-text">Members</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase5-bg); border-color: var(--phase5); color: var(--phase5);">
+        <div class="flow-node-text">Coaching</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase5-bg); border-color: var(--phase5); color: var(--phase5);">
+        <div class="flow-node-text">Accountability</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase5-bg); border-color: var(--phase5); color: var(--phase5);">
+        <div class="flow-node-text">Tech Support</div>
+      </div>
+    </div>
+
+    <div class="flow-arrow"></div>
+
+    <!-- Shared Operators -->
+    <div class="flow-row" style="margin: 16px 0; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <div class="flow-node" style="min-width: 120px; background: var(--phase6-bg); border-color: var(--phase6); color: var(--phase6); opacity: 0.8;">
+        <div class="flow-node-text">Transcriber</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase6-bg); border-color: var(--phase6); color: var(--phase6); opacity: 0.8;">
+        <div class="flow-node-text">ICP Generator</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase6-bg); border-color: var(--phase6); color: var(--phase6); opacity: 0.8;">
+        <div class="flow-node-text">Offer Generator</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: var(--phase6-bg); border-color: var(--phase6); color: var(--phase6); opacity: 0.8;">
+        <div class="flow-node-text">Stats Updater</div>
+      </div>
+      <div class="flow-node" style="min-width: 120px; background: #f0f4ff; border-color: var(--accent); color: var(--accent);">
+        <div class="flow-node-text">Shared Data</div>
+        <div class="flow-node-sub">16 Tables</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p>
+  <strong>Tier 1 (Central Intelligence)</strong>: CEO-level orchestrator that responds to cross-department strategic questions and synthesizes insights from all three departments.
+</p>
+
+<p>
+  <strong>Tier 2 (Directors)</strong>: Three department heads coordinate their specialists, aggregate department-level metrics, and report to Central Intelligence.
+</p>
+
+<p>
+  <strong>Tier 3 (Specialists + Operators)</strong>: 15+ domain-expert specialists handle specific work (social media, email, leads, members, etc.) plus shared operators for transcription, generation, and updates. All read/write to 16 shared intelligence tables.
+</p>
+
+<!-- Section 3: Documentation Map -->
+<h2 id="docs">3. Complete Documentation Map</h2>
+
+<p>
+  All project documentation, from architecture to implementation details, organized by audience and use case:
+</p>
+
+<div class="doc-grid">
+  <div class="doc-card">
+    <h4>PRD.md</h4>
+    <p>Complete product requirements, business context, stakeholder personas, and success metrics.</p>
+    <a href="PRD.md">Read Document</a>
+  </div>
+
+  <div class="doc-card">
+    <h4>implementation-strategy.md</h4>
+    <p>Technical architecture, 2-component design (Backend + Frontend), platform decisions, and tech stack.</p>
+    <a href="implementation-strategy.md">Read Document</a>
+  </div>
+
+  <div class="doc-card">
+    <h4>api-contract-enhanced.md</h4>
+    <p>FastAPI endpoint specifications, request/response schemas, authentication, and error handling.</p>
+    <a href="api-contract-enhanced.md">Read Document</a>
+  </div>
+
+  <div class="doc-card">
+    <h4>data-schema-enhanced.md</h4>
+    <p>Supabase PostgreSQL schema, 16 shared intelligence tables, relationships, and RLS policies.</p>
+    <a href="data-schema-enhanced.md">Read Document</a>
+  </div>
+
+  <div class="doc-card">
+    <h4>feature-breakdown-enhanced.md</h4>
+    <p>Detailed feature breakdown by department, story mapping, and acceptance criteria per feature.</p>
+    <a href="feature-breakdown-enhanced.md">Read Document</a>
+  </div>
+
+  <div class="doc-card">
+    <h4>technical-documentation.html</h4>
+    <p>System architecture, data flows, integration patterns, and operational runbooks.</p>
+    <a href="technical-documentation.html">View Documentation</a>
+  </div>
+
+  <div class="doc-card">
+    <h4>workflow-documentation.html</h4>
+    <p>End-to-end workflows, decision trees, and processes for each department and specialist role.</p>
+    <a href="workflow-documentation.html">View Documentation</a>
+  </div>
+
+  <div class="doc-card">
+    <h4>client-overview.html</h4>
+    <p>Client-facing overview, feature benefits, and getting started guide for end users.</p>
+    <a href="client-overview.html">View Documentation</a>
+  </div>
+
+  <div class="doc-card">
+    <h4>webapp-mockup.html</h4>
+    <p>Interactive UI mockup showing dashboard layouts, navigation, and component designs.</p>
+    <a href="webapp-mockup.html">View Mockup</a>
+  </div>
+</div>
+
+<!-- Section 4: Technology Stack -->
+<h2 id="tech-stack">4. Technology Stack at a Glance</h2>
+
+<div class="tech-grid">
+  <div class="tech-section">
+    <h4>Backend Services</h4>
+    <ul>
+      <li>Python + FastAPI</li>
+      <li>Anthropic Claude SDK</li>
+      <li>Celery + Redis</li>
+      <li>SQLAlchemy ORM</li>
+    </ul>
+  </div>
+
+  <div class="tech-section">
+    <h4>Database & Auth</h4>
+    <ul>
+      <li>Supabase PostgreSQL</li>
+      <li>Supabase Auth (JWT)</li>
+      <li>Row-Level Security (RLS)</li>
+      <li>16 Shared Intelligence Tables</li>
+    </ul>
+  </div>
+
+  <div class="tech-section">
+    <h4>Frontend & Deployment</h4>
+    <ul>
+      <li>Next.js 14+ (React RSC)</li>
+      <li>Vercel AI SDK</li>
+      <li>Tailwind CSS + shadcn/ui</li>
+      <li>Vercel Hosting</li>
+    </ul>
+  </div>
+
+  <div class="tech-section">
+    <h4>Infrastructure & Monitoring</h4>
+    <ul>
+      <li>VPS (DigitalOcean/Hetzner)</li>
+      <li>Sentry Error Tracking</li>
+      <li>Custom Agent Observability</li>
+      <li>WebSocket for Chat Streaming</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Section 5: Key Concepts -->
+<h2 id="concepts">5. Key Concepts</h2>
+
+<h3>Shared Intelligence Pool</h3>
+<p>
+  All specialists read from and write to a common set of 16 Supabase tables. This enables:
+</p>
+<ul>
+  <li>Marketing specialist uses sales pain points to inform content calendar</li>
+  <li>Fulfillment specialist exports member wins for marketing content ideas</li>
+  <li>Central Intelligence synthesizes cross-department metrics for executive dashboards</li>
+  <li>No manual data flows between departments</li>
+</ul>
+
+<h3>Agent Hierarchy with Claude SDK</h3>
+<p>
+  All agents (Central Intelligence, Directors, Specialists) use Anthropic Claude for reasoning. The hierarchy enables:
+</p>
+<ul>
+  <li><strong>Central Intelligence</strong>: Multi-turn conversations with strategic context from all departments</li>
+  <li><strong>Directors</strong>: Department-level decision making, aggregating specialist insights</li>
+  <li><strong>Specialists</strong>: Domain-expert tasks (email writing, lead analysis, member tracking)</li>
+</ul>
+
+<h3>Two-Component Architecture</h3>
+<ul>
+  <li><strong>Component 1</strong>: Python agentic backend (FastAPI + Claude SDK + Celery)</li>
+  <li><strong>Component 2</strong>: Next.js frontend with streaming UI and real-time dashboards</li>
+  <li><strong>Shared Data Layer</strong>: Supabase PostgreSQL with RLS</li>
+</ul>
+
+<h3>Voice of Customer (VOC) Intelligence</h3>
+<p>
+  Central Intelligence subsystem (integrated Python agents) transforms call transcripts (sales, coaching, discovery, accountability) into structured VOC data that powers marketing content, email writing, and strategic priorities.
+</p>
+
+<!-- Section 6: Quick References -->
+<h2 id="references">6. Quick References</h2>
+
+<h3>Agent Count Summary</h3>
+<table>
+  <tr>
+    <th>Tier</th>
+    <th>Role</th>
+    <th>Count</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td>Central Intelligence</td>
+    <td>1</td>
+    <td>CEO-level orchestrator</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>Directors</td>
+    <td>3</td>
+    <td>Marketing, Sales, Fulfillment</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Marketing Specialists</td>
+    <td>6</td>
+    <td>Social, Email, Funnels, Ads, DM, Offers</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Sales Specialists</td>
+    <td>3</td>
+    <td>Appointments, Leads, Call Analysis</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Fulfillment Specialists</td>
+    <td>4</td>
+    <td>Members, Coaching, Accountability, Tech Support</td>
+  </tr>
+  <tr>
+    <td>Shared</td>
+    <td>Operators</td>
+    <td>7</td>
+    <td>Transcriber, ICP Generator, Offer Generator, Stats Updaters</td>
+  </tr>
+  <tr>
+    <td>Data</td>
+    <td>Shared Tables</td>
+    <td>16</td>
+    <td>Supabase PostgreSQL intelligence pool</td>
+  </tr>
+</table>
+
+<h3>Project Timeline (8 Sprints + Auth)</h3>
+<ul>
+  <li><strong>Sprint 1a (Wk 1-2)</strong>: Foundation, Central Intelligence shell, Supabase setup, FastAPI scaffolding</li>
+  <li><strong>Sprint 1b (Wk 3)</strong>: Authentication, error handling, observability</li>
+  <li><strong>Sprints 2-4</strong>: Marketing department (6 specialists, all features)</li>
+  <li><strong>Sprint 5</strong>: Sales department (3 specialists, appointment/lead/call workflows)</li>
+  <li><strong>Sprint 6</strong>: Fulfillment department (4 specialists, member/coaching/accountability/support)</li>
+  <li><strong>Sprint 7</strong>: Data migration, cross-department integration testing</li>
+  <li><strong>Sprint 8</strong>: Executive intelligence dashboards, final polish, deployment</li>
+</ul>
+
+<h3>Business Value Summary</h3>
+<table>
+  <tr>
+    <th>Metric</th>
+    <th>Target Impact</th>
+  </tr>
+  <tr>
+    <td>Time Savings</td>
+    <td>50 hours/week of manual analysis, transcription, copywriting</td>
+  </tr>
+  <tr>
+    <td>Decision Quality</td>
+    <td>Cross-domain insights instead of siloed guessing</td>
+  </tr>
+  <tr>
+    <td>Content Generation</td>
+    <td>Email, social, ads informed by real customer data</td>
+  </tr>
+  <tr>
+    <td>Scalability</td>
+    <td>Add new worker in 1-2 days instead of custom tool</td>
+  </tr>
+  <tr>
+    <td>Data Accuracy</td>
+    <td>Single source of truth instead of scattered spreadsheets</td>
+  </tr>
+  <tr>
+    <td>Team Adoption</td>
+    <td>Single web interface vs. switching between 5+ tools</td>
+  </tr>
+</table>
+
+<!-- Section 7: Getting Started -->
+<h2 id="getting-started">7. Getting Started</h2>
+
+<h3>For Developers</h3>
+<ol>
+  <li>Read <a href="PRD.md">PRD.md</a> for business context and feature requirements</li>
+  <li>Review <a href="implementation-strategy.md">implementation-strategy.md</a> for architecture decisions</li>
+  <li>Consult <a href="api-contract-enhanced.md">api-contract-enhanced.md</a> for backend API specs</li>
+  <li>Check <a href="data-schema-enhanced.md">data-schema-enhanced.md</a> for database schema</li>
+  <li>View <a href="technical-documentation.html">technical-documentation.html</a> for integration patterns</li>
+</ol>
+
+<h3>For Product Managers</h3>
+<ol>
+  <li>Start with <a href="PRD.md">PRD.md</a> executive summary and stakeholder section</li>
+  <li>Review <a href="feature-breakdown-enhanced.md">feature-breakdown-enhanced.md</a> for detailed scope</li>
+  <li>Check timeline in <a href="PRD.md">PRD.md</a> section 1.4</li>
+</ol>
+
+<h3>For End Users</h3>
+<ol>
+  <li>View <a href="client-overview.html">client-overview.html</a> for feature overview</li>
+  <li>Explore <a href="webapp-mockup.html">webapp-mockup.html</a> for UI walkthrough</li>
+  <li>Reference <a href="workflow-documentation.html">workflow-documentation.html</a> for how-to guides</li>
+</ol>
+
+<div class="note">
+  <strong>All documentation is interconnected.</strong> Use the links above to navigate between technical specs, business requirements, and operational workflows. Last updated 2026-04-29.
+</div>
+
+</div><!-- end content -->
+</div><!-- end main -->
+</div><!-- end layout -->
+</body>
+</html>

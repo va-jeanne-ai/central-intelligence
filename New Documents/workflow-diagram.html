@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Central Intelligence V2 — 3-Level Architecture Diagram</title>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #F9FAFB;
+      color: #111827;
+      line-height: 1.65;
+      padding: 2rem;
+    }
+
+    /* ─── Design Tokens ────────────────────────────────────────── */
+    :root {
+      --gold:        #F4A900;
+      --gold-light:  #FCD34D;
+      --gold-dark:   #D97706;
+      --gold-pale:   #FFFBEB;
+      --director:    #3B82F6;
+      --director-dk: #1D4ED8;
+      --director-pale:#EFF6FF;
+      --specialist:  #10B981;
+      --specialist-dk:#059669;
+      --specialist-pale:#ECFDF5;
+      --operator:    #F97316;
+      --operator-dk: #EA580C;
+      --operator-pale:#FFF7ED;
+      --pool:        #8B5CF6;
+      --pool-dk:     #7C3AED;
+      --pool-pale:   #F5F3FF;
+      --marketing:   #10B981;
+      --sales:       #3B82F6;
+      --fulfillment: #F97316;
+      --white:       #FFFFFF;
+      --gray-50:     #F9FAFB;
+      --gray-100:    #F3F4F6;
+      --gray-200:    #E5E7EB;
+      --gray-300:    #D1D5DB;
+      --gray-400:    #9CA3AF;
+      --gray-500:    #6B7280;
+      --gray-700:    #374151;
+      --gray-800:    #1F2937;
+      --gray-900:    #111827;
+      --shadow-sm:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+      --shadow:      0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.05);
+      --shadow-md:   0 10px 15px rgba(0,0,0,.08), 0 4px 6px rgba(0,0,0,.05);
+      --shadow-lg:   0 20px 25px rgba(0,0,0,.10), 0 10px 10px rgba(0,0,0,.04);
+      --radius:      10px;
+      --radius-lg:   16px;
+    }
+
+    /* ─── Page Header ─────────────────────────────────────────── */
+    .page-header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    .page-header h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--gray-900);
+      margin-bottom: .5rem;
+    }
+    .page-header h1 span { color: var(--gold); }
+    .page-header p {
+      font-size: 1.05rem;
+      color: var(--gray-500);
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    /* ─── Legend ───────────────────────────────────────────────── */
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .85rem;
+      color: var(--gray-700);
+      font-weight: 500;
+    }
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .legend-dot.ci { background: var(--gold); }
+    .legend-dot.director { background: var(--director); }
+    .legend-dot.specialist { background: var(--specialist); }
+    .legend-dot.operator { background: var(--operator); }
+    .legend-dot.pool { background: var(--pool); }
+
+    /* ─── SVG Container ───────────────────────────────────────── */
+    .diagram-container {
+      width: 100%;
+      max-width: 1440px;
+      margin: 0 auto;
+      overflow: visible;
+    }
+    .diagram-container svg {
+      display: block;
+      margin: 0 auto;
+      width: 100%;
+      height: auto;
+    }
+
+    /* ─── Level Labels ────────────────────────────────────────── */
+    .level-label {
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      fill: var(--gray-400);
+    }
+
+    /* ─── Flow Label Section ──────────────────────────────────── */
+    .flow-section {
+      max-width: 1400px;
+      margin: 2.5rem auto 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+    .flow-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      box-shadow: var(--shadow-sm);
+      border-left: 4px solid var(--gray-300);
+    }
+    .flow-card h3 {
+      font-size: .9rem;
+      font-weight: 700;
+      margin-bottom: .5rem;
+      color: var(--gray-800);
+    }
+    .flow-card p {
+      font-size: .82rem;
+      color: var(--gray-500);
+      line-height: 1.55;
+    }
+    .flow-card.ci-card  { border-left-color: var(--gold); }
+    .flow-card.dir-card    { border-left-color: var(--director); }
+    .flow-card.spec-card   { border-left-color: var(--specialist); }
+    .flow-card.op-card     { border-left-color: var(--operator); }
+    .flow-card.pool-card   { border-left-color: var(--pool); }
+
+    /* ─── Pool Tables List ────────────────────────────────────── */
+    .pool-tables {
+      max-width: 1400px;
+      margin: 2rem auto 0;
+      background: var(--pool-pale);
+      border: 1px solid #DDD6FE;
+      border-radius: var(--radius-lg);
+      padding: 1.5rem 2rem;
+    }
+    .pool-tables h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--pool-dk);
+      margin-bottom: .75rem;
+    }
+    .pool-tables .tables-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+    .pool-tables .table-tag {
+      background: var(--white);
+      border: 1px solid #DDD6FE;
+      border-radius: 6px;
+      padding: .3rem .75rem;
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--pool-dk);
+    }
+
+    /* ─── Footer ──────────────────────────────────────────────── */
+    .footer-note {
+      text-align: center;
+      margin-top: 2.5rem;
+      font-size: .8rem;
+      color: var(--gray-400);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE HEADER
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page-header">
+  <h1><span>Central Intelligence V2</span> &mdash; 3-Level Architecture</h1>
+  <p>Central Intelligence orchestrates Directors, Directors coordinate Specialists, Operators feed the Shared Intelligence Pool.</p>
+</div>
+
+<!-- ── Legend ────────────────────────────────────────────────── -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot ci"></div>Central Intelligence (CEO)</div>
+  <div class="legend-item"><div class="legend-dot director"></div>Directors (Level 3)</div>
+  <div class="legend-item"><div class="legend-dot specialist"></div>Specialists (Level 2)</div>
+  <div class="legend-item"><div class="legend-dot operator"></div>Operators (Level 1 &mdash; Floaters)</div>
+  <div class="legend-item"><div class="legend-dot pool"></div>Shared Intelligence Pool</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MAIN SVG DIAGRAM
+     ══════════════════════════════════════════════════════════════ -->
+<div class="diagram-container">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 940" style="overflow:visible">
+  <defs>
+    <!-- Arrowheads -->
+    <marker id="arrow-gold" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#D97706"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#3B82F6"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#10B981"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#F97316"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#8B5CF6"/>
+    </marker>
+
+    <!-- Drop shadows -->
+    <filter id="shadow-sm" x="-5%" y="-5%" width="115%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.1"/>
+    </filter>
+    <filter id="shadow-md" x="-8%" y="-8%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.12"/>
+    </filter>
+
+    <!-- Gradient for pool -->
+    <linearGradient id="pool-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#F5F3FF"/>
+      <stop offset="100%" stop-color="#EDE9FE"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       LEVEL LABELS (left side)
+       ═══════════════════════════════════════════════════════════ -->
+  <text x="18" y="70" class="level-label" transform="rotate(-90, 18, 70)" style="font-size:11px">CEO</text>
+  <text x="18" y="230" class="level-label" transform="rotate(-90, 18, 230)" style="font-size:11px">LEVEL 3</text>
+  <text x="18" y="470" class="level-label" transform="rotate(-90, 18, 470)" style="font-size:11px">LEVEL 2</text>
+
+  <!-- Level separator lines -->
+  <line x1="40" y1="140" x2="1370" y2="140" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="6,4"/>
+  <line x1="40" y1="310" x2="1370" y2="310" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="6,4"/>
+  <line x1="40" y1="640" x2="1390" y2="640" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="6,4"/>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       LEVEL 3 — CENTRAL INTELLIGENCE
+       ═══════════════════════════════════════════════════════════ -->
+  <g transform="translate(700, 75)">
+    <rect x="-130" y="-40" width="260" height="80" rx="14" fill="#FFFBEB" stroke="#F4A900" stroke-width="2.5" filter="url(#shadow-md)"/>
+    <text x="0" y="-8" text-anchor="middle" font-size="11" font-weight="700" fill="#92400E" letter-spacing=".05em">CEO / CENTRAL ORCHESTRATOR</text>
+    <text x="0" y="14" text-anchor="middle" font-size="17" font-weight="800" fill="#D97706">Central Intelligence</text>
+    <!-- Crown icon -->
+    <text x="0" y="-22" text-anchor="middle" font-size="14">&#x1F451;</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CENTRAL INTELLIGENCE → DIRECTOR CONNECTIONS
+       ═══════════════════════════════════════════════════════════ -->
+  <!-- C.I. → Marketing Director -->
+  <path d="M620,115 L620,140 Q620,155 620,165 L290,165 Q280,165 280,175 L280,195" stroke="#D97706" stroke-width="2" fill="none" marker-end="url(#arrow-gold)" stroke-dasharray="none"/>
+  <!-- C.I. → Sales Director -->
+  <path d="M700,115 L700,195" stroke="#D97706" stroke-width="2" fill="none" marker-end="url(#arrow-gold)"/>
+  <!-- C.I. → Fulfillment Director -->
+  <path d="M780,115 L780,140 Q780,155 780,165 L1110,165 Q1120,165 1120,175 L1120,195" stroke="#D97706" stroke-width="2" fill="none" marker-end="url(#arrow-gold)"/>
+
+  <!-- Sub-Workflow label on C.I. → Director lines -->
+  <text x="460" y="160" text-anchor="middle" font-size="9" fill="#9CA3AF" font-style="italic">Sub-Workflow Tool</text>
+  <text x="720" y="160" text-anchor="middle" font-size="9" fill="#9CA3AF" font-style="italic">Sub-Workflow Tool</text>
+  <text x="950" y="160" text-anchor="middle" font-size="9" fill="#9CA3AF" font-style="italic">Sub-Workflow Tool</text>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       LEVEL 2 — DIRECTORS
+       ═══════════════════════════════════════════════════════════ -->
+  <!-- Marketing Director -->
+  <g transform="translate(280, 240)">
+    <rect x="-110" y="-35" width="220" height="70" rx="12" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2" filter="url(#shadow-sm)"/>
+    <text x="0" y="-8" text-anchor="middle" font-size="10" font-weight="600" fill="#1E40AF" letter-spacing=".04em">CI-MKT-DIR</text>
+    <text x="0" y="12" text-anchor="middle" font-size="14" font-weight="700" fill="#1D4ED8">Marketing Director</text>
+  </g>
+
+  <!-- Sales Director -->
+  <g transform="translate(700, 240)">
+    <rect x="-110" y="-35" width="220" height="70" rx="12" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2" filter="url(#shadow-sm)"/>
+    <text x="0" y="-8" text-anchor="middle" font-size="10" font-weight="600" fill="#1E40AF" letter-spacing=".04em">CI-SLS-DIR</text>
+    <text x="0" y="12" text-anchor="middle" font-size="14" font-weight="700" fill="#1D4ED8">Sales Director</text>
+  </g>
+
+  <!-- Fulfillment Director -->
+  <g transform="translate(1120, 240)">
+    <rect x="-110" y="-35" width="220" height="70" rx="12" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2" filter="url(#shadow-sm)"/>
+    <text x="0" y="-8" text-anchor="middle" font-size="10" font-weight="600" fill="#1E40AF" letter-spacing=".04em">CI-FUL-DIR</text>
+    <text x="0" y="12" text-anchor="middle" font-size="14" font-weight="700" fill="#1D4ED8">Fulfillment Director</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       DIRECTOR → SPECIALIST CONNECTIONS
+       ═══════════════════════════════════════════════════════════ -->
+  <!-- Marketing Director → 6 specialists (3x2 grid at x=120,280,440 y=400,480) -->
+  <!-- Row 1: Email(120), Social(280), Funnels(440) -->
+  <path d="M200,275 L200,310 L120,310 L120,373" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M280,275 L280,373" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M360,275 L360,310 L440,310 L440,373" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)"/>
+  <!-- Row 2: Ads(120), DMs(280), Offers(440) -->
+  <path d="M190,275 L190,320 L120,320 L120,453" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)" opacity=".5"/>
+  <path d="M270,275 L270,320 L280,320 L280,453" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)" opacity=".5"/>
+  <path d="M370,275 L370,320 L440,320 L440,453" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)" opacity=".5"/>
+
+  <!-- Sales Director → 3 specialists (Leads@640, Appts@790, Calls@715) -->
+  <path d="M660,275 L660,310 L640,310 L640,373" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M740,275 L740,310 L790,310 L790,373" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M700,275 L700,310 L715,310 L715,453" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)" opacity=".6"/>
+
+  <!-- Fulfillment Director → 4 specialists (Members@955, Coaching@1075, Acct@1195, TechSOS@1315) -->
+  <path d="M1050,275 L1050,310 L955,310 L955,373" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M1090,275 L1090,310 L1075,310 L1075,373" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M1150,275 L1150,310 L1195,310 L1195,373" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M1190,275 L1190,310 L1315,310 L1315,373" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)"/>
+
+  <!-- Sub-Workflow label -->
+  <text x="280" y="325" text-anchor="middle" font-size="9" fill="#9CA3AF" font-style="italic">Sub-Workflow Tools</text>
+  <text x="700" y="325" text-anchor="middle" font-size="9" fill="#9CA3AF" font-style="italic">Sub-Workflow Tools</text>
+  <text x="1120" y="325" text-anchor="middle" font-size="9" fill="#9CA3AF" font-style="italic">Sub-Workflow Tools</text>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       LEVEL 1 — SPECIALISTS (Marketing Department)
+       ═══════════════════════════════════════════════════════════ -->
+  <!-- Department background — 3 columns x 2 rows -->
+  <rect x="45" y="340" width="505" height="280" rx="12" fill="#ECFDF5" fill-opacity=".35" stroke="#A7F3D0" stroke-width="1"/>
+  <text x="60" y="360" font-size="10" font-weight="700" fill="#059669" letter-spacing=".06em">MARKETING DEPARTMENT</text>
+
+  <!-- Row 1: Email, Social Media, Funnels -->
+  <g transform="translate(120, 400)">
+    <rect x="-65" y="-25" width="130" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-MKT-02</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Email</text>
+  </g>
+
+  <g transform="translate(280, 400)">
+    <rect x="-65" y="-25" width="130" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-MKT-01</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Social Media</text>
+  </g>
+
+  <g transform="translate(440, 400)">
+    <rect x="-65" y="-25" width="130" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-MKT-03</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Funnels</text>
+  </g>
+
+  <!-- Row 2: Ads, DMs (NEW), Offer Creation (NEW) -->
+  <g transform="translate(120, 480)">
+    <rect x="-65" y="-25" width="130" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-MKT-04</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Ads</text>
+  </g>
+
+  <g transform="translate(280, 480)">
+    <rect x="-65" y="-25" width="130" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="2" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-MKT-05</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">DMs</text>
+    <rect x="40" y="-25" width="28" height="14" rx="3" fill="#059669"/>
+    <text x="54" y="-15" text-anchor="middle" font-size="7" font-weight="700" fill="white">NEW</text>
+  </g>
+
+  <g transform="translate(440, 480)">
+    <rect x="-65" y="-25" width="130" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="2" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-MKT-06</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Offer Creation</text>
+    <rect x="40" y="-25" width="28" height="14" rx="3" fill="#059669"/>
+    <text x="54" y="-15" text-anchor="middle" font-size="7" font-weight="700" fill="white">NEW</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       LEVEL 1 — SPECIALISTS (Sales Department)
+       ═══════════════════════════════════════════════════════════ -->
+  <rect x="565" y="340" width="310" height="280" rx="12" fill="#EFF6FF" fill-opacity=".3" stroke="#BFDBFE" stroke-width="1"/>
+  <text x="580" y="360" font-size="10" font-weight="700" fill="#1D4ED8" letter-spacing=".06em">SALES DEPARTMENT</text>
+
+  <!-- Leads Database Worker -->
+  <g transform="translate(640, 400)">
+    <rect x="-60" y="-25" width="120" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-SAL-02</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Leads DB</text>
+  </g>
+
+  <!-- Appointment Setting Bot -->
+  <g transform="translate(790, 400)">
+    <rect x="-60" y="-25" width="120" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-SAL-01</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Appointments</text>
+  </g>
+
+  <!-- Sales Call Analyzer -->
+  <g transform="translate(715, 480)">
+    <rect x="-60" y="-25" width="120" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-SAL-03</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Sales Calls</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       LEVEL 1 — SPECIALISTS (Fulfillment Department)
+       ═══════════════════════════════════════════════════════════ -->
+  <rect x="890" y="340" width="490" height="280" rx="12" fill="#FFF7ED" fill-opacity=".35" stroke="#FED7AA" stroke-width="1"/>
+  <text x="905" y="360" font-size="10" font-weight="700" fill="#EA580C" letter-spacing=".06em">FULFILLMENT DEPARTMENT</text>
+
+  <!-- Members Database Worker -->
+  <g transform="translate(955, 400)">
+    <rect x="-50" y="-25" width="100" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-FUL-01</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Members DB</text>
+  </g>
+
+  <!-- Coaching Call Analyzer -->
+  <g transform="translate(1075, 400)">
+    <rect x="-50" y="-25" width="100" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-FUL-02</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Coaching</text>
+  </g>
+
+  <!-- Accountability Call Analyzer -->
+  <g transform="translate(1195, 400)">
+    <rect x="-50" y="-25" width="100" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-FUL-03</text>
+    <text x="0" y="10" text-anchor="middle" font-size="10" font-weight="700" fill="#059669">Accountability</text>
+  </g>
+
+  <!-- Tech SOS Tracker -->
+  <g transform="translate(1315, 400)">
+    <rect x="-50" y="-25" width="100" height="50" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" filter="url(#shadow-sm)"/>
+    <text x="0" y="-5" text-anchor="middle" font-size="8" font-weight="600" fill="#065F46">CI-FUL-04</text>
+    <text x="0" y="10" text-anchor="middle" font-size="11" font-weight="700" fill="#059669">Tech SOS</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SHARED INTELLIGENCE POOL (central data layer)
+       ═══════════════════════════════════════════════════════════ -->
+  <g transform="translate(700, 710)">
+    <rect x="-380" y="-40" width="760" height="80" rx="14" fill="url(#pool-grad)" stroke="#8B5CF6" stroke-width="2.5" filter="url(#shadow-md)"/>
+    <text x="0" y="-12" text-anchor="middle" font-size="11" font-weight="700" fill="#6D28D9" letter-spacing=".06em">SHARED INTELLIGENCE POOL</text>
+    <text x="0" y="10" text-anchor="middle" font-size="10" fill="#7C3AED">goals  |  wins  |  pain_points  |  objections  |  content_ideas  |  icp  |  offers  |  comments  |  reference</text>
+    <text x="0" y="26" text-anchor="middle" font-size="9" fill="#A78BFA" font-style="italic">Data Table Tools &mdash; read/write by all Specialists &amp; Operators</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SPECIALISTS → POOL CONNECTIONS (read/write)
+       ═══════════════════════════════════════════════════════════ -->
+  <!-- Marketing specialists → Pool (row 2 bottom at y=505) -->
+  <!-- Left arrow: from Ads (x=120) down to pool -->
+  <path d="M120,505 L120,600 Q120,625 170,640 L340,670" stroke="#10B981" stroke-width="1.5" fill="none" marker-end="url(#arrow-green)" opacity=".6"/>
+  <!-- Right arrow: from Offer Creation (x=440) down to pool -->
+  <path d="M440,505 L440,600 Q440,625 445,640 L450,670" stroke="#10B981" stroke-width="1.5" fill="none" marker-end="url(#arrow-green)" opacity=".6"/>
+
+  <!-- Sales specialists → Pool (Calls at y=505, others at y=425) -->
+  <path d="M715,505 L715,600 Q715,625 710,640 L700,670" stroke="#10B981" stroke-width="1.5" fill="none" marker-end="url(#arrow-green)" opacity=".6"/>
+
+  <!-- Fulfillment specialists → Pool -->
+  <path d="M1075,425 L1075,600 Q1075,625 1050,640 L1000,670" stroke="#10B981" stroke-width="1.5" fill="none" marker-end="url(#arrow-green)" opacity=".6"/>
+  <path d="M1250,425 L1250,600 Q1250,625 1200,640 L1060,670" stroke="#10B981" stroke-width="1.5" fill="none" marker-end="url(#arrow-green)" opacity=".6"/>
+
+  <!-- Pool → Specialists (read — dashed, going up) -->
+  <path d="M380,670 L170,570 Q160,560 160,540 L160,430" stroke="#8B5CF6" stroke-width="1.2" fill="none" marker-end="url(#arrow-purple)" stroke-dasharray="5,3" opacity=".5"/>
+  <path d="M620,670 L610,560 Q605,540 605,520 L605,430" stroke="#8B5CF6" stroke-width="1.2" fill="none" marker-end="url(#arrow-purple)" stroke-dasharray="5,3" opacity=".5"/>
+  <path d="M980,670 L970,540 Q968,520 970,500 L970,430" stroke="#8B5CF6" stroke-width="1.2" fill="none" marker-end="url(#arrow-purple)" stroke-dasharray="5,3" opacity=".5"/>
+
+  <!-- Data flow labels -->
+  <text x="155" y="555" font-size="8" fill="#8B5CF6" font-style="italic" opacity=".7">read</text>
+  <text x="560" y="555" font-size="8" fill="#8B5CF6" font-style="italic" opacity=".7">read</text>
+  <text x="915" y="555" font-size="8" fill="#8B5CF6" font-style="italic" opacity=".7">read</text>
+  <text x="280" y="575" font-size="8" fill="#10B981" font-style="italic" opacity=".7">write</text>
+  <text x="685" y="595" font-size="8" fill="#10B981" font-style="italic" opacity=".7">write</text>
+  <text x="1060" y="595" font-size="8" fill="#10B981" font-style="italic" opacity=".7">write</text>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       OPERATORS (Level 1 — Floaters) — horizontal layout below pool
+       ═══════════════════════════════════════════════════════════ -->
+  <text x="18" y="830" class="level-label" transform="rotate(-90, 18, 830)" style="font-size:11px">LEVEL 1</text>
+  <text x="700" y="785" text-anchor="middle" font-size="10" font-weight="700" fill="#EA580C" letter-spacing=".06em">SHARED OPERATORS (FLOATERS)</text>
+
+  <!-- Row 1: 3 main operators centered under pool (pool center=700, span ~320-1080) -->
+  <g transform="translate(460, 820)">
+    <rect x="-75" y="-18" width="150" height="36" rx="7" fill="#FFF7ED" stroke="#F97316" stroke-width="1.5"/>
+    <text x="0" y="-2" text-anchor="middle" font-size="8" font-weight="600" fill="#9A3412">CI-CORE-01</text>
+    <text x="0" y="11" text-anchor="middle" font-size="10" font-weight="700" fill="#EA580C">Call Transcriber</text>
+  </g>
+
+  <g transform="translate(700, 820)">
+    <rect x="-75" y="-18" width="150" height="36" rx="7" fill="#FFF7ED" stroke="#F97316" stroke-width="1.5"/>
+    <text x="0" y="-2" text-anchor="middle" font-size="8" font-weight="600" fill="#9A3412">CI-OPS-ICP</text>
+    <text x="0" y="11" text-anchor="middle" font-size="10" font-weight="700" fill="#EA580C">ICP Generator</text>
+  </g>
+
+  <g transform="translate(940, 820)">
+    <rect x="-75" y="-18" width="150" height="36" rx="7" fill="#FFF7ED" stroke="#F97316" stroke-width="1.5"/>
+    <text x="0" y="-2" text-anchor="middle" font-size="8" font-weight="600" fill="#9A3412">CI-OPS-OFFER</text>
+    <text x="0" y="11" text-anchor="middle" font-size="10" font-weight="700" fill="#EA580C">Offer Generator</text>
+  </g>
+
+  <!-- Row 2: 5 stats updaters centered under pool -->
+  <g transform="translate(380, 880)">
+    <rect x="-60" y="-18" width="120" height="36" rx="7" fill="#FFF7ED" stroke="#F97316" stroke-width="1.2"/>
+    <text x="0" y="5" text-anchor="middle" font-size="10" font-weight="600" fill="#EA580C">Email Stats</text>
+  </g>
+
+  <g transform="translate(540, 880)">
+    <rect x="-60" y="-18" width="120" height="36" rx="7" fill="#FFF7ED" stroke="#F97316" stroke-width="1.2"/>
+    <text x="0" y="5" text-anchor="middle" font-size="10" font-weight="600" fill="#EA580C">Social Stats</text>
+  </g>
+
+  <g transform="translate(700, 880)">
+    <rect x="-60" y="-18" width="120" height="36" rx="7" fill="#FFF7ED" stroke="#F97316" stroke-width="1.2"/>
+    <text x="0" y="5" text-anchor="middle" font-size="10" font-weight="600" fill="#EA580C">Funnel Stats</text>
+  </g>
+
+  <g transform="translate(860, 880)">
+    <rect x="-60" y="-18" width="120" height="36" rx="7" fill="#FFF7ED" stroke="#F97316" stroke-width="1.2"/>
+    <text x="0" y="5" text-anchor="middle" font-size="10" font-weight="600" fill="#EA580C">Ads Stats</text>
+  </g>
+
+  <g transform="translate(1020, 880)">
+    <rect x="-70" y="-18" width="140" height="36" rx="7" fill="#FFF7ED" stroke="#F97316" stroke-width="1.2"/>
+    <text x="0" y="5" text-anchor="middle" font-size="10" font-weight="600" fill="#EA580C">Comments Collector</text>
+  </g>
+
+  <!-- Operators → Pool connections (arrows going UP to pool) -->
+  <path d="M460,802 L460,760 Q460,755 500,752 L530,750" stroke="#F97316" stroke-width="1.5" fill="none" marker-end="url(#arrow-orange)" opacity=".6"/>
+  <path d="M700,802 L700,750" stroke="#F97316" stroke-width="1.2" fill="none" marker-end="url(#arrow-orange)" opacity=".5"/>
+  <path d="M940,802 L940,760 Q940,755 900,752 L870,750" stroke="#F97316" stroke-width="1.2" fill="none" marker-end="url(#arrow-orange)" opacity=".5"/>
+  <text x="700" y="768" text-anchor="middle" font-size="8" fill="#F97316" font-style="italic" opacity=".7">write to pool</text>
+
+</svg>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     DATA FLOW EXPLANATION CARDS
+     ══════════════════════════════════════════════════════════════ -->
+<div class="flow-section">
+  <div class="flow-card ci-card">
+    <h3>Central Intelligence &mdash; CEO</h3>
+    <p>Receives user requests and delegates to the appropriate Director via <strong>Sub-Workflow Tools</strong>. Queries the Shared Intelligence Pool for cross-department context. Aggregates Director responses into final output.</p>
+  </div>
+  <div class="flow-card dir-card">
+    <h3>Level 3 &mdash; Directors</h3>
+    <p>Each Director manages a department. They receive tasks from Central Intelligence and coordinate their Specialists via <strong>Sub-Workflow Tools</strong>. Directors aggregate specialist outputs and return structured results.</p>
+  </div>
+  <div class="flow-card spec-card">
+    <h3>Level 2 &mdash; Specialists</h3>
+    <p>Domain experts that execute specific tasks. They <strong>read from and write to</strong> the Shared Intelligence Pool using <strong>Data Table Tools</strong>. Each Specialist has deep expertise in one area.</p>
+  </div>
+  <div class="flow-card op-card">
+    <h3>Level 1 &mdash; Operators (Floaters)</h3>
+    <p>Single-purpose data feeders that run independently. They <strong>write to shared tables</strong> (stats, transcripts, comments) and are not managed by any Director. Triggered by schedules or events.</p>
+  </div>
+  <div class="flow-card pool-card">
+    <h3>Shared Intelligence Pool</h3>
+    <p>Central data layer with 9 tables: <strong>goals, wins, pain_points, objections, content_ideas, icp, offers, comments, reference</strong>. All Specialists and Operators read/write here, creating a shared knowledge base across the entire Central Intelligence.</p>
+  </div>
+</div>
+
+<!-- ── Pool Tables Detail ───────────────────────────────────── -->
+<div class="pool-tables">
+  <h3>Shared Intelligence Pool &mdash; Data Tables</h3>
+  <div class="tables-grid">
+    <span class="table-tag">goals</span>
+    <span class="table-tag">wins</span>
+    <span class="table-tag">pain_points</span>
+    <span class="table-tag">objections</span>
+    <span class="table-tag">content_ideas</span>
+    <span class="table-tag">icp</span>
+    <span class="table-tag">offers</span>
+    <span class="table-tag">comments</span>
+    <span class="table-tag">reference</span>
+  </div>
+</div>
+
+<p class="footer-note">Central Intelligence V2 Architecture Diagram &mdash; Generated 2026-03-05</p>
+
+</body>
+</html>

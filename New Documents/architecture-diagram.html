@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Central Intelligence Architecture — Central Intelligence AI Platform</title>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #0a0a0a;
+      --surface:      #111111;
+      --surface2:     #1a1a1a;
+      --border:       #2a2a2a;
+      --text:         #e5e7eb;
+      --text-muted:   #6b7280;
+      --ci-brand:        #f59e0b;
+      --ci-brand-glow:   rgba(245,158,11,0.25);
+      --director:     #3b82f6;
+      --director-glow:rgba(59,130,246,0.25);
+      --marketing:    #22c55e;
+      --sales:        #f97316;
+      --fulfillment:  #a855f7;
+      --operator:     #6b7280;
+      --data:         #06b6d4;
+      --webapp:       #ec4899;
+      --ci:           #6366f1;
+      --ci-glow:      rgba(99,102,241,0.25);
+      --line:         rgba(255,255,255,0.12);
+    }
+
+    html, body {
+      width: 100%;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ─── Header ───────────────────────────────────────────────────────────── */
+    .page-header {
+      padding: 24px 32px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .page-header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--ci-brand);
+      letter-spacing: -0.3px;
+    }
+    .page-header h1 span { color: var(--text-muted); font-weight: 400; }
+    .header-meta { font-size: 12px; color: var(--text-muted); }
+
+    /* ─── Layout ───────────────────────────────────────────────────────────── */
+    .canvas-wrapper {
+      display: flex;
+      gap: 0;
+      min-height: calc(100vh - 80px);
+    }
+
+    .diagram-area {
+      flex: 1;
+      padding: 24px 16px 40px;
+      overflow-x: auto;
+    }
+
+    .side-panel {
+      width: 320px;
+      min-width: 280px;
+      border-left: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ─── Legend ───────────────────────────────────────────────────────────── */
+    .legend {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .legend h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .legend-grid { display: flex; flex-direction: column; gap: 7px; }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+    }
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .legend-dot.ci-brand   { background: var(--ci-brand); box-shadow: 0 0 6px var(--ci-brand); }
+    .legend-dot.ci         { background: var(--ci); box-shadow: 0 0 5px var(--ci); }
+    .legend-dot.director   { background: var(--director); }
+    .legend-dot.marketing  { background: var(--marketing); }
+    .legend-dot.sales      { background: var(--sales); }
+    .legend-dot.fulfillment{ background: var(--fulfillment); }
+    .legend-dot.operator   { background: var(--operator); }
+    .legend-dot.data       { background: var(--data); }
+    .legend-dot.webapp     { background: var(--webapp); }
+
+    /* ─── Detail Panel ─────────────────────────────────────────────────────── */
+    .detail-panel {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .detail-panel h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .detail-placeholder {
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .detail-placeholder .arrow { color: var(--ci-brand); }
+
+    .node-detail { display: none; }
+    .node-detail.active { display: block; }
+
+    .detail-id {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: monospace;
+      margin-bottom: 10px;
+    }
+    .detail-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .detail-tier {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 14px;
+    }
+    .detail-section { margin-bottom: 14px; }
+    .detail-section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .detail-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .detail-tag {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .detail-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ─── SVG Diagram ──────────────────────────────────────────────────────── */
+    #arch-svg {
+      display: block;
+      min-width: 900px;
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .node-group { cursor: pointer; }
+    .node-group:hover .node-rect { filter: brightness(1.2); }
+    .node-group:hover .node-circle { filter: brightness(1.2); }
+
+    .node-rect {
+      rx: 8;
+      transition: filter 0.15s;
+    }
+    .node-circle { transition: filter 0.15s; }
+
+    .tier-label {
+      font-size: 11px;
+      fill: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    /* ─── Stats Bar ─────────────────────────────────────────────────────────── */
+    .stats-bar {
+      display: flex;
+      gap: 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      margin: 0 32px 0;
+      flex-wrap: wrap;
+    }
+    .stat-item {
+      flex: 1;
+      min-width: 100px;
+      padding: 10px 16px;
+      border-right: 1px solid var(--border);
+    }
+    .stat-item:last-child { border-right: none; }
+    .stat-value { font-size: 20px; font-weight: 700; }
+    .stat-label { font-size: 11px; color: var(--text-muted); }
+    .stat-ci         { color: var(--ci-brand); }
+    .stat-director   { color: var(--director); }
+    .stat-marketing  { color: var(--marketing); }
+    .stat-sales      { color: var(--sales); }
+    .stat-fulfillment{ color: var(--fulfillment); }
+    .stat-operator   { color: var(--operator); }
+    .stat-data       { color: var(--data); }
+
+    /* ─── Print ─────────────────────────────────────────────────────────────── */
+    @media print {
+      body { background: #fff; color: #111; }
+      .side-panel { display: none; }
+      .diagram-area { padding: 0; }
+      #arch-svg { min-width: unset; max-width: 100%; }
+      .page-header { border-color: #ddd; }
+      .stats-bar { border-color: #ddd; }
+      .stat-item { border-color: #ddd; }
+    }
+
+    @media (max-width: 900px) {
+      .canvas-wrapper { flex-direction: column; }
+      .side-panel { width: 100%; min-width: unset; border-left: none; border-top: 1px solid var(--border); }
+      #arch-svg { min-width: 700px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── Header ──────────────────────────────────────────────────────────────── -->
+<header class="page-header">
+  <h1>Central Intelligence <span>/ Central Intelligence AI Platform Architecture</span></h1>
+  <div class="header-meta">v1.1.0 &nbsp;·&nbsp; 2026-03-12 &nbsp;·&nbsp; Click any node for details</div>
+</header>
+
+<!-- ─── Stats Bar ────────────────────────────────────────────────────────────── -->
+<div class="stats-bar">
+  <div class="stat-item"><div class="stat-value stat-ci">1</div><div class="stat-label">Central Intelligence</div></div>
+  <div class="stat-item"><div class="stat-value stat-director">3</div><div class="stat-label">Directors</div></div>
+  <div class="stat-item"><div class="stat-value stat-marketing">6</div><div class="stat-label">Marketing Workers</div></div>
+  <div class="stat-item"><div class="stat-value stat-sales">3</div><div class="stat-label">Sales Workers</div></div>
+  <div class="stat-item"><div class="stat-value stat-fulfillment">4</div><div class="stat-label">Fulfillment Workers</div></div>
+  <div class="stat-item"><div class="stat-value stat-operator">7</div><div class="stat-label">Operators</div></div>
+  <div class="stat-item"><div class="stat-value stat-data">16</div><div class="stat-label">Data Tables</div></div>
+  <div class="stat-item"><div class="stat-value" style="color:var(--webapp)">6</div><div class="stat-label">Airtable Bases</div></div>
+</div>
+
+<!-- ─── Main Canvas ──────────────────────────────────────────────────────────── -->
+<div class="canvas-wrapper">
+  <div class="diagram-area">
+    <svg id="arch-svg" viewBox="0 0 1100 960" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- Gradients -->
+        <radialGradient id="gQueen" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="gMkt" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#22c55e" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#22c55e" stop-opacity="0.05"/>
+        </linearGradient>
+        <linearGradient id="gSls" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#f97316" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#f97316" stop-opacity="0.05"/>
+        </linearGradient>
+        <linearGradient id="gFul" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#a855f7" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#a855f7" stop-opacity="0.05"/>
+        </linearGradient>
+        <linearGradient id="gData" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.05"/>
+        </linearGradient>
+        <linearGradient id="gCI" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#6366f1" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#6366f1" stop-opacity="0.05"/>
+        </linearGradient>
+        <!-- Arrow markers -->
+        <marker id="arrowQueen" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#f59e0b" opacity="0.7"/>
+        </marker>
+        <marker id="arrowDir" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6" opacity="0.6"/>
+        </marker>
+        <marker id="arrowMkt" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#22c55e" opacity="0.6"/>
+        </marker>
+        <marker id="arrowSls" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#f97316" opacity="0.6"/>
+        </marker>
+        <marker id="arrowFul" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#a855f7" opacity="0.6"/>
+        </marker>
+        <marker id="arrowData" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#06b6d4" opacity="0.5"/>
+        </marker>
+        <marker id="arrowWebapp" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#ec4899" opacity="0.7"/>
+        </marker>
+        <marker id="arrowCI" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#6366f1" opacity="0.6"/>
+        </marker>
+      </defs>
+
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- TIER LABELS                                       -->
+      <!-- ───────────────────────────────────────────────── -->
+      <text x="18" y="88"  class="tier-label">TIER 1</text>
+      <text x="18" y="200" class="tier-label">TIER 2</text>
+      <text x="18" y="390" class="tier-label">TIER 3</text>
+      <text x="18" y="720" class="tier-label">DATA</text>
+
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- CENTRAL INTELLIGENCE ZONE                         -->
+      <!-- ───────────────────────────────────────────────── -->
+      <rect x="52" y="236" width="310" height="88" rx="10" fill="url(#gCI)" stroke="#6366f1" stroke-opacity="0.2" stroke-width="1"/>
+      <text x="66" y="250" font-size="10" fill="#6366f1" opacity="0.8" font-weight="600" letter-spacing="0.5">CENTRAL INTELLIGENCE</text>
+
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- DEPARTMENT ZONE BACKGROUNDS                       -->
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- Marketing zone -->
+      <rect x="52" y="340" width="310" height="240" rx="10" fill="url(#gMkt)" stroke="#22c55e" stroke-opacity="0.15" stroke-width="1"/>
+      <text x="66" y="360" font-size="10" fill="#22c55e" opacity="0.7" font-weight="600" letter-spacing="0.5">MARKETING DEPT</text>
+
+      <!-- Sales zone -->
+      <rect x="390" y="340" width="210" height="240" rx="10" fill="url(#gSls)" stroke="#f97316" stroke-opacity="0.15" stroke-width="1"/>
+      <text x="404" y="360" font-size="10" fill="#f97316" opacity="0.7" font-weight="600" letter-spacing="0.5">SALES DEPT</text>
+
+      <!-- Fulfillment zone -->
+      <rect x="628" y="340" width="242" height="240" rx="10" fill="url(#gFul)" stroke="#a855f7" stroke-opacity="0.15" stroke-width="1"/>
+      <text x="642" y="360" font-size="10" fill="#a855f7" opacity="0.7" font-weight="600" letter-spacing="0.5">FULFILLMENT DEPT</text>
+
+      <!-- Operators zone -->
+      <rect x="52" y="600" width="820" height="92" rx="10" fill="rgba(107,114,128,0.06)" stroke="#6b7280" stroke-opacity="0.2" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="66" y="618" font-size="10" fill="#6b7280" opacity="0.8" font-weight="600" letter-spacing="0.5">SHARED OPERATORS</text>
+
+      <!-- Data zone -->
+      <rect x="52" y="718" width="820" height="192" rx="10" fill="url(#gData)" stroke="#06b6d4" stroke-opacity="0.2" stroke-width="1"/>
+      <text x="66" y="736" font-size="10" fill="#06b6d4" opacity="0.8" font-weight="600" letter-spacing="0.5">DATA LAYER</text>
+
+      <!-- Web App zone -->
+      <rect x="906" y="56" width="168" height="440" rx="10" fill="rgba(236,72,153,0.06)" stroke="#ec4899" stroke-opacity="0.2" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="920" y="76" font-size="10" fill="#ec4899" opacity="0.8" font-weight="600" letter-spacing="0.5">WEB APP LAYER</text>
+
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- CONNECTION LINES — Queen to CI & Directors        -->
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- Queen (550,96) to CI (207,290) -->
+      <line x1="490" y1="120" x2="207" y2="262" stroke="#6366f1" stroke-width="1.5" stroke-opacity="0.45" marker-end="url(#arrowCI)"/>
+      <text x="310" y="165" font-size="8" fill="#6366f1" opacity="0.6" text-anchor="middle">Intelligence</text>
+      <text x="310" y="175" font-size="8" fill="#6366f1" opacity="0.6" text-anchor="middle">Requests</text>
+
+      <!-- Queen (550,96) to MKT Dir (175,190) -->
+      <line x1="490" y1="110" x2="215" y2="178" stroke="#f59e0b" stroke-width="1.5" stroke-opacity="0.5" marker-end="url(#arrowQueen)"/>
+      <!-- Queen to SLS Dir (495,190) -->
+      <line x1="540" y1="116" x2="496" y2="178" stroke="#f59e0b" stroke-width="1.5" stroke-opacity="0.5" marker-end="url(#arrowQueen)"/>
+      <!-- Queen to FUL Dir (748,190) -->
+      <line x1="580" y1="110" x2="725" y2="178" stroke="#f59e0b" stroke-width="1.5" stroke-opacity="0.5" marker-end="url(#arrowQueen)"/>
+
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- CONNECTION LINES — CI to Marketing Director       -->
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- CI (207,326) → MKT Dir (175,224) -->
+      <line x1="207" y1="326" x2="175" y2="224" stroke="#6366f1" stroke-width="1" stroke-opacity="0.35" stroke-dasharray="3,3" marker-end="url(#arrowCI)"/>
+
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- CONNECTION LINES — Directors to Specialists       -->
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- MKT Dir (175,210) → specialists -->
+      <line x1="145" y1="212" x2="98"  y2="374" stroke="#22c55e" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowMkt)"/>
+      <line x1="160" y1="212" x2="148" y2="374" stroke="#22c55e" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowMkt)"/>
+      <line x1="175" y1="212" x2="198" y2="374" stroke="#22c55e" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowMkt)"/>
+      <line x1="190" y1="212" x2="248" y2="374" stroke="#22c55e" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowMkt)"/>
+      <line x1="205" y1="212" x2="298" y2="374" stroke="#22c55e" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowMkt)"/>
+      <line x1="215" y1="212" x2="348" y2="374" stroke="#22c55e" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowMkt)"/>
+
+      <!-- SLS Dir (495,210) → specialists -->
+      <line x1="470" y1="212" x2="425" y2="374" stroke="#f97316" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowSls)"/>
+      <line x1="495" y1="212" x2="495" y2="374" stroke="#f97316" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowSls)"/>
+      <line x1="520" y1="212" x2="560" y2="374" stroke="#f97316" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowSls)"/>
+
+      <!-- FUL Dir (748,210) → specialists -->
+      <line x1="720" y1="212" x2="665" y2="374" stroke="#a855f7" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowFul)"/>
+      <line x1="740" y1="212" x2="715" y2="374" stroke="#a855f7" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowFul)"/>
+      <line x1="758" y1="212" x2="765" y2="374" stroke="#a855f7" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowFul)"/>
+      <line x1="775" y1="212" x2="815" y2="374" stroke="#a855f7" stroke-width="1" stroke-opacity="0.4" marker-end="url(#arrowFul)"/>
+
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- CONNECTION LINES — Specialists → CI → Data Layer  -->
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- Specialists to CI (cross-dept feeds) -->
+      <line x1="175" y1="592" x2="175" y2="326" stroke="#6366f1" stroke-width="1" stroke-opacity="0.3" stroke-dasharray="4,3" marker-end="url(#arrowCI)"/>
+      <text x="115" y="460" font-size="8" fill="#6366f1" opacity="0.6" text-anchor="middle">VOC Data</text>
+
+      <!-- Specialists to data -->
+      <line x1="175" y1="592" x2="175" y2="718" stroke="#06b6d4" stroke-width="1" stroke-opacity="0.25" stroke-dasharray="3,3" marker-end="url(#arrowData)"/>
+      <line x1="495" y1="592" x2="380" y2="718" stroke="#06b6d4" stroke-width="1" stroke-opacity="0.25" stroke-dasharray="3,3" marker-end="url(#arrowData)"/>
+      <line x1="748" y1="592" x2="600" y2="718" stroke="#06b6d4" stroke-width="1" stroke-opacity="0.25" stroke-dasharray="3,3" marker-end="url(#arrowData)"/>
+
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- CI to Web App connection                          -->
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- CI → WebApp Dashboard (intelligence display) -->
+      <path d="M 354 290 C 630 290 880 140 906 120" stroke="#6366f1" stroke-width="1" stroke-opacity="0.4" fill="none" stroke-dasharray="4,3" marker-end="url(#arrowCI)"/>
+      <text x="620" y="278" font-size="8" fill="#6366f1" opacity="0.6" text-anchor="middle">Insights → Dashboard</text>
+
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- Web App connections                               -->
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- WebApp → Queen -->
+      <path d="M 906 110 C 870 110 840 96 820 96" stroke="#ec4899" stroke-width="1.5" stroke-opacity="0.6" fill="none" stroke-dasharray="5,3" marker-end="url(#arrowWebapp)"/>
+      <!-- WebApp → MKT Dir -->
+      <path d="M 906 190 C 870 190 680 190 540 190" stroke="#ec4899" stroke-width="1" stroke-opacity="0.35" fill="none" stroke-dasharray="4,3" marker-end="url(#arrowWebapp)"/>
+
+      <!-- ───────────────────────────────────────────────── -->
+      <!-- Shared Intelligence Pool arrow (cross-dept)       -->
+      <!-- ───────────────────────────────────────────────── -->
+      <path d="M 200 785 Q 440 840 600 785" stroke="#f59e0b" stroke-width="1" stroke-opacity="0.3" fill="none" stroke-dasharray="3,4"/>
+      <text x="370" y="842" font-size="9" fill="#f59e0b" opacity="0.5" text-anchor="middle">shared intelligence pool</text>
+
+      <!-- ===================================================== -->
+      <!-- TIER 1 — CENTRAL INTELLIGENCE                                    -->
+      <!-- ===================================================== -->
+      <!-- Queen glow -->
+      <circle cx="550" cy="96" r="56" fill="url(#gQueen)" />
+
+      <!-- Chat + Webhook access mode badges -->
+      <g class="node-group" data-id="chat-trigger" onclick="showDetail('chat-trigger')">
+        <rect x="390" y="58" width="100" height="24" rx="5" fill="#1a1a1a" stroke="#f59e0b" stroke-opacity="0.4" stroke-width="1"/>
+        <text x="440" y="74" text-anchor="middle" font-size="10" fill="#f59e0b" opacity="0.9">Chat Trigger</text>
+      </g>
+      <g class="node-group" data-id="webhook-trigger" onclick="showDetail('webhook-trigger')">
+        <rect x="610" y="58" width="100" height="24" rx="5" fill="#1a1a1a" stroke="#f59e0b" stroke-opacity="0.4" stroke-width="1"/>
+        <text x="660" y="74" text-anchor="middle" font-size="10" fill="#f59e0b" opacity="0.9">Webhook API</text>
+      </g>
+      <!-- Arrows from badges into Queen -->
+      <line x1="490" y1="70" x2="512" y2="82" stroke="#f59e0b" stroke-width="1" stroke-opacity="0.5" marker-end="url(#arrowQueen)"/>
+      <line x1="610" y1="70" x2="590" y2="82" stroke="#f59e0b" stroke-width="1" stroke-opacity="0.5" marker-end="url(#arrowQueen)"/>
+
+      <!-- Central Intelligence hexagon node -->
+      <g class="node-group" data-id="wb-core-00" onclick="showDetail('wb-core-00')">
+        <polygon points="550,60 588,80 588,120 550,140 512,120 512,80" fill="#1a1a0a" stroke="#f59e0b" stroke-width="2.5"/>
+        <circle cx="550" cy="100" r="20" fill="#f59e0b" opacity="0.15"/>
+        <!-- Bee icon suggestion (simple) -->
+        <text x="550" y="95" text-anchor="middle" font-size="16" fill="#f59e0b">&#x2764;</text>
+        <text x="550" y="110" text-anchor="middle" font-size="8" fill="#f59e0b" font-weight="700">C.I.</text>
+        <text x="550" y="155" text-anchor="middle" font-size="10" fill="#f59e0b" font-weight="600">CI-CORE-00</text>
+        <text x="550" y="168" text-anchor="middle" font-size="9" fill="#e5e7eb" opacity="0.7">GPT-4o Orchestrator</text>
+      </g>
+
+      <!-- ===================================================== -->
+      <!-- TIER 1.5 — CENTRAL INTELLIGENCE                        -->
+      <!-- ===================================================== -->
+
+      <!-- Central Intelligence main component -->
+      <g class="node-group" data-id="wb-ci" onclick="showDetail('wb-ci')">
+        <rect x="60" y="262" width="294" height="56" rx="8" fill="#0a0a12" stroke="#6366f1" stroke-width="1.8" class="node-rect"/>
+        <rect x="60" y="262" width="8" height="56" rx="4" fill="#6366f1"/>
+        <text x="78" y="279" font-size="10" fill="#6366f1" font-weight="700">CI-CI</text>
+        <text x="78" y="293" font-size="9" fill="#e5e7eb" opacity="0.8">Central Intelligence</text>
+        <text x="78" y="305" font-size="8" fill="#6b7280">Supabase + 6 Skills</text>
+
+        <!-- Icon circle -->
+        <circle cx="260" cy="290" r="14" fill="#6366f1" opacity="0.1"/>
+        <text x="260" y="295" text-anchor="middle" font-size="18" fill="#6366f1" opacity="0.7">&#x26a1;</text>
+      </g>
+
+      <!-- ===================================================== -->
+      <!-- TIER 2 — DIRECTORS                                    -->
+      <!-- ===================================================== -->
+
+      <!-- Marketing Director -->
+      <g class="node-group" data-id="wb-mkt-dir" onclick="showDetail('wb-mkt-dir')">
+        <rect x="100" y="178" width="150" height="46" rx="8" fill="#0d1a11" stroke="#22c55e" stroke-width="1.8" class="node-rect"/>
+        <rect x="100" y="178" width="8" height="46" rx="4" fill="#22c55e"/>
+        <text x="118" y="196" font-size="10" fill="#22c55e" font-weight="700">CI-MKT-DIR</text>
+        <text x="118" y="210" font-size="9" fill="#e5e7eb" opacity="0.8">Marketing Director</text>
+        <text x="118" y="222" font-size="8" fill="#6b7280">6 specialists</text>
+      </g>
+
+      <!-- Sales Director -->
+      <g class="node-group" data-id="wb-sls-dir" onclick="showDetail('wb-sls-dir')">
+        <rect x="420" y="178" width="150" height="46" rx="8" fill="#1a0e0a" stroke="#f97316" stroke-width="1.8" class="node-rect"/>
+        <rect x="420" y="178" width="8" height="46" rx="4" fill="#f97316"/>
+        <text x="438" y="196" font-size="10" fill="#f97316" font-weight="700">CI-SLS-DIR</text>
+        <text x="438" y="210" font-size="9" fill="#e5e7eb" opacity="0.8">Sales Director</text>
+        <text x="438" y="222" font-size="8" fill="#6b7280">3 specialists</text>
+      </g>
+
+      <!-- Fulfillment Director -->
+      <g class="node-group" data-id="wb-ful-dir" onclick="showDetail('wb-ful-dir')">
+        <rect x="674" y="178" width="150" height="46" rx="8" fill="#12091a" stroke="#a855f7" stroke-width="1.8" class="node-rect"/>
+        <rect x="674" y="178" width="8" height="46" rx="4" fill="#a855f7"/>
+        <text x="692" y="196" font-size="10" fill="#a855f7" font-weight="700">CI-FUL-DIR</text>
+        <text x="692" y="210" font-size="9" fill="#e5e7eb" opacity="0.8">Fulfillment Director</text>
+        <text x="692" y="222" font-size="8" fill="#6b7280">4 specialists</text>
+      </g>
+
+      <!-- ===================================================== -->
+      <!-- TIER 3 — MARKETING SPECIALISTS                        -->
+      <!-- ===================================================== -->
+      <!-- 6 nodes in 2 rows of 3 inside marketing zone -->
+
+      <!-- Row 1 -->
+      <g class="node-group" data-id="wb-mkt-01" onclick="showDetail('wb-mkt-01')">
+        <rect x="60" y="374" width="90" height="44" rx="6" fill="#0a160c" stroke="#22c55e" stroke-width="1.2" class="node-rect"/>
+        <text x="105" y="390" text-anchor="middle" font-size="9" fill="#22c55e" font-weight="700">CI-MKT-01</text>
+        <text x="105" y="403" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Social Media</text>
+        <text x="105" y="414" text-anchor="middle" font-size="7.5" fill="#6b7280">Worker</text>
+      </g>
+
+      <g class="node-group" data-id="wb-mkt-02" onclick="showDetail('wb-mkt-02')">
+        <rect x="160" y="374" width="90" height="44" rx="6" fill="#0a160c" stroke="#22c55e" stroke-width="1.2" class="node-rect"/>
+        <text x="205" y="390" text-anchor="middle" font-size="9" fill="#22c55e" font-weight="700">CI-MKT-02</text>
+        <text x="205" y="403" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Email Worker</text>
+        <text x="205" y="414" text-anchor="middle" font-size="7.5" fill="#6b7280">Worker</text>
+      </g>
+
+      <g class="node-group" data-id="wb-mkt-03" onclick="showDetail('wb-mkt-03')">
+        <rect x="260" y="374" width="90" height="44" rx="6" fill="#0a160c" stroke="#22c55e" stroke-width="1.2" class="node-rect"/>
+        <text x="305" y="390" text-anchor="middle" font-size="9" fill="#22c55e" font-weight="700">CI-MKT-03</text>
+        <text x="305" y="403" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Funnels Worker</text>
+        <text x="305" y="414" text-anchor="middle" font-size="7.5" fill="#6b7280">Worker</text>
+      </g>
+
+      <!-- Row 2 -->
+      <g class="node-group" data-id="wb-mkt-04" onclick="showDetail('wb-mkt-04')">
+        <rect x="60" y="430" width="90" height="44" rx="6" fill="#0a160c" stroke="#22c55e" stroke-width="1.2" class="node-rect"/>
+        <text x="105" y="446" text-anchor="middle" font-size="9" fill="#22c55e" font-weight="700">CI-MKT-04</text>
+        <text x="105" y="459" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Ads Worker</text>
+        <text x="105" y="470" text-anchor="middle" font-size="7.5" fill="#6b7280">Worker</text>
+      </g>
+
+      <g class="node-group" data-id="wb-mkt-05" onclick="showDetail('wb-mkt-05')">
+        <rect x="160" y="430" width="90" height="44" rx="6" fill="#0a160c" stroke="#22c55e" stroke-width="1.2" class="node-rect"/>
+        <text x="205" y="446" text-anchor="middle" font-size="9" fill="#22c55e" font-weight="700">CI-MKT-05</text>
+        <text x="205" y="459" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">DM Worker</text>
+        <text x="205" y="470" text-anchor="middle" font-size="7.5" fill="#6b7280">Worker</text>
+      </g>
+
+      <g class="node-group" data-id="wb-mkt-06" onclick="showDetail('wb-mkt-06')">
+        <rect x="260" y="430" width="90" height="44" rx="6" fill="#0a160c" stroke="#22c55e" stroke-width="1.2" class="node-rect"/>
+        <text x="305" y="446" text-anchor="middle" font-size="9" fill="#22c55e" font-weight="700">CI-MKT-06</text>
+        <text x="305" y="459" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Offers Worker</text>
+        <text x="305" y="470" text-anchor="middle" font-size="7.5" fill="#6b7280">Worker</text>
+      </g>
+
+      <!-- ===================================================== -->
+      <!-- TIER 3 — SALES SPECIALISTS                            -->
+      <!-- ===================================================== -->
+
+      <g class="node-group" data-id="wb-sal-01" onclick="showDetail('wb-sal-01')">
+        <rect x="398" y="374" width="90" height="44" rx="6" fill="#160a04" stroke="#f97316" stroke-width="1.2" class="node-rect"/>
+        <text x="443" y="390" text-anchor="middle" font-size="9" fill="#f97316" font-weight="700">CI-SAL-01</text>
+        <text x="443" y="403" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Appt Setting</text>
+        <text x="443" y="414" text-anchor="middle" font-size="7.5" fill="#6b7280">Bot</text>
+      </g>
+
+      <g class="node-group" data-id="wb-sal-02" onclick="showDetail('wb-sal-02')">
+        <rect x="460" y="430" width="90" height="44" rx="6" fill="#160a04" stroke="#f97316" stroke-width="1.2" class="node-rect"/>
+        <text x="505" y="446" text-anchor="middle" font-size="9" fill="#f97316" font-weight="700">CI-SAL-02</text>
+        <text x="505" y="459" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Leads Database</text>
+        <text x="505" y="470" text-anchor="middle" font-size="7.5" fill="#6b7280">Worker</text>
+      </g>
+
+      <g class="node-group" data-id="wb-sal-03" onclick="showDetail('wb-sal-03')">
+        <rect x="530" y="374" width="90" height="44" rx="6" fill="#160a04" stroke="#f97316" stroke-width="1.2" class="node-rect"/>
+        <text x="575" y="390" text-anchor="middle" font-size="9" fill="#f97316" font-weight="700">CI-SAL-03</text>
+        <text x="575" y="403" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Sales Call</text>
+        <text x="575" y="414" text-anchor="middle" font-size="7.5" fill="#6b7280">Analyzer</text>
+      </g>
+
+      <!-- ===================================================== -->
+      <!-- TIER 3 — FULFILLMENT SPECIALISTS                      -->
+      <!-- ===================================================== -->
+
+      <g class="node-group" data-id="wb-ful-01" onclick="showDetail('wb-ful-01')">
+        <rect x="636" y="374" width="90" height="44" rx="6" fill="#100818" stroke="#a855f7" stroke-width="1.2" class="node-rect"/>
+        <text x="681" y="390" text-anchor="middle" font-size="9" fill="#a855f7" font-weight="700">CI-FUL-01</text>
+        <text x="681" y="403" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Members DB</text>
+        <text x="681" y="414" text-anchor="middle" font-size="7.5" fill="#6b7280">Worker</text>
+      </g>
+
+      <g class="node-group" data-id="wb-ful-02" onclick="showDetail('wb-ful-02')">
+        <rect x="636" y="430" width="90" height="44" rx="6" fill="#100818" stroke="#a855f7" stroke-width="1.2" class="node-rect"/>
+        <text x="681" y="446" text-anchor="middle" font-size="9" fill="#a855f7" font-weight="700">CI-FUL-02</text>
+        <text x="681" y="459" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Coaching Call</text>
+        <text x="681" y="470" text-anchor="middle" font-size="7.5" fill="#6b7280">Analyzer</text>
+      </g>
+
+      <g class="node-group" data-id="wb-ful-03" onclick="showDetail('wb-ful-03')">
+        <rect x="736" y="374" width="90" height="44" rx="6" fill="#100818" stroke="#a855f7" stroke-width="1.2" class="node-rect"/>
+        <text x="781" y="390" text-anchor="middle" font-size="9" fill="#a855f7" font-weight="700">CI-FUL-03</text>
+        <text x="781" y="403" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Accountability</text>
+        <text x="781" y="414" text-anchor="middle" font-size="7.5" fill="#6b7280">Call Analyzer</text>
+      </g>
+
+      <g class="node-group" data-id="wb-ful-04" onclick="showDetail('wb-ful-04')">
+        <rect x="736" y="430" width="90" height="44" rx="6" fill="#100818" stroke="#a855f7" stroke-width="1.2" class="node-rect"/>
+        <text x="781" y="446" text-anchor="middle" font-size="9" fill="#a855f7" font-weight="700">CI-FUL-04</text>
+        <text x="781" y="459" text-anchor="middle" font-size="8" fill="#e5e7eb" opacity="0.75">Tech SOS</text>
+        <text x="781" y="470" text-anchor="middle" font-size="7.5" fill="#6b7280">Tracker</text>
+      </g>
+
+      <!-- ===================================================== -->
+      <!-- SHARED OPERATORS                                      -->
+      <!-- ===================================================== -->
+
+      <g class="node-group" data-id="wb-core-01" onclick="showDetail('wb-core-01')">
+        <rect x="62" y="626" width="100" height="36" rx="5" fill="#111111" stroke="#6b7280" stroke-width="1.2" class="node-rect"/>
+        <text x="112" y="640" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="700">CI-CORE-01</text>
+        <text x="112" y="654" text-anchor="middle" font-size="8" fill="#6b7280">Call Transcriber</text>
+      </g>
+
+      <g class="node-group" data-id="wb-ops-icp" onclick="showDetail('wb-ops-icp')">
+        <rect x="172" y="626" width="100" height="36" rx="5" fill="#111111" stroke="#6b7280" stroke-width="1.2" class="node-rect"/>
+        <text x="222" y="640" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="700">CI-OPS-ICP</text>
+        <text x="222" y="654" text-anchor="middle" font-size="8" fill="#6b7280">ICP Generator</text>
+      </g>
+
+      <g class="node-group" data-id="wb-ops-offer" onclick="showDetail('wb-ops-offer')">
+        <rect x="282" y="626" width="100" height="36" rx="5" fill="#111111" stroke="#6b7280" stroke-width="1.2" class="node-rect"/>
+        <text x="332" y="640" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="700">CI-OPS-OFFER</text>
+        <text x="332" y="654" text-anchor="middle" font-size="8" fill="#6b7280">Offer Generator</text>
+      </g>
+
+      <g class="node-group" data-id="wb-stats-social" onclick="showDetail('wb-stats-social')">
+        <rect x="392" y="626" width="100" height="36" rx="5" fill="#111111" stroke="#6b7280" stroke-width="1.2" class="node-rect"/>
+        <text x="442" y="640" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="700">Stats: Social</text>
+        <text x="442" y="654" text-anchor="middle" font-size="8" fill="#6b7280">Updater</text>
+      </g>
+
+      <g class="node-group" data-id="wb-stats-email" onclick="showDetail('wb-stats-email')">
+        <rect x="502" y="626" width="100" height="36" rx="5" fill="#111111" stroke="#6b7280" stroke-width="1.2" class="node-rect"/>
+        <text x="552" y="640" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="700">Stats: Email</text>
+        <text x="552" y="654" text-anchor="middle" font-size="8" fill="#6b7280">Updater</text>
+      </g>
+
+      <g class="node-group" data-id="wb-stats-funnel" onclick="showDetail('wb-stats-funnel')">
+        <rect x="612" y="626" width="100" height="36" rx="5" fill="#111111" stroke="#6b7280" stroke-width="1.2" class="node-rect"/>
+        <text x="662" y="640" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="700">Stats: Funnel</text>
+        <text x="662" y="654" text-anchor="middle" font-size="8" fill="#6b7280">Updater</text>
+      </g>
+
+      <g class="node-group" data-id="wb-stats-ads" onclick="showDetail('wb-stats-ads')">
+        <rect x="722" y="626" width="100" height="36" rx="5" fill="#111111" stroke="#6b7280" stroke-width="1.2" class="node-rect"/>
+        <text x="772" y="640" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="700">Stats: Ads</text>
+        <text x="772" y="654" text-anchor="middle" font-size="8" fill="#6b7280">Updater</text>
+      </g>
+
+      <!-- ===================================================== -->
+      <!-- DATA LAYER — Supabase Tables                          -->
+      <!-- ===================================================== -->
+
+      <!-- Supabase Tables block -->
+      <g class="node-group" data-id="supabase-tables" onclick="showDetail('supabase-tables')">
+        <rect x="62" y="744" width="340" height="148" rx="8" fill="#081417" stroke="#06b6d4" stroke-width="1.5" class="node-rect"/>
+        <text x="80" y="763" font-size="10" fill="#06b6d4" font-weight="700">Supabase Tables (PostgreSQL)</text>
+        <!-- Table names in 2 columns -->
+        <text x="74"  y="780" font-size="8.5" fill="#9ca3af">bee_analysis_log</text>
+        <text x="210" y="780" font-size="8.5" fill="#9ca3af">content_ideas</text>
+        <text x="74"  y="794" font-size="8.5" fill="#9ca3af">pain_points</text>
+        <text x="210" y="794" font-size="8.5" fill="#9ca3af">wins</text>
+        <text x="74"  y="808" font-size="8.5" fill="#9ca3af">call_transcripts</text>
+        <text x="210" y="808" font-size="8.5" fill="#9ca3af">bee_registry</text>
+        <text x="74"  y="822" font-size="8.5" fill="#9ca3af">goals</text>
+        <text x="210" y="822" font-size="8.5" fill="#9ca3af">objections</text>
+        <text x="74"  y="836" font-size="8.5" fill="#9ca3af">icp_profiles</text>
+        <text x="210" y="836" font-size="8.5" fill="#9ca3af">offers</text>
+        <text x="74"  y="850" font-size="8.5" fill="#9ca3af">dm_templates</text>
+        <text x="210" y="850" font-size="8.5" fill="#9ca3af">ad_copies</text>
+        <text x="74"  y="864" font-size="8.5" fill="#9ca3af">email_drafts</text>
+        <text x="210" y="864" font-size="8.5" fill="#9ca3af">funnel_reports</text>
+        <text x="74"  y="878" font-size="8.5" fill="#9ca3af">social_scripts</text>
+        <text x="210" y="878" font-size="8.5" fill="#9ca3af">error_log</text>
+      </g>
+
+      <!-- Airtable block -->
+      <g class="node-group" data-id="airtable" onclick="showDetail('airtable')">
+        <rect x="416" y="744" width="220" height="148" rx="8" fill="#080d0d" stroke="#06b6d4" stroke-width="1.5" class="node-rect"/>
+        <text x="434" y="763" font-size="10" fill="#06b6d4" font-weight="700">Airtable (Primary DB)</text>
+        <text x="434" y="778" font-size="8" fill="#4b5563" font-style="italic">swappable · database-agnostic</text>
+        <text x="428" y="796" font-size="8.5" fill="#9ca3af">leads</text>
+        <text x="428" y="810" font-size="8.5" fill="#9ca3af">members</text>
+        <text x="428" y="824" font-size="8.5" fill="#9ca3af">social_metrics</text>
+        <text x="428" y="838" font-size="8.5" fill="#9ca3af">email_campaigns</text>
+        <text x="428" y="852" font-size="8.5" fill="#9ca3af">funnel_metrics</text>
+        <text x="428" y="866" font-size="8.5" fill="#9ca3af">ad_campaigns</text>
+      </g>
+
+      <!-- Shared Intelligence Pool -->
+      <g class="node-group" data-id="intel-pool" onclick="showDetail('intel-pool')">
+        <rect x="650" y="744" width="222" height="148" rx="8" fill="#0d0a06" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="5,3" class="node-rect"/>
+        <text x="668" y="763" font-size="10" fill="#f59e0b" font-weight="700">Shared Intelligence Pool</text>
+        <text x="662" y="778" font-size="8" fill="#4b5563" font-style="italic">cross-department read/write</text>
+        <text x="664" y="796" font-size="8.5" fill="#9ca3af">wins</text>
+        <text x="664" y="810" font-size="8.5" fill="#9ca3af">pain_points</text>
+        <text x="664" y="824" font-size="8.5" fill="#9ca3af">objections</text>
+        <text x="664" y="838" font-size="8.5" fill="#9ca3af">content_ideas</text>
+        <text x="664" y="852" font-size="8.5" fill="#9ca3af">icp_profiles</text>
+        <text x="664" y="866" font-size="8.5" fill="#9ca3af">offers</text>
+        <text x="664" y="880" font-size="8.5" fill="#9ca3af">goals</text>
+      </g>
+
+      <!-- ===================================================== -->
+      <!-- WEB APP LAYER                                         -->
+      <!-- ===================================================== -->
+
+      <g class="node-group" data-id="nextjs-dashboard" onclick="showDetail('nextjs-dashboard')">
+        <rect x="918" y="86" width="144" height="44" rx="7" fill="#180d12" stroke="#ec4899" stroke-width="1.5" class="node-rect"/>
+        <text x="990" y="102" text-anchor="middle" font-size="9" fill="#ec4899" font-weight="700">Next.js 14 Dashboard</text>
+        <text x="990" y="115" text-anchor="middle" font-size="8" fill="#9ca3af">App Router · RSC</text>
+        <text x="990" y="126" text-anchor="middle" font-size="7.5" fill="#6b7280">TanStack Query · Recharts</text>
+      </g>
+
+      <g class="node-group" data-id="nextauth" onclick="showDetail('nextauth')">
+        <rect x="918" y="142" width="144" height="36" rx="7" fill="#180d12" stroke="#ec4899" stroke-width="1" class="node-rect"/>
+        <text x="990" y="157" text-anchor="middle" font-size="9" fill="#ec4899" font-weight="600">NextAuth.js</text>
+        <text x="990" y="170" text-anchor="middle" font-size="8" fill="#6b7280">Authentication Layer</text>
+      </g>
+
+      <g class="node-group" data-id="hmac-webhooks" onclick="showDetail('hmac-webhooks')">
+        <rect x="918" y="190" width="144" height="36" rx="7" fill="#180d12" stroke="#ec4899" stroke-width="1" class="node-rect"/>
+        <text x="990" y="205" text-anchor="middle" font-size="9" fill="#ec4899" font-weight="600">HTTPS Webhooks</text>
+        <text x="990" y="218" text-anchor="middle" font-size="8" fill="#6b7280">HMAC-SHA256 Signed</text>
+      </g>
+
+      <g class="node-group" data-id="webapp-api" onclick="showDetail('webapp-api')">
+        <rect x="918" y="238" width="144" height="36" rx="7" fill="#180d12" stroke="#ec4899" stroke-width="1" class="node-rect"/>
+        <text x="990" y="253" text-anchor="middle" font-size="9" fill="#ec4899" font-weight="600">REST API Layer</text>
+        <text x="990" y="266" text-anchor="middle" font-size="8" fill="#6b7280">33+ Webhook Endpoints</text>
+      </g>
+
+      <!-- HMAC → API arrow label -->
+      <text x="860" y="107" font-size="8" fill="#ec4899" opacity="0.7" text-anchor="middle">HTTPS + HMAC</text>
+
+    </svg>
+  </div>
+
+  <!-- ─── Side Panel ──────────────────────────────────────────── -->
+  <aside class="side-panel">
+    <div class="legend">
+      <h3>Legend</h3>
+      <div class="legend-grid">
+        <div class="legend-item"><div class="legend-dot ci-brand"></div><span>Central Intelligence — Central AI Orchestrator</span></div>
+        <div class="legend-item"><div class="legend-dot ci"></div><span>Central Intelligence — Marketing Intelligence Engine</span></div>
+        <div class="legend-item"><div class="legend-dot director"></div><span>Director — Department AI Manager</span></div>
+        <div class="legend-item"><div class="legend-dot marketing"></div><span>Marketing Specialist</span></div>
+        <div class="legend-item"><div class="legend-dot sales"></div><span>Sales Specialist</span></div>
+        <div class="legend-item"><div class="legend-dot fulfillment"></div><span>Fulfillment Specialist</span></div>
+        <div class="legend-item"><div class="legend-dot operator"></div><span>Shared Operator (cross-dept)</span></div>
+        <div class="legend-item"><div class="legend-dot data"></div><span>Data / Storage Layer</span></div>
+        <div class="legend-item"><div class="legend-dot webapp"></div><span>Web Application Layer</span></div>
+      </div>
+    </div>
+
+    <div class="detail-panel">
+      <h3>Node Details</h3>
+
+      <!-- Placeholder -->
+      <div id="detail-placeholder" class="detail-placeholder">
+        <span class="arrow">&#x2190;</span> Click any node in the diagram to see details here.
+      </div>
+
+      <!-- ── Central Intelligence ──────────────────────────────────────── -->
+      <div id="detail-wb-core-00" class="node-detail">
+        <div class="detail-id" style="background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3)">CI-CORE-00</div>
+        <div class="detail-title">Central Intelligence</div>
+        <div class="detail-tier">Tier 1 — Central AI Orchestrator</div>
+        <div class="detail-section">
+          <div class="detail-section-label">Model</div>
+          <div class="detail-tags"><span class="detail-tag">GPT-4o</span></div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-label">Access Modes</div>
+          <div class="detail-tags">
+            <span class="detail-tag">Chat Trigger (conversational)</span>
+            <span class="detail-tag">Webhook (programmatic)</span>
+          </div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-label">Responsibilities</div>
+          <div class="detail-desc">Top-level intent parsing, request routing to directors or specialists, cross-department coordination, and final response synthesis. Can delegate to any Director or directly to any Specialist worker.</div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-label">Delegates To</div>
+          <div class="detail-tags">
+            <span class="detail-tag">CI-MKT-DIR</span>
+            <span class="detail-tag">CI-SLS-DIR</span>
+            <span class="detail-tag">CI-FUL-DIR</span>
+            <span class="detail-tag">Any Specialist (direct)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Chat Trigger ───────────────────────────────────── -->
+      <div id="detail-chat-trigger" class="node-detail">
+        <div class="detail-id" style="background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)">ACCESS</div>
+        <div class="detail-title">Chat Trigger</div>
+        <div class="detail-tier">Input Mode — Conversational</div>
+        <div class="detail-desc">WebSocket endpoint enabling natural language conversations with the Central Intelligence orchestrator. Used for interactive sessions, ad-hoc requests, and exploratory queries. Supports multi-turn conversation context.</div>
+      </div>
+
+      <!-- ── Webhook Trigger ────────────────────────────────── -->
+      <div id="detail-webhook-trigger" class="node-detail">
+        <div class="detail-id" style="background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)">ACCESS</div>
+        <div class="detail-title">Webhook API</div>
+        <div class="detail-tier">Input Mode — Programmatic</div>
+        <div class="detail-desc">HTTPS webhook endpoint for programmatic access from external systems. Requests are signed with HMAC-SHA256 for security. Used by the Next.js dashboard, automation scripts, and third-party integrations.</div>
+      </div>
+
+      <!-- ── Central Intelligence ────────────────────────────── -->
+      <div id="detail-wb-ci" class="node-detail">
+        <div class="detail-id" style="background:rgba(99,102,241,0.15);color:#6366f1;border:1px solid rgba(99,102,241,0.3)">CI-CI</div>
+        <div class="detail-title">Central Intelligence</div>
+        <div class="detail-tier">Tier 1.5 — Marketing Intelligence Engine</div>
+        <div class="detail-section">
+          <div class="detail-section-label">Infrastructure</div>
+          <div class="detail-tags"><span class="detail-tag">Supabase (PostgreSQL)</span><span class="detail-tag">9 Intelligence Tables</span><span class="detail-tag">Node.js + Express Backend</span></div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-label">Skills (6 Total)</div>
+          <div class="detail-tags">
+            <span class="detail-tag">Transcript Processor (Built)</span>
+            <span class="detail-tag">Content Calendar (In Design)</span>
+            <span class="detail-tag">Email Writer (Planned)</span>
+            <span class="detail-tag">Email Marketing Specialist (Planned)</span>
+            <span class="detail-tag">Performance Tracker (Planned)</span>
+            <span class="detail-tag">Market Signal Analyzer (Planned)</span>
+          </div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-label">Input Data</div>
+          <div class="detail-tags"><span class="detail-tag">call_transcripts</span><span class="detail-tag">VOC data</span><span class="detail-tag">customer feedback</span></div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-label">Output to Marketing</div>
+          <div class="detail-tags"><span class="detail-tag">pain_points</span><span class="detail-tag">wins</span><span class="detail-tag">objections</span><span class="detail-tag">content_ideas</span><span class="detail-tag">market_signals</span></div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-label">Feeds</div>
+          <div class="detail-tags"><span class="detail-tag">Marketing Director</span><span class="detail-tag">Shared Intelligence Pool</span><span class="detail-tag">Web App Dashboard</span></div>
+        </div>
+        <div class="detail-desc">Central hub for processing customer voice data (transcripts, feedback, call recordings) and extracting market intelligence. Transforms raw customer data into actionable insights for marketing strategy, content planning, and competitive positioning. Feeds insights back into the marketing workflow and maintains the shared intelligence pool for cross-department visibility.</div>
+      </div>
+
+      <!-- ── MKT Director ───────────────────────────────────── -->
+      <div id="detail-wb-mkt-dir" class="node-detail">
+        <div class="detail-id" style="background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3)">CI-MKT-DIR</div>
+        <div class="detail-title">Marketing Director</div>
+        <div class="detail-tier">Tier 2 — Department Director</div>
+        <div class="detail-section">
+          <div class="detail-section-label">Manages</div>
+          <div class="detail-tags">
+            <span class="detail-tag">CI-MKT-01</span>
+            <span class="detail-tag">CI-MKT-02</span>
+            <span class="detail-tag">CI-MKT-03</span>
+            <span class="detail-tag">CI-MKT-04</span>
+            <span class="detail-tag">CI-MKT-05</span>
+            <span class="detail-tag">CI-MKT-06</span>
+          </div>
+        </div>
+        <div class="detail-desc">Coordinates all marketing activities. Routes tasks to appropriate marketing specialists, aggregates results, and reports back to Central Intelligence. Maintains awareness of campaign state and content pipeline.</div>
+      </div>
+
+      <!-- ── SLS Director ───────────────────────────────────── -->
+      <div id="detail-wb-sls-dir" class="node-detail">
+        <div class="detail-id" style="background:rgba(249,115,22,0.15);color:#f97316;border:1px solid rgba(249,115,22,0.3)">CI-SLS-DIR</div>
+        <div class="detail-title">Sales Director</div>
+        <div class="detail-tier">Tier 2 — Department Director</div>
+        <div class="detail-section">
+          <div class="detail-section-label">Manages</div>
+          <div class="detail-tags">
+            <span class="detail-tag">CI-SAL-01</span>
+            <span class="detail-tag">CI-SAL-02</span>
+            <span class="detail-tag">CI-SAL-03</span>
+          </div>
+        </div>
+        <div class="detail-desc">Oversees the full sales pipeline from lead capture through appointment setting and call analysis. Coordinates lead database management, tracks pipeline metrics, and surfaces insights from sales call recordings.</div>
+      </div>
+
+      <!-- ── FUL Director ───────────────────────────────────── -->
+      <div id="detail-wb-ful-dir" class="node-detail">
+        <div class="detail-id" style="background:rgba(168,85,247,0.15);color:#a855f7;border:1px solid rgba(168,85,247,0.3)">CI-FUL-DIR</div>
+        <div class="detail-title">Fulfillment Director</div>
+        <div class="detail-tier">Tier 2 — Department Director</div>
+        <div class="detail-section">
+          <div class="detail-section-label">Manages</div>
+          <div class="detail-tags">
+            <span class="detail-tag">CI-FUL-01</span>
+            <span class="detail-tag">CI-FUL-02</span>
+            <span class="detail-tag">CI-FUL-03</span>
+            <span class="detail-tag">CI-FUL-04</span>
+          </div>
+        </div>
+        <div class="detail-desc">Manages client fulfillment operations including member database, coaching and accountability call analysis, and tech support tracking. Ensures client success and retention metrics are monitored.</div>
+      </div>
+
+      <!-- ── Marketing Workers ──────────────────────────────── -->
+      <div id="detail-wb-mkt-01" class="node-detail">
+        <div class="detail-id" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.25)">CI-MKT-01</div>
+        <div class="detail-title">Social Media Worker</div>
+        <div class="detail-tier">Tier 3 — Marketing Specialist</div>
+        <div class="detail-desc">Generates and schedules social media content. Creates scripts, captions, and post ideas. Tracks social metrics and feeds performance data back to the shared intelligence pool for content optimization.</div>
+        <div class="detail-section"><div class="detail-section-label">Data Tables</div><div class="detail-tags"><span class="detail-tag">social_scripts</span><span class="detail-tag">content_ideas</span></div></div>
+        <div class="detail-section"><div class="detail-section-label">Airtable</div><div class="detail-tags"><span class="detail-tag">social_metrics</span></div></div>
+      </div>
+      <div id="detail-wb-mkt-02" class="node-detail">
+        <div class="detail-id" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.25)">CI-MKT-02</div>
+        <div class="detail-title">Email Worker</div>
+        <div class="detail-tier">Tier 3 — Marketing Specialist</div>
+        <div class="detail-desc">Drafts email campaigns, sequences, and broadcast messages. Manages email template library, tracks open/click rates, and surfaces winning subject lines and copy patterns.</div>
+        <div class="detail-section"><div class="detail-section-label">Data Tables</div><div class="detail-tags"><span class="detail-tag">email_drafts</span></div></div>
+        <div class="detail-section"><div class="detail-section-label">Airtable</div><div class="detail-tags"><span class="detail-tag">email_campaigns</span></div></div>
+      </div>
+      <div id="detail-wb-mkt-03" class="node-detail">
+        <div class="detail-id" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.25)">CI-MKT-03</div>
+        <div class="detail-title">Funnels Worker</div>
+        <div class="detail-tier">Tier 3 — Marketing Specialist</div>
+        <div class="detail-desc">Builds and optimizes sales funnels. Generates funnel copy, VSL scripts, and landing page content. Monitors conversion metrics and provides optimization recommendations.</div>
+        <div class="detail-section"><div class="detail-section-label">Data Tables</div><div class="detail-tags"><span class="detail-tag">funnel_reports</span></div></div>
+        <div class="detail-section"><div class="detail-section-label">Airtable</div><div class="detail-tags"><span class="detail-tag">funnel_metrics</span></div></div>
+      </div>
+      <div id="detail-wb-mkt-04" class="node-detail">
+        <div class="detail-id" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.25)">CI-MKT-04</div>
+        <div class="detail-title">Ads Worker</div>
+        <div class="detail-tier">Tier 3 — Marketing Specialist</div>
+        <div class="detail-desc">Creates and manages ad copy for paid advertising campaigns. Generates ad variants, headlines, and hooks. Analyzes ad performance and surfaces winning creatives for scaling.</div>
+        <div class="detail-section"><div class="detail-section-label">Data Tables</div><div class="detail-tags"><span class="detail-tag">ad_copies</span></div></div>
+        <div class="detail-section"><div class="detail-section-label">Airtable</div><div class="detail-tags"><span class="detail-tag">ad_campaigns</span></div></div>
+      </div>
+      <div id="detail-wb-mkt-05" class="node-detail">
+        <div class="detail-id" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.25)">CI-MKT-05</div>
+        <div class="detail-title">DM Worker</div>
+        <div class="detail-tier">Tier 3 — Marketing Specialist</div>
+        <div class="detail-desc">Manages direct message outreach campaigns. Generates personalized DM sequences, manages template library, and tracks reply rates and conversion from DM to booked calls.</div>
+        <div class="detail-section"><div class="detail-section-label">Data Tables</div><div class="detail-tags"><span class="detail-tag">dm_templates</span></div></div>
+      </div>
+      <div id="detail-wb-mkt-06" class="node-detail">
+        <div class="detail-id" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.25)">CI-MKT-06</div>
+        <div class="detail-title">Offers Worker</div>
+        <div class="detail-tier">Tier 3 — Marketing Specialist</div>
+        <div class="detail-desc">Generates and refines offer structures, pricing, and positioning. Works with the shared intelligence pool (pain points, wins, ICP) to craft highly targeted offers.</div>
+        <div class="detail-section"><div class="detail-section-label">Shared Pool</div><div class="detail-tags"><span class="detail-tag">offers</span><span class="detail-tag">pain_points</span><span class="detail-tag">icp_profiles</span></div></div>
+      </div>
+
+      <!-- ── Sales Workers ──────────────────────────────────── -->
+      <div id="detail-wb-sal-01" class="node-detail">
+        <div class="detail-id" style="background:rgba(249,115,22,0.12);color:#f97316;border:1px solid rgba(249,115,22,0.25)">CI-SAL-01</div>
+        <div class="detail-title">Appointment Setting Bot</div>
+        <div class="detail-tier">Tier 3 — Sales Specialist</div>
+        <div class="detail-desc">Automates appointment setting through conversational AI. Qualifies leads, handles objections, and books calls to the calendar. Integrates with CRM to update lead status and track show rates.</div>
+        <div class="detail-section"><div class="detail-section-label">Shared Pool</div><div class="detail-tags"><span class="detail-tag">objections</span><span class="detail-tag">icp_profiles</span></div></div>
+      </div>
+      <div id="detail-wb-sal-02" class="node-detail">
+        <div class="detail-id" style="background:rgba(249,115,22,0.12);color:#f97316;border:1px solid rgba(249,115,22,0.25)">CI-SAL-02</div>
+        <div class="detail-title">Leads Database Worker</div>
+        <div class="detail-tier">Tier 3 — Sales Specialist</div>
+        <div class="detail-desc">Manages the leads database in Airtable. Handles lead import, deduplication, scoring, and status tracking. Provides pipeline reports and identifies stale leads for re-engagement.</div>
+        <div class="detail-section"><div class="detail-section-label">Airtable</div><div class="detail-tags"><span class="detail-tag">leads</span></div></div>
+      </div>
+      <div id="detail-wb-sal-03" class="node-detail">
+        <div class="detail-id" style="background:rgba(249,115,22,0.12);color:#f97316;border:1px solid rgba(249,115,22,0.25)">CI-SAL-03</div>
+        <div class="detail-title">Sales Call Analyzer</div>
+        <div class="detail-tier">Tier 3 — Sales Specialist</div>
+        <div class="detail-desc">Analyzes sales call transcripts to extract objections, buying signals, and close techniques. Feeds insights into the shared intelligence pool and provides coaching recommendations for the sales team.</div>
+        <div class="detail-section"><div class="detail-section-label">Shared Pool</div><div class="detail-tags"><span class="detail-tag">objections</span><span class="detail-tag">wins</span></div></div>
+        <div class="detail-section"><div class="detail-section-label">Data Tables</div><div class="detail-tags"><span class="detail-tag">call_transcripts</span><span class="detail-tag">bee_analysis_log</span></div></div>
+      </div>
+
+      <!-- ── Fulfillment Workers ────────────────────────────── -->
+      <div id="detail-wb-ful-01" class="node-detail">
+        <div class="detail-id" style="background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25)">CI-FUL-01</div>
+        <div class="detail-title">Members Database Worker</div>
+        <div class="detail-tier">Tier 3 — Fulfillment Specialist</div>
+        <div class="detail-desc">Manages the client/member database in Airtable. Handles onboarding records, progress tracking, subscription status, and member communications history.</div>
+        <div class="detail-section"><div class="detail-section-label">Airtable</div><div class="detail-tags"><span class="detail-tag">members</span></div></div>
+      </div>
+      <div id="detail-wb-ful-02" class="node-detail">
+        <div class="detail-id" style="background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25)">CI-FUL-02</div>
+        <div class="detail-title">Coaching Call Analyzer</div>
+        <div class="detail-tier">Tier 3 — Fulfillment Specialist</div>
+        <div class="detail-desc">Analyzes coaching session transcripts to extract client goals, progress, blockers, and wins. Generates session summaries and action items. Feeds wins and goals into the shared intelligence pool.</div>
+        <div class="detail-section"><div class="detail-section-label">Shared Pool</div><div class="detail-tags"><span class="detail-tag">wins</span><span class="detail-tag">goals</span></div></div>
+      </div>
+      <div id="detail-wb-ful-03" class="node-detail">
+        <div class="detail-id" style="background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25)">CI-FUL-03</div>
+        <div class="detail-title">Accountability Call Analyzer</div>
+        <div class="detail-tier">Tier 3 — Fulfillment Specialist</div>
+        <div class="detail-desc">Processes accountability check-in call transcripts. Tracks client commitments, completion rates, and patterns. Surfaces at-risk clients based on engagement and progress signals.</div>
+        <div class="detail-section"><div class="detail-section-label">Data Tables</div><div class="detail-tags"><span class="detail-tag">call_transcripts</span><span class="detail-tag">bee_analysis_log</span></div></div>
+      </div>
+      <div id="detail-wb-ful-04" class="node-detail">
+        <div class="detail-id" style="background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25)">CI-FUL-04</div>
+        <div class="detail-title">Tech SOS Tracker</div>
+        <div class="detail-tier">Tier 3 — Fulfillment Specialist</div>
+        <div class="detail-desc">Manages technical support requests from clients. Logs issues, tracks resolution status, identifies recurring problems, and escalates critical tickets. Maintains the error_log table for system-wide visibility.</div>
+        <div class="detail-section"><div class="detail-section-label">Data Tables</div><div class="detail-tags"><span class="detail-tag">error_log</span></div></div>
+      </div>
+
+      <!-- ── Operators ──────────────────────────────────────── -->
+      <div id="detail-wb-core-01" class="node-detail">
+        <div class="detail-id" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">CI-CORE-01</div>
+        <div class="detail-title">Call Transcriber</div>
+        <div class="detail-tier">Shared Operator</div>
+        <div class="detail-desc">Receives audio recordings from any department, transcribes them using speech-to-text, and routes the transcript to the appropriate analyzer worker. Shared across Sales and Fulfillment departments.</div>
+        <div class="detail-section"><div class="detail-section-label">Used By</div><div class="detail-tags"><span class="detail-tag">CI-SAL-03</span><span class="detail-tag">CI-FUL-02</span><span class="detail-tag">CI-FUL-03</span></div></div>
+        <div class="detail-section"><div class="detail-section-label">Output</div><div class="detail-tags"><span class="detail-tag">call_transcripts table</span></div></div>
+      </div>
+      <div id="detail-wb-ops-icp" class="node-detail">
+        <div class="detail-id" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">CI-OPS-ICP</div>
+        <div class="detail-title">ICP Generator</div>
+        <div class="detail-tier">Shared Operator</div>
+        <div class="detail-desc">Generates and refines Ideal Customer Profile documents based on win/loss data, client interviews, and market research. Cross-department asset used by marketing, sales, and fulfillment.</div>
+        <div class="detail-section"><div class="detail-section-label">Output</div><div class="detail-tags"><span class="detail-tag">icp_profiles table</span></div></div>
+      </div>
+      <div id="detail-wb-ops-offer" class="node-detail">
+        <div class="detail-id" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">CI-OPS-OFFER</div>
+        <div class="detail-title">Offer Generator</div>
+        <div class="detail-tier">Shared Operator</div>
+        <div class="detail-desc">Creates and iterates on offer structures, pricing models, and value propositions. Draws from pain_points, wins, and ICP profiles. Used by both Marketing and Sales departments.</div>
+        <div class="detail-section"><div class="detail-section-label">Output</div><div class="detail-tags"><span class="detail-tag">offers table</span></div></div>
+      </div>
+      <div id="detail-wb-stats-social" class="node-detail">
+        <div class="detail-id" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">STATS</div>
+        <div class="detail-title">Social Stats Updater</div>
+        <div class="detail-tier">Shared Operator — Scheduled</div>
+        <div class="detail-desc">Periodically pulls social media metrics (followers, reach, engagement, impressions) from connected platforms and updates the social_metrics Airtable base.</div>
+      </div>
+      <div id="detail-wb-stats-email" class="node-detail">
+        <div class="detail-id" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">STATS</div>
+        <div class="detail-title">Email Stats Updater</div>
+        <div class="detail-tier">Shared Operator — Scheduled</div>
+        <div class="detail-desc">Fetches email campaign performance metrics (open rate, CTR, unsubscribes, revenue per email) from the email platform and syncs to the email_campaigns Airtable base.</div>
+      </div>
+      <div id="detail-wb-stats-funnel" class="node-detail">
+        <div class="detail-id" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">STATS</div>
+        <div class="detail-title">Funnel Stats Updater</div>
+        <div class="detail-tier">Shared Operator — Scheduled</div>
+        <div class="detail-desc">Collects funnel conversion data across all stages (opt-in, sales page, checkout, upsell) and writes to the funnel_metrics Airtable base for dashboard visualization.</div>
+      </div>
+      <div id="detail-wb-stats-ads" class="node-detail">
+        <div class="detail-id" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">STATS</div>
+        <div class="detail-title">Ad Stats Updater</div>
+        <div class="detail-tier">Shared Operator — Scheduled</div>
+        <div class="detail-desc">Pulls advertising performance metrics (spend, CPL, CPA, ROAS) from ad platforms and updates the ad_campaigns Airtable base. Flags underperforming campaigns for review.</div>
+      </div>
+
+      <!-- ── Data Layer ──────────────────────────────────────── -->
+      <div id="detail-supabase-tables" class="node-detail">
+        <div class="detail-id" style="background:rgba(6,182,212,0.12);color:#06b6d4;border:1px solid rgba(6,182,212,0.25)">DATA</div>
+        <div class="detail-title">Supabase Tables (PostgreSQL)</div>
+        <div class="detail-tier">Operational Data Store — Internal</div>
+        <div class="detail-desc">Supabase PostgreSQL database for all operational and intelligence data. Accessed via SQLAlchemy ORM with Repository pattern for database-agnostic design.</div>
+        <div class="detail-section"><div class="detail-section-label">Intelligence Tables</div><div class="detail-tags"><span class="detail-tag">wins</span><span class="detail-tag">pain_points</span><span class="detail-tag">objections</span><span class="detail-tag">content_ideas</span><span class="detail-tag">icp_profiles</span><span class="detail-tag">offers</span><span class="detail-tag">goals</span></div></div>
+        <div class="detail-section"><div class="detail-section-label">Operational Tables</div><div class="detail-tags"><span class="detail-tag">call_transcripts</span><span class="detail-tag">bee_analysis_log</span><span class="detail-tag">bee_registry</span><span class="detail-tag">error_log</span></div></div>
+        <div class="detail-section"><div class="detail-section-label">Content Tables</div><div class="detail-tags"><span class="detail-tag">social_scripts</span><span class="detail-tag">email_drafts</span><span class="detail-tag">dm_templates</span><span class="detail-tag">ad_copies</span><span class="detail-tag">funnel_reports</span></div></div>
+      </div>
+      <div id="detail-airtable" class="node-detail">
+        <div class="detail-id" style="background:rgba(6,182,212,0.12);color:#06b6d4;border:1px solid rgba(6,182,212,0.25)">DATA</div>
+        <div class="detail-title">Airtable — Primary Database</div>
+        <div class="detail-tier">External CRM &amp; Metrics Store — Swappable</div>
+        <div class="detail-desc">Primary external database for CRM and metrics data. Architecture is database-agnostic — Airtable can be swapped for any compatible datastore (Notion, Google Sheets, PostgreSQL) without workflow restructuring.</div>
+        <div class="detail-section"><div class="detail-section-label">Bases</div><div class="detail-tags"><span class="detail-tag">leads</span><span class="detail-tag">members</span><span class="detail-tag">social_metrics</span><span class="detail-tag">email_campaigns</span><span class="detail-tag">funnel_metrics</span><span class="detail-tag">ad_campaigns</span></div></div>
+      </div>
+      <div id="detail-intel-pool" class="node-detail">
+        <div class="detail-id" style="background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.25)">SHARED</div>
+        <div class="detail-title">Shared Intelligence Pool</div>
+        <div class="detail-tier">Cross-Department Knowledge Base</div>
+        <div class="detail-desc">A subset of Supabase tables designated as shared cross-department intelligence. Any worker bee can read from and write to these tables, enabling the system to learn from every interaction and share insights across departments.</div>
+        <div class="detail-section"><div class="detail-section-label">Tables</div><div class="detail-tags"><span class="detail-tag">wins</span><span class="detail-tag">pain_points</span><span class="detail-tag">objections</span><span class="detail-tag">content_ideas</span><span class="detail-tag">icp_profiles</span><span class="detail-tag">offers</span><span class="detail-tag">goals</span></div></div>
+        <div class="detail-section"><div class="detail-section-label">Writers</div><div class="detail-tags"><span class="detail-tag">CI-SAL-03</span><span class="detail-tag">CI-FUL-02</span><span class="detail-tag">CI-OPS-ICP</span><span class="detail-tag">CI-OPS-OFFER</span></div></div>
+        <div class="detail-section"><div class="detail-section-label">Readers</div><div class="detail-tags"><span class="detail-tag">All Workers</span></div></div>
+      </div>
+
+      <!-- ── Web App ─────────────────────────────────────────── -->
+      <div id="detail-nextjs-dashboard" class="node-detail">
+        <div class="detail-id" style="background:rgba(236,72,153,0.12);color:#ec4899;border:1px solid rgba(236,72,153,0.25)">WEBAPP</div>
+        <div class="detail-title">Next.js 14 Dashboard</div>
+        <div class="detail-tier">Web Application — Frontend</div>
+        <div class="detail-section"><div class="detail-section-label">Stack</div><div class="detail-tags"><span class="detail-tag">Next.js 14</span><span class="detail-tag">App Router</span><span class="detail-tag">React Server Components</span><span class="detail-tag">TanStack Query</span><span class="detail-tag">Recharts</span></div></div>
+        <div class="detail-desc">Primary user interface for interacting with the Central Intelligence system. Provides real-time dashboards, campaign management, analytics visualizations, and a chat interface to the Central Intelligence. Communicates with Python backend via FastAPI REST endpoints with JWT + HMAC signing.</div>
+      </div>
+      <div id="detail-nextauth" class="node-detail">
+        <div class="detail-id" style="background:rgba(236,72,153,0.12);color:#ec4899;border:1px solid rgba(236,72,153,0.25)">AUTH</div>
+        <div class="detail-title">NextAuth.js</div>
+        <div class="detail-tier">Web Application — Authentication</div>
+        <div class="detail-desc">Handles user authentication for the web dashboard. Two-layer security model: Supabase Auth manages session authentication at the UI layer, while HMAC-SHA256 signatures secure each API request to the FastAPI backend at the API layer.</div>
+      </div>
+      <div id="detail-hmac-webhooks" class="node-detail">
+        <div class="detail-id" style="background:rgba(236,72,153,0.12);color:#ec4899;border:1px solid rgba(236,72,153,0.25)">SECURITY</div>
+        <div class="detail-title">HTTPS Webhooks — HMAC Signed</div>
+        <div class="detail-tier">Web Application — Transport Security</div>
+        <div class="detail-desc">All communication between the Next.js dashboard and the FastAPI backend is via HTTPS REST endpoints. Each request includes an HMAC-SHA256 signature computed from the request body and a shared secret. The FastAPI backend verifies the signature before processing any request.</div>
+      </div>
+      <div id="detail-webapp-api" class="node-detail">
+        <div class="detail-id" style="background:rgba(236,72,153,0.12);color:#ec4899;border:1px solid rgba(236,72,153,0.25)">API</div>
+        <div class="detail-title">REST API Layer</div>
+        <div class="detail-tier">Web Application — API Interface</div>
+        <div class="detail-desc">33+ REST endpoints exposed by FastAPI, consumed by the dashboard. Covers all worker bee operations: content generation, database queries, analytics, and orchestration. Full request/response contracts documented in api-contract.md.</div>
+      </div>
+
+    </div><!-- /detail-panel -->
+  </aside>
+</div><!-- /canvas-wrapper -->
+
+<script>
+  function showDetail(id) {
+    // Hide placeholder
+    document.getElementById('detail-placeholder').style.display = 'none';
+
+    // Hide all details
+    document.querySelectorAll('.node-detail').forEach(function(el) {
+      el.classList.remove('active');
+    });
+
+    // Show selected
+    var target = document.getElementById('detail-' + id);
+    if (target) {
+      target.classList.add('active');
+    } else {
+      document.getElementById('detail-placeholder').style.display = 'block';
+    }
+
+    // Highlight selected node
+    document.querySelectorAll('.node-group').forEach(function(el) {
+      el.style.opacity = '0.55';
+    });
+    var selectedGroup = document.querySelector('[data-id="' + id + '"]');
+    if (selectedGroup) {
+      selectedGroup.style.opacity = '1';
+    }
+  }
+
+  // Click on SVG background to reset
+  document.getElementById('arch-svg').addEventListener('click', function(e) {
+    if (e.target === this || e.target.tagName === 'defs') {
+      document.querySelectorAll('.node-group').forEach(function(el) {
+        el.style.opacity = '1';
+      });
+      document.querySelectorAll('.node-detail').forEach(function(el) {
+        el.classList.remove('active');
+      });
+      document.getElementById('detail-placeholder').style.display = 'block';
+    }
+  });
+</script>
+
+</body>
+</html>

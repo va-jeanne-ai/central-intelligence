@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Central Intelligence — Your AI Business Command Center</title>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #F9FAFB;
+      color: #111827;
+      line-height: 1.65;
+    }
+
+    /* ─── Design Tokens ────────────────────────────────────────── */
+    :root {
+      --gold:        #F4A900;
+      --gold-light:  #FCD34D;
+      --gold-dark:   #D97706;
+      --gold-pale:   #FFFBEB;
+      --marketing:   #10B981;
+      --marketing-dk:#059669;
+      --sales:       #3B82F6;
+      --sales-dk:    #1D4ED8;
+      --fulfillment: #F97316;
+      --fulfillment-dk: #EA580C;
+      --white:       #FFFFFF;
+      --gray-50:     #F9FAFB;
+      --gray-100:    #F3F4F6;
+      --gray-200:    #E5E7EB;
+      --gray-300:    #D1D5DB;
+      --gray-400:    #9CA3AF;
+      --gray-500:    #6B7280;
+      --gray-700:    #374151;
+      --gray-800:    #1F2937;
+      --gray-900:    #111827;
+      --shadow-sm:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+      --shadow:      0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.05);
+      --shadow-md:   0 10px 15px rgba(0,0,0,.08), 0 4px 6px rgba(0,0,0,.05);
+      --radius:      10px;
+      --radius-lg:   16px;
+    }
+
+    /* ─── Layout ───────────────────────────────────────────────── */
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ─── Section spacing ──────────────────────────────────────── */
+    .section {
+      margin-bottom: 64px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--gray-400);
+      margin-bottom: 6px;
+    }
+
+    h2.section-title {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--gray-900);
+      letter-spacing: -.03em;
+      margin-bottom: 14px;
+      line-height: 1.2;
+    }
+
+    .section-intro {
+      font-size: 16.5px;
+      color: var(--gray-700);
+      max-width: 680px;
+      line-height: 1.7;
+    }
+
+    .section-intro + .section-intro {
+      margin-top: 12px;
+    }
+
+    /* ─── Cover / Header ───────────────────────────────────────── */
+    .cover {
+      background: linear-gradient(160deg, #1F2937 0%, #111827 55%, #0F172A 100%);
+      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+      padding: 72px 48px 80px;
+      margin-bottom: 72px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cover::before {
+      content: '';
+      position: absolute;
+      top: -80px;
+      right: -80px;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(244,169,0,.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .cover::after {
+      content: '';
+      position: absolute;
+      bottom: -60px;
+      left: 30%;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(244,169,0,.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .cover-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(244,169,0,.15);
+      border: 1px solid rgba(244,169,0,.3);
+      border-radius: 99px;
+      padding: 5px 14px 5px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--gold-light);
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+
+    .cover-logo-hex {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      font-size: 18px;
+    }
+
+    .cover h1 {
+      font-size: 52px;
+      font-weight: 900;
+      color: #FFFFFF;
+      letter-spacing: -.04em;
+      line-height: 1.0;
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .cover h1 span {
+      color: var(--gold);
+    }
+
+    .cover-dash {
+      width: 48px;
+      height: 4px;
+      background: var(--gold);
+      border-radius: 2px;
+      margin: 20px 0 22px;
+    }
+
+    .cover-subtitle {
+      font-size: 19px;
+      color: rgba(255,255,255,.72);
+      font-weight: 400;
+      max-width: 560px;
+      line-height: 1.55;
+      position: relative;
+      z-index: 1;
+    }
+
+    .cover-meta {
+      margin-top: 44px;
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .cover-meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .cover-meta-val {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--gold-light);
+      letter-spacing: -.03em;
+    }
+
+    .cover-meta-lbl {
+      font-size: 11px;
+      color: rgba(255,255,255,.5);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .cover-meta-divider {
+      width: 1px;
+      height: 36px;
+      background: rgba(255,255,255,.12);
+    }
+
+    /* ─── Cards ────────────────────────────────────────────────── */
+    .card {
+      background: var(--white);
+      border-radius: var(--radius);
+      border: 1px solid var(--gray-200);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* ─── Department color pills ───────────────────────────────── */
+    .dept-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 99px;
+    }
+    .dept-pill.marketing { background: rgba(16,185,129,.1); color: var(--marketing-dk); }
+    .dept-pill.sales     { background: rgba(59,130,246,.1); color: var(--sales-dk); }
+    .dept-pill.fulfillment { background: rgba(249,115,22,.1); color: var(--fulfillment-dk); }
+    .dept-pill.gold      { background: rgba(244,169,0,.12); color: var(--gold-dark); }
+
+    /* ─── What Is Central Intelligence ──────────────────────────────────────── */
+    .what-is-box {
+      background: var(--gold-pale);
+      border: 1px solid rgba(244,169,0,.2);
+      border-radius: var(--radius-lg);
+      padding: 32px 36px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      align-items: center;
+    }
+
+    .what-is-text p {
+      font-size: 16.5px;
+      color: var(--gray-800);
+      line-height: 1.75;
+    }
+
+    .what-is-text p + p {
+      margin-top: 14px;
+    }
+
+    .bee-metaphor-visual {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .hex-ci-large {
+      width: 90px;
+      height: 90px;
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dark) 100%);
+      clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      box-shadow: 0 8px 24px rgba(244,169,0,.4);
+      position: relative;
+    }
+
+    .bee-metaphor-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--gold-dark);
+      text-align: center;
+      letter-spacing: .04em;
+    }
+
+    .bee-metaphor-sublabel {
+      font-size: 11.5px;
+      color: var(--gray-500);
+      text-align: center;
+    }
+
+    /* ─── Architecture Diagram ─────────────────────────────────── */
+    .arch-diagram {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      padding: 40px 32px 36px;
+      box-shadow: var(--shadow-sm);
+      text-align: center;
+      overflow: hidden;
+    }
+
+    .arch-diagram svg {
+      width: 100%;
+      max-width: 780px;
+      height: auto;
+    }
+
+    .arch-caption {
+      font-size: 14px;
+      color: var(--gray-500);
+      margin-top: 20px;
+      font-style: italic;
+    }
+
+    /* ─── Mockup Iframe Embeds ────────────────────────────────── */
+    .mockup-iframe-wrap {
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-md), 0 0 0 1px rgba(0,0,0,.04);
+      background: var(--white);
+    }
+
+    .mockup-iframe {
+      height: 820px;
+    zoom: 67%;
+      width: 100%;
+      border: none;
+      display: block;
+      border-radius: var(--radius-lg);
+    }
+
+    /* ─── Feature Sections ─────────────────────────────────────── */
+    .feature-block {
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid var(--gray-200);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .feature-header {
+      padding: 20px 24px;
+      color: #fff;
+    }
+
+    .feature-header.sales-bg     { background: linear-gradient(135deg, var(--sales-dk), var(--sales)); }
+    .feature-header.fulfillment-bg { background: linear-gradient(135deg, var(--fulfillment-dk), var(--fulfillment)); }
+    .feature-header.marketing-bg { background: linear-gradient(135deg, var(--marketing-dk), var(--marketing)); }
+
+    .feature-header-icon { font-size: 28px; margin-bottom: 6px; }
+    .feature-header-title { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+    .feature-header-sub { font-size: 13px; opacity: .8; margin-top: 2px; }
+
+    .feature-items {
+      background: var(--white);
+      padding: 20px 24px;
+    }
+
+    .feature-item {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+
+    .feature-item-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 5px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .feature-item-name .fi-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .fi-dot.sales-dot       { background: var(--sales); }
+    .fi-dot.fulfillment-dot { background: var(--fulfillment); }
+    .fi-dot.marketing-dot   { background: var(--marketing); }
+
+    .feature-item-desc {
+      font-size: 13px;
+      color: var(--gray-500);
+      line-height: 1.55;
+    }
+
+
+    /* ─── Intelligence Loop Diagram ────────────────────────────── */
+    .intel-loop {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      padding: 36px 32px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .intel-loop svg {
+      width: 100%;
+      height: auto;
+    }
+
+    /* ─── Timeline ─────────────────────────────────────────────── */
+    .timeline {
+      position: relative;
+      padding-left: 0;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 0;
+      position: relative;
+      margin-bottom: 0;
+    }
+
+    .timeline-item + .timeline-item .timeline-left::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 19px;
+      width: 2px;
+      height: 100%;
+      background: var(--gray-200);
+      z-index: 0;
+    }
+
+    .timeline-left {
+      padding: 20px 24px 20px 0;
+      text-align: right;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    .timeline-dot-col {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .timeline-line {
+      width: 2px;
+      background: var(--gray-200);
+      flex: 1;
+      min-height: 20px;
+    }
+
+    .timeline-line.top { min-height: 20px; }
+
+    .timeline-dot {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      flex-shrink: 0;
+      z-index: 1;
+    }
+
+    .timeline-right {
+      padding: 20px 0 20px 24px;
+    }
+
+    .tl-phase { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gray-400); margin-bottom: 2px; }
+    .tl-weeks { font-size: 13px; font-weight: 600; color: var(--gray-500); margin-bottom: 4px; }
+    .tl-title { font-size: 17px; font-weight: 800; color: var(--gray-900); letter-spacing: -.02em; margin-bottom: 5px; }
+    .tl-desc  { font-size: 13.5px; color: var(--gray-600); line-height: 1.55; }
+    .tl-tag   { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 99px; margin-top: 7px; }
+
+    /* ─── What We Need ─────────────────────────────────────────── */
+    .needs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .need-item {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .need-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--gold-pale);
+      border: 1px solid rgba(244,169,0,.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .need-title { font-size: 14px; font-weight: 700; color: var(--gray-900); margin-bottom: 3px; }
+    .need-desc  { font-size: 13px; color: var(--gray-500); line-height: 1.5; }
+
+    .reassurance-box {
+      background: linear-gradient(135deg, rgba(16,185,129,.07), rgba(59,130,246,.05));
+      border: 1px solid rgba(16,185,129,.2);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      font-size: 15px;
+      color: var(--gray-700);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .reassurance-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    /* ─── Footer / Expandability ───────────────────────────────── */
+    .footer-section {
+      background: linear-gradient(135deg, #1F2937 0%, #111827 100%);
+      border-radius: var(--radius-lg);
+      padding: 40px 44px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .footer-section::before {
+      content: '';
+      position: absolute;
+      top: -60px;
+      right: -60px;
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(244,169,0,.1) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .footer-section h2 {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--white);
+      letter-spacing: -.02em;
+      margin-bottom: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .footer-section p {
+      font-size: 16px;
+      color: rgba(255,255,255,.72);
+      line-height: 1.65;
+      max-width: 600px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .footer-bees {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .future-bee {
+      background: rgba(244,169,0,.12);
+      border: 1px solid rgba(244,169,0,.25);
+      border-radius: 99px;
+      padding: 5px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gold-light);
+    }
+
+    /* ─── Divider ──────────────────────────────────────────────── */
+    .section-divider {
+      height: 1px;
+      background: var(--gray-200);
+      margin: 48px 0;
+    }
+
+    /* ─── Marketing insight callout ────────────────────────────── */
+    .insight-callout {
+      background: linear-gradient(135deg, rgba(16,185,129,.08), rgba(16,185,129,.03));
+      border: 1px solid rgba(16,185,129,.25);
+      border-left: 4px solid var(--marketing);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+      line-height: 1.6;
+    }
+
+    .insight-callout strong { color: var(--marketing-dk); }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       1. COVER / HEADER
+  ═══════════════════════════════════════════════════════════ -->
+  <header class="cover">
+    <div class="cover-badge">
+      <span class="cover-logo-hex">&#129431;</span>
+      Project Proposal &amp; Overview
+    </div>
+    <h1>Bee<span>hive</span></h1>
+    <div class="cover-dash"></div>
+    <p class="cover-subtitle">Unifying your Marketing, Sales, and Fulfillment intelligence into one smart platform — powered by AI, built for you.</p>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <span class="cover-meta-val">8</span>
+        <span class="cover-meta-lbl">Phases</span>
+      </div>
+      <div class="cover-meta-divider"></div>
+      <div class="cover-meta-item">
+        <span class="cover-meta-val">3</span>
+        <span class="cover-meta-lbl">Departments</span>
+      </div>
+      <div class="cover-meta-divider"></div>
+      <div class="cover-meta-item">
+        <span class="cover-meta-val">~25</span>
+        <span class="cover-meta-lbl">AI Workers</span>
+      </div>
+      <div class="cover-meta-divider"></div>
+      <div class="cover-meta-item">
+        <span class="cover-meta-val">194</span>
+        <span class="cover-meta-lbl">Features</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       2. WHAT IS BEEHIVE?
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">Overview</p>
+    <h2 class="section-title">What is Central Intelligence?</h2>
+    <div class="what-is-box">
+      <div class="what-is-text">
+        <p>Central Intelligence replaces your separate custom AI tools with one unified platform. A central <strong>Central Intelligence (CEO)</strong> delegates to three <strong>Department Directors</strong> — Marketing, Sales, and Fulfillment — who each manage teams of <strong>Specialists</strong> and <strong>Operators</strong>. ~25 AI workers in total, all accessible through a beautiful web app with dashboards, charts, and AI chat.</p>
+        <p>Instead of switching between tools, tabs, and spreadsheets to get a picture of your business, you simply ask Central Intelligence. It knows everything happening across your organization and surfaces exactly what you need to make better decisions, faster.</p>
+        <p>Think of it as your always-on AI executive team — a CEO with three department heads who have each read every sales call, coached every client session, and tracked every marketing metric, all at once.</p>
+      </div>
+      <div class="bee-metaphor-visual">
+        <div class="hex-ci-large">&#129431;</div>
+        <div class="bee-metaphor-label">Central Intelligence (CEO)</div>
+        <div class="bee-metaphor-sublabel">3 Directors &middot; 15 Specialists &middot; ~7 Operators</div>
+        <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;justify-content:center;">
+          <span class="dept-pill marketing">Marketing</span>
+          <span class="dept-pill sales">Sales</span>
+          <span class="dept-pill fulfillment">Fulfillment</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       3. HOW IT WORKS — Architecture Diagram
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">Architecture</p>
+    <h2 class="section-title">How It Works</h2>
+    <p class="section-intro">You interact through the web app. The Central Intelligence (CEO) understands your request and delegates to the right Department Director, who coordinates Specialists and Operators to get you answers, insights, and recommendations — in seconds.</p>
+
+    <div style="margin-top:28px;" class="arch-diagram">
+      <svg viewBox="0 0 920 480" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif">
+
+        <!-- Defs (first so they're available) -->
+        <defs>
+          <linearGradient id="queenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#F4A900"/>
+            <stop offset="100%" style="stop-color:#D97706"/>
+          </linearGradient>
+          <filter id="queenShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="rgba(244,169,0,0.35)"/>
+          </filter>
+          <marker id="arrowGold" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#F4A900"/>
+          </marker>
+          <marker id="arrowGray" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#D1D5DB"/>
+          </marker>
+          <marker id="arrowBlue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="rgba(59,130,246,0.7)"/>
+          </marker>
+          <marker id="arrowOrange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="rgba(249,115,22,0.7)"/>
+          </marker>
+          <marker id="arrowGreen" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="rgba(16,185,129,0.7)"/>
+          </marker>
+        </defs>
+
+        <!-- Background -->
+        <rect x="0" y="0" width="920" height="480" fill="#FAFAFA" rx="12"/>
+
+        <!-- ═══ LEFT SIDE: You + Web App ═══ -->
+        <rect x="30" y="164" width="120" height="72" rx="10" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1.5"/>
+        <text x="90" y="193" text-anchor="middle" font-size="22">&#128100;</text>
+        <text x="90" y="215" text-anchor="middle" font-size="13" font-weight="700" fill="#374151">You</text>
+
+        <rect x="30" y="256" width="120" height="52" rx="10" fill="#1F2937"/>
+        <text x="90" y="278" text-anchor="middle" font-size="16">&#128187;</text>
+        <text x="90" y="298" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF">Web App</text>
+
+        <!-- Arrow: You -> Web App -->
+        <line x1="90" y1="237" x2="90" y2="254" stroke="#D1D5DB" stroke-width="2" marker-end="url(#arrowGray)"/>
+
+        <!-- Arrow: Web App -> Central Intelligence (gold dashed) -->
+        <path d="M 152,280 C 210,280 230,240 280,228" fill="none" stroke="#F4A900" stroke-width="2.5" stroke-dasharray="6,3" marker-end="url(#arrowGold)"/>
+        <text x="200" y="270" text-anchor="middle" font-size="10" fill="#D97706" font-weight="600" transform="rotate(-12, 200, 270)">Ask anything</text>
+
+        <!-- Arrow: C.I. -> Web App (gray dashed, response) -->
+        <path d="M 282,252 C 230,268 210,290 152,294" fill="none" stroke="#9CA3AF" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowGray)"/>
+        <text x="200" y="298" text-anchor="middle" font-size="9.5" fill="#9CA3AF" font-weight="500" transform="rotate(8, 200, 298)">Insights</text>
+
+        <!-- ═══ CENTER: Central Intelligence Hexagon ═══ -->
+        <polygon points="370,140 440,180 440,260 370,300 300,260 300,180" fill="url(#queenGrad)" filter="url(#queenShadow)"/>
+        <text x="370" y="210" text-anchor="middle" font-size="36">&#128029;</text>
+        <text x="370" y="242" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">Central Intelligence</text>
+        <text x="370" y="260" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.8)">CEO</text>
+
+        <!-- ═══ TOP RIGHT: SALES ═══ -->
+        <rect x="540" y="16" width="190" height="134" rx="12" fill="rgba(59,130,246,0.06)" stroke="rgba(59,130,246,0.3)" stroke-width="1.5"/>
+        <text x="635" y="40" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="0.1em" fill="#1D4ED8">SALES</text>
+        <rect x="554" y="48" width="162" height="24" rx="6" fill="rgba(59,130,246,0.12)" stroke="rgba(59,130,246,0.3)" stroke-width="1"/>
+        <text x="635" y="65" text-anchor="middle" font-size="11" fill="#1D4ED8" font-weight="700">Sales Director</text>
+        <rect x="554" y="78" width="162" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="635" y="93" text-anchor="middle" font-size="10.5" fill="#374151" font-weight="600">&#128205; Leads Specialist</text>
+        <rect x="554" y="104" width="162" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="635" y="119" text-anchor="middle" font-size="10.5" fill="#374151" font-weight="600">&#128222; Appointment Specialist</text>
+        <rect x="554" y="130" width="162" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="635" y="145" text-anchor="middle" font-size="10.5" fill="#374151" font-weight="600">&#127908; Sales Call Analyzer</text>
+        <!-- Arrow: C.I. -> Sales -->
+        <path d="M 435,182 C 480,160 510,120 538,95" fill="none" stroke="rgba(59,130,246,0.55)" stroke-width="2" marker-end="url(#arrowBlue)"/>
+
+        <!-- ═══ RIGHT: FULFILLMENT ═══ -->
+        <rect x="540" y="166" width="190" height="176" rx="12" fill="rgba(249,115,22,0.06)" stroke="rgba(249,115,22,0.3)" stroke-width="1.5"/>
+        <text x="635" y="188" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="0.1em" fill="#EA580C">FULFILLMENT</text>
+        <rect x="554" y="196" width="162" height="24" rx="6" fill="rgba(249,115,22,0.12)" stroke="rgba(249,115,22,0.3)" stroke-width="1"/>
+        <text x="635" y="213" text-anchor="middle" font-size="11" fill="#EA580C" font-weight="700">Fulfillment Director</text>
+        <rect x="554" y="226" width="162" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="635" y="241" text-anchor="middle" font-size="10.5" fill="#374151" font-weight="600">&#128101; Members Specialist</text>
+        <rect x="554" y="252" width="162" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="635" y="267" text-anchor="middle" font-size="10.5" fill="#374151" font-weight="600">&#129302; Coaching Analyzer</text>
+        <rect x="554" y="278" width="162" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="635" y="293" text-anchor="middle" font-size="10.5" fill="#374151" font-weight="600">&#9989; Accountability Tracker</text>
+        <rect x="554" y="304" width="162" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="635" y="319" text-anchor="middle" font-size="10.5" fill="#374151" font-weight="600">&#128736; Tech SOS Tracker</text>
+        <!-- Arrow: C.I. -> Fulfillment -->
+        <path d="M 442,230 C 480,240 510,247 538,247" fill="none" stroke="rgba(249,115,22,0.55)" stroke-width="2" marker-end="url(#arrowOrange)"/>
+
+        <!-- ═══ BOTTOM RIGHT: MARKETING ═══ -->
+        <rect x="540" y="344" width="190" height="132" rx="12" fill="rgba(16,185,129,0.06)" stroke="rgba(16,185,129,0.3)" stroke-width="1.5"/>
+        <text x="635" y="366" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="0.1em" fill="#059669">MARKETING</text>
+        <rect x="554" y="374" width="162" height="24" rx="6" fill="rgba(16,185,129,0.12)" stroke="rgba(16,185,129,0.3)" stroke-width="1"/>
+        <text x="635" y="391" text-anchor="middle" font-size="11" fill="#059669" font-weight="700">Marketing Director</text>
+        <rect x="554" y="404" width="78" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="593" y="419" text-anchor="middle" font-size="10" fill="#374151" font-weight="600">&#128172; Social</text>
+        <rect x="636" y="404" width="80" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="676" y="419" text-anchor="middle" font-size="10" fill="#374151" font-weight="600">&#128231; Email</text>
+        <rect x="554" y="430" width="52" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="580" y="445" text-anchor="middle" font-size="10" fill="#374151" font-weight="600">Funnels</text>
+        <rect x="610" y="430" width="42" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="631" y="445" text-anchor="middle" font-size="10" fill="#374151" font-weight="600">Ads</text>
+        <rect x="656" y="430" width="60" height="22" rx="5" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+        <text x="686" y="445" text-anchor="middle" font-size="10" fill="#374151" font-weight="600">DM &middot; Offers</text>
+        <!-- Arrow: C.I. -> Marketing -->
+        <path d="M 420,290 C 470,330 510,360 538,390" fill="none" stroke="rgba(16,185,129,0.55)" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+        <!-- ═══ BOTTOM CENTER: Your Data ═══ -->
+        <rect x="260" y="370" width="170" height="70" rx="10" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1.5"/>
+        <text x="345" y="396" text-anchor="middle" font-size="18">&#128190;</text>
+        <text x="345" y="416" text-anchor="middle" font-size="12" font-weight="700" fill="#374151">Your Data</text>
+        <text x="345" y="432" text-anchor="middle" font-size="10" fill="#9CA3AF">22+ tables</text>
+        <!-- Arrow: Your Data -> C.I. -->
+        <path d="M 345,368 C 355,340 362,316 367,302" fill="none" stroke="#D1D5DB" stroke-width="1.8" marker-end="url(#arrowGray)"/>
+
+        <!-- ═══ Subtle connector labels ═══ -->
+        <text x="820" y="90" text-anchor="end" font-size="9" fill="#9CA3AF">1 Director + 3 Specialists</text>
+        <text x="820" y="250" text-anchor="end" font-size="9" fill="#9CA3AF">1 Director + 4 Specialists</text>
+        <text x="820" y="430" text-anchor="end" font-size="9" fill="#9CA3AF">1 Director + 6 Specialists</text>
+
+      </svg>
+      <p class="arch-caption">You ask questions through the web app. The Central Intelligence delegates to Department Directors, who coordinate Specialists and Operators to return a unified answer.</p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       3b. ORG CHART — Central Intelligence V2 Hierarchy
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">Organization</p>
+    <h2 class="section-title">The Central Intelligence Team (~25 Workers)</h2>
+    <p class="section-intro">Central Intelligence V2 uses a 3-level hierarchy: Central Intelligence (CEO) delegates to Department Directors, who manage Specialists. Shared Operators float across departments as needed.</p>
+
+    <div style="margin-top:28px;background:#fff;border:1px solid #E5E7EB;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+
+      <!-- Central Intelligence -->
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#F4A900,#D97706);color:#fff;padding:12px 28px;border-radius:12px;font-weight:800;font-size:16px;box-shadow:0 4px 12px rgba(244,169,0,.35);">
+          &#128029; Central Intelligence (CEO)
+        </div>
+      </div>
+
+      <!-- Connector lines -->
+      <div style="display:flex;justify-content:center;margin-bottom:4px;">
+        <div style="width:2px;height:20px;background:#E5E7EB;"></div>
+      </div>
+      <div style="display:flex;justify-content:center;margin-bottom:4px;">
+        <div style="width:66%;height:2px;background:#E5E7EB;position:relative;">
+          <div style="position:absolute;left:0;top:0;width:2px;height:16px;background:#E5E7EB;"></div>
+          <div style="position:absolute;left:50%;transform:translateX(-50%);top:0;width:2px;height:16px;background:#E5E7EB;"></div>
+          <div style="position:absolute;right:0;top:0;width:2px;height:16px;background:#E5E7EB;"></div>
+        </div>
+      </div>
+
+      <!-- Three Departments -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px;">
+
+        <!-- Marketing Department -->
+        <div style="border:1px solid rgba(16,185,129,.3);border-radius:12px;overflow:hidden;">
+          <div style="background:linear-gradient(135deg,#059669,#10B981);color:#fff;padding:10px 14px;text-align:center;">
+            <div style="font-size:13px;font-weight:800;letter-spacing:.04em;">Marketing Director</div>
+          </div>
+          <div style="padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:rgba(16,185,129,.03);">
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#128172; Social Media Specialist</div>
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#128231; Email Specialist</div>
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#128270; Funnels Specialist</div>
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#128202; Ads Specialist</div>
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#128172; DM Specialist</div>
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#127873; Offer Creation Specialist</div>
+          </div>
+        </div>
+
+        <!-- Sales Department -->
+        <div style="border:1px solid rgba(59,130,246,.3);border-radius:12px;overflow:hidden;">
+          <div style="background:linear-gradient(135deg,#1D4ED8,#3B82F6);color:#fff;padding:10px 14px;text-align:center;">
+            <div style="font-size:13px;font-weight:800;letter-spacing:.04em;">Sales Director</div>
+          </div>
+          <div style="padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:rgba(59,130,246,.03);">
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#128205; Leads Database Worker</div>
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#128222; Appointment Setting Bot</div>
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#127908; Sales Call Analyzer</div>
+          </div>
+        </div>
+
+        <!-- Fulfillment Department -->
+        <div style="border:1px solid rgba(249,115,22,.3);border-radius:12px;overflow:hidden;">
+          <div style="background:linear-gradient(135deg,#EA580C,#F97316);color:#fff;padding:10px 14px;text-align:center;">
+            <div style="font-size:13px;font-weight:800;letter-spacing:.04em;">Fulfillment Director</div>
+          </div>
+          <div style="padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:rgba(249,115,22,.03);">
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#128101; Members Database Worker</div>
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#129302; Coaching Call Analyzer</div>
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#9989; Accountability Call Analyzer</div>
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;color:#374151;">&#128736; Tech SOS Tracker</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Shared Operators -->
+      <div style="margin-top:20px;border-top:1px solid #E5E7EB;padding-top:16px;">
+        <div style="text-align:center;margin-bottom:10px;">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;">Shared Operators (Floaters)</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
+          <span class="dept-pill gold">&#127908; Transcriber</span>
+          <span class="dept-pill gold">&#9888;&#65039; Error Handler</span>
+          <span class="dept-pill gold">&#127919; ICP Generator</span>
+          <span class="dept-pill gold">&#127873; Offer Generator</span>
+          <span class="dept-pill gold">&#128202; Stats Updater (x5)</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       4. YOUR DASHBOARD
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">Your Dashboard</p>
+    <h2 class="section-title">See Everything at a Glance</h2>
+    <p class="section-intro">Your dashboard shows key metrics across all departments, with AI-powered recommendations on what to focus on this week. One screen. All the context you need.</p>
+
+    <div class="mockup-iframe-wrap" style="margin-top:28px;">
+      <iframe src="webapp-mockup.html#screen-dashboard" class="mockup-iframe"></iframe>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       5. CENTRAL INTELLIGENCE CHAT
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">AI Chat</p>
+    <h2 class="section-title">Ask the Central Intelligence Anything</h2>
+    <p class="section-intro">The Central Intelligence has visibility across all your data. Ask a question in plain English and get a real answer — not a link to a dashboard, but an actual insight with context and next steps.</p>
+
+    <div class="mockup-iframe-wrap" style="margin-top:28px;">
+      <iframe src="webapp-mockup.html#screen-chat" class="mockup-iframe"></iframe>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       6. MARKETING FEATURES
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">Marketing Department</p>
+    <h2 class="section-title">Marketing Tools</h2>
+    <p class="section-intro">AI-powered marketing analysis and content generation — managed by the Marketing Director and 6 Specialists, all informed by what is actually happening in your sales calls and coaching sessions.</p>
+
+    <div style="margin-top:16px;" class="insight-callout">
+      <strong>The key advantage:</strong> Your marketing content is powered by real data from your sales calls and coaching sessions — not generic templates. When your clients say "I struggle with consistency," that exact language becomes your next email, ad, and social script.
+    </div>
+
+    <div style="margin-top:20px;" class="feature-block">
+      <div class="feature-header marketing-bg">
+        <div class="feature-header-icon">&#128229;</div>
+        <div class="feature-header-title">Marketing Suite</div>
+        <div class="feature-header-sub">Social, Email, Funnels, Ads, DM, and Offers — 1 Director + 6 Specialists</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;background:#fff;padding:20px 24px;border-top:1px solid #E5E7EB;">
+        <div class="feature-item">
+          <div class="feature-item-name"><span class="fi-dot marketing-dot"></span>Social Media Specialist</div>
+          <div class="feature-item-desc">See your social metrics at a glance and generate scripts informed by the exact pain points your clients are voicing on calls. No brainstorming required.</div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-name"><span class="fi-dot marketing-dot"></span>Email Specialist</div>
+          <div class="feature-item-desc">Analyze campaign open and click rates, then draft new emails using insights from your coaching wins and content idea library.</div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-name"><span class="fi-dot marketing-dot"></span>Funnels Specialist</div>
+          <div class="feature-item-desc">Identify where people drop off in your funnels and get specific, AI-generated suggestions to fix the weak points — with your data as context.</div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-name"><span class="fi-dot marketing-dot"></span>Ads Specialist</div>
+          <div class="feature-item-desc">Track ad performance (return on spend, click rates, cost per click) and generate ad copy based on what your clients actually care about.</div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-name"><span class="fi-dot marketing-dot"></span>DM Specialist</div>
+          <div class="feature-item-desc">Analyze your direct message conversations and generate response scripts that move prospects toward booking appointments.</div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-name"><span class="fi-dot marketing-dot"></span>Offer Creation Specialist</div>
+          <div class="feature-item-desc">Generate and refine offer structures based on your ICP data, client feedback, and competitive positioning — informed by real objections from sales calls.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       7. SALES FEATURES
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">Sales Department</p>
+    <h2 class="section-title">Sales Tools</h2>
+    <p class="section-intro">Everything you need to track, analyze, and improve your sales process — managed by the Sales Director and 3 Specialists, from first contact to closed deal.</p>
+
+    <!-- Leads Dashboard preview -->
+    <div class="mockup-iframe-wrap" style="margin-top:28px;">
+      <iframe src="webapp-mockup.html#screen-leads" class="mockup-iframe"></iframe>
+    </div>
+
+    <!-- Sales feature items -->
+    <div style="margin-top:14px;" class="feature-items" style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;background:#fff;border-radius:0 0 var(--radius-lg) var(--radius-lg);">
+        <div class="feature-item">
+          <div class="feature-item-name"><span class="fi-dot sales-dot"></span>Sales Call Analyzer</div>
+          <div class="feature-item-desc">Upload a sales call recording and get AI-extracted pain points, objection patterns, and content ideas — automatically organized by theme.</div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-name"><span class="fi-dot sales-dot"></span>Appointment Setting Bot</div>
+          <div class="feature-item-desc">AI analyzes your appointment conversations and suggests specific script improvements to boost your booking rate. See before/after comparisons.</div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-name"><span class="fi-dot sales-dot"></span>Leads Database Worker</div>
+          <div class="feature-item-desc">Filter leads by source, status, date range, and score. Sort, search, and edit records directly in the app without touching a spreadsheet.</div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-name"><span class="fi-dot sales-dot"></span>Appointment Analytics</div>
+          <div class="feature-item-desc">Track your set rate, show rate, and close rate in one view. Spot trends across conversation types and time periods.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       8. FULFILLMENT FEATURES
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">Fulfillment Department</p>
+    <h2 class="section-title">Fulfillment Tools</h2>
+    <p class="section-intro">Know exactly where every member stands, what they need, and how your coaching is landing — managed by the Fulfillment Director and 4 Specialists, all in one place.</p>
+
+    <!-- Members Directory preview -->
+    <div class="mockup-iframe-wrap" style="margin-top:28px;">
+      <iframe src="webapp-mockup.html#screen-members" class="mockup-iframe"></iframe>
+    </div>
+
+    <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div class="feature-item" style="background:#fff;border:1px solid #E5E7EB;">
+        <div class="feature-item-name"><span class="fi-dot fulfillment-dot"></span>Coaching Call Analyzer</div>
+        <div class="feature-item-desc">Extract client wins and pain points from coaching calls. These automatically feed content ideas to your marketing department.</div>
+      </div>
+      <div class="feature-item" style="background:#fff;border:1px solid #E5E7EB;">
+        <div class="feature-item-name"><span class="fi-dot fulfillment-dot"></span>Accountability Call Analyzer</div>
+        <div class="feature-item-desc">Track goal commitments versus actual progress across accountability calls. See who is on track and who may need extra support.</div>
+      </div>
+      <div class="feature-item" style="background:#fff;border:1px solid #E5E7EB;">
+        <div class="feature-item-name"><span class="fi-dot fulfillment-dot"></span>Tech SOS Tracker</div>
+        <div class="feature-item-desc">Centralize tech support requests from members. AI identifies patterns and common issues so you can create solutions that help everyone at once.</div>
+      </div>
+      <div class="feature-item" style="background:#fff;border:1px solid #E5E7EB;">
+        <div class="feature-item-name"><span class="fi-dot fulfillment-dot"></span>Members Database Worker</div>
+        <div class="feature-item-desc">Tap any member to see their full history: submissions, goals, call transcripts, accountability check-ins, and tech issues — all in one profile.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       9. THE INTELLIGENCE LOOP
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">What Makes Central Intelligence Different</p>
+    <h2 class="section-title">The Intelligence Loop</h2>
+    <p class="section-intro">The magic of Central Intelligence is that every department feeds intelligence to every other department. Pain points from sales calls become content ideas for social media. Client wins from coaching become email stories. And the Central Intelligence (CEO) sees it all — coordinating Directors and Specialists to tell you exactly what to focus on.</p>
+
+    <div style="margin-top:28px;" class="intel-loop">
+      <svg viewBox="0 0 740 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif">
+
+        <!-- SALES box -->
+        <rect x="20" y="20" width="190" height="96" rx="12" fill="rgba(59,130,246,0.07)" stroke="rgba(59,130,246,0.3)" stroke-width="1.5"/>
+        <text x="115" y="46" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.12em" fill="#1D4ED8">SALES CALLS</text>
+        <text x="115" y="65" text-anchor="middle" font-size="13" fill="#374151">Pain points extracted</text>
+        <text x="115" y="84" text-anchor="middle" font-size="13" fill="#374151">Objections identified</text>
+        <text x="115" y="103" text-anchor="middle" font-size="13" fill="#374151">Conversion signals</text>
+
+        <!-- FULFILLMENT box -->
+        <rect x="20" y="142" width="190" height="96" rx="12" fill="rgba(249,115,22,0.07)" stroke="rgba(249,115,22,0.3)" stroke-width="1.5"/>
+        <text x="115" y="168" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.12em" fill="#EA580C">COACHING CALLS</text>
+        <text x="115" y="187" text-anchor="middle" font-size="13" fill="#374151">Client wins captured</text>
+        <text x="115" y="206" text-anchor="middle" font-size="13" fill="#374151">Themes surfaced</text>
+        <text x="115" y="225" text-anchor="middle" font-size="13" fill="#374151">Success stories found</text>
+
+        <!-- Arrows from Sales + Fulfillment -> Content Library -->
+        <line x1="212" y1="68" x2="285" y2="130" stroke="#3B82F6" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#a1)"/>
+        <line x1="212" y1="190" x2="285" y2="160" stroke="#F97316" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#a2)"/>
+
+        <!-- Content Library middle -->
+        <rect x="285" y="118" width="170" height="66" rx="12" fill="#FFF7E6" stroke="rgba(244,169,0,0.4)" stroke-width="1.5"/>
+        <text x="370" y="143" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.1em" fill="#D97706">CONTENT LIBRARY</text>
+        <text x="370" y="162" text-anchor="middle" font-size="12.5" fill="#374151">Ideas · Themes · Language</text>
+        <text x="370" y="177" text-anchor="middle" font-size="12.5" fill="#374151">Patterns · Opportunities</text>
+
+        <!-- Arrow: Content Library -> Marketing -->
+        <line x1="457" y1="151" x2="528" y2="80" stroke="#F4A900" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#a3)"/>
+        <line x1="457" y1="162" x2="528" y2="210" stroke="#F4A900" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#a4)"/>
+
+        <!-- Marketing: Social -->
+        <rect x="530" y="30" width="190" height="80" rx="12" fill="rgba(16,185,129,0.07)" stroke="rgba(16,185,129,0.3)" stroke-width="1.5"/>
+        <text x="625" y="56" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.12em" fill="#059669">MARKETING</text>
+        <text x="625" y="76" text-anchor="middle" font-size="13" fill="#374151">Social scripts generated</text>
+        <text x="625" y="95" text-anchor="middle" font-size="13" fill="#374151">Emails drafted</text>
+
+        <!-- Marketing: Ads -->
+        <rect x="530" y="170" width="190" height="80" rx="12" fill="rgba(16,185,129,0.07)" stroke="rgba(16,185,129,0.3)" stroke-width="1.5"/>
+        <text x="625" y="196" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.12em" fill="#059669">MARKETING</text>
+        <text x="625" y="216" text-anchor="middle" font-size="13" fill="#374151">Ad copy created</text>
+        <text x="625" y="235" text-anchor="middle" font-size="13" fill="#374151">Funnel copy improved</text>
+
+        <!-- Central Intelligence bottom label -->
+        <rect x="284" y="270" width="172" height="44" rx="10" fill="url(#qbGrad)" stroke="rgba(244,169,0,0.3)" stroke-width="1.5"/>
+        <text x="370" y="288" text-anchor="middle" font-size="16">&#129431;</text>
+        <text x="370" y="306" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF">Central Intelligence sees everything</text>
+
+        <!-- Arrows pointing to Central Intelligence -->
+        <line x1="115" y1="240" x2="310" y2="272" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a5)"/>
+        <line x1="370" y1="186" x2="370" y2="268" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a5)"/>
+        <line x1="625" y1="252" x2="432" y2="278" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a5)"/>
+
+        <defs>
+          <linearGradient id="qbGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#F4A900"/>
+            <stop offset="100%" style="stop-color:#D97706"/>
+          </linearGradient>
+          <marker id="a1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#3B82F6" opacity="0.7"/></marker>
+          <marker id="a2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#F97316" opacity="0.7"/></marker>
+          <marker id="a3" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#F4A900" opacity="0.8"/></marker>
+          <marker id="a4" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#F4A900" opacity="0.8"/></marker>
+          <marker id="a5" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#9CA3AF"/></marker>
+        </defs>
+      </svg>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px;padding-top:20px;border-top:1px solid #E5E7EB;">
+        <div style="text-align:center;padding:12px;">
+          <div style="font-size:24px;margin-bottom:6px;">&#127908;</div>
+          <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:3px;">Sales Call Pain Point</div>
+          <div style="font-size:12px;color:#6B7280;line-height:1.5;">"I don't know how to price my services"</div>
+          <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">Becomes your next social post</div>
+        </div>
+        <div style="text-align:center;padding:12px;">
+          <div style="font-size:24px;margin-bottom:6px;">&#129302;</div>
+          <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:3px;">Coaching Win</div>
+          <div style="font-size:12px;color:#6B7280;line-height:1.5;">"Client hit $8k month after 6 weeks"</div>
+          <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">Becomes your next email story</div>
+        </div>
+        <div style="text-align:center;padding:12px;">
+          <div style="font-size:24px;margin-bottom:6px;">&#128202;</div>
+          <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:3px;">Recurring Objection</div>
+          <div style="font-size:12px;color:#6B7280;line-height:1.5;">"I'm not ready yet / not the right time"</div>
+          <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">Becomes your next ad creative</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       10. DELIVERY TIMELINE
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">Project Timeline</p>
+    <h2 class="section-title">Delivery Roadmap</h2>
+    <p class="section-intro">Each phase delivers working features you can use immediately. You do not wait weeks to see anything — you start using Central Intelligence from the 1st feature.</p>
+
+    <div style="margin-top:32px;background:#fff;border:1px solid #E5E7EB;border-radius:16px;padding:28px 32px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+
+      <!-- Phase 1 -->
+      <div style="display:grid;grid-template-columns:1fr 2px 1fr;align-items:start;gap:0;margin-bottom:0;">
+        <!-- Left: phase info -->
+        <div style="padding:0 24px 32px 0;text-align:right;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:2px;">Phase 1</div>
+          <div style="font-size:12px;font-weight:600;color:#6B7280;margin-bottom:6px; display: none;">Weeks 1 — 2</div>
+          <div style="display:inline-block;background:#FFF7E6;border:1px solid rgba(244,169,0,.3);border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600;color:#D97706;">You can start chatting</div>
+        </div>
+        <!-- Center line + dot -->
+        <div style="display:flex;flex-direction:column;align-items:center;padding-top:4px;">
+          <div style="width:14px;height:14px;border-radius:50%;background:#F4A900;border:3px solid #FFFBEB;box-shadow:0 0 0 2px #F4A900;flex-shrink:0;"></div>
+          <div style="width:2px;background:#E5E7EB;flex:1;min-height:28px;"></div>
+        </div>
+        <!-- Right: content -->
+        <div style="padding:0 0 32px 24px;">
+          <div style="font-size:18px;font-weight:800;color:#111827;letter-spacing:-.02em;margin-bottom:4px;">Foundation</div>
+          <div style="font-size:13.5px;color:#6B7280;line-height:1.55;">Central Intelligence AI comes online. The web app shell launches with navigation and a working chat interface. You can start asking questions from day one — even before all the data is connected.</div>
+        </div>
+      </div>
+
+      <!-- Phase 2 -->
+      <div style="display:grid;grid-template-columns:1fr 2px 1fr;align-items:start;">
+        <div style="padding:0 24px 32px 0;text-align:right;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:2px;">Phase 2</div>
+          <div style="font-size:12px;font-weight:600;color:#6B7280;margin-bottom:6px; display: none;">Weeks 3 — 4</div>
+          <div style="display:inline-block;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600;color:#059669;">Marketing goes live</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;padding-top:4px;">
+          <div style="width:14px;height:14px;border-radius:50%;background:#10B981;border:3px solid #ECFDF5;box-shadow:0 0 0 2px #10B981;flex-shrink:0;"></div>
+          <div style="width:2px;background:#E5E7EB;flex:1;min-height:28px;"></div>
+        </div>
+        <div style="padding:0 0 32px 24px;">
+          <div style="font-size:18px;font-weight:800;color:#111827;letter-spacing:-.02em;margin-bottom:4px;">Social Media + Email</div>
+          <div style="font-size:13.5px;color:#6B7280;line-height:1.55;">The Marketing Director comes online. Social media and email specialists launch — social scripts generated from real client pain points, email drafts informed by coaching wins and content ideas.</div>
+        </div>
+      </div>
+
+      <!-- Phase 3 -->
+      <div style="display:grid;grid-template-columns:1fr 2px 1fr;align-items:start;">
+        <div style="padding:0 24px 32px 0;text-align:right;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:2px;">Phase 3</div>
+          <div style="font-size:12px;font-weight:600;color:#6B7280;margin-bottom:6px; display: none;">Weeks 5 — 6</div>
+          <div style="display:inline-block;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600;color:#059669;">Full marketing suite</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;padding-top:4px;">
+          <div style="width:14px;height:14px;border-radius:50%;background:#10B981;border:3px solid #ECFDF5;box-shadow:0 0 0 2px #10B981;flex-shrink:0;"></div>
+          <div style="width:2px;background:#E5E7EB;flex:1;min-height:28px;"></div>
+        </div>
+        <div style="padding:0 0 32px 24px;">
+          <div style="font-size:18px;font-weight:800;color:#111827;letter-spacing:-.02em;margin-bottom:4px;">Funnels + Ads + DM + Offers</div>
+          <div style="font-size:13.5px;color:#6B7280;line-height:1.55;">Funnel analysis, ad performance tracking, DM specialist, and offer creation specialist launch — completing the marketing suite. ICP and Offer generators come online as shared operators.</div>
+        </div>
+      </div>
+
+      <!-- Phase 4 -->
+      <div style="display:grid;grid-template-columns:1fr 2px 1fr;align-items:start;">
+        <div style="padding:0 24px 32px 0;text-align:right;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:2px;">Phase 4</div>
+          <div style="font-size:12px;font-weight:600;color:#6B7280;margin-bottom:6px; display: none;">Weeks 7 — 8</div>
+          <div style="display:inline-block;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600;color:#1D4ED8;">Sales goes live</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;padding-top:4px;">
+          <div style="width:14px;height:14px;border-radius:50%;background:#3B82F6;border:3px solid #EFF6FF;box-shadow:0 0 0 2px #3B82F6;flex-shrink:0;"></div>
+          <div style="width:2px;background:#E5E7EB;flex:1;min-height:28px;"></div>
+        </div>
+        <div style="padding:0 0 32px 24px;">
+          <div style="font-size:18px;font-weight:800;color:#111827;letter-spacing:-.02em;margin-bottom:4px;">Leads Dashboard + Call Analysis</div>
+          <div style="font-size:13.5px;color:#6B7280;line-height:1.55;">The Sales Director comes online. Your live leads data appears in the dashboard with charts, filters, and conversion funnels. Upload sales call recordings for AI-extracted pain points, objections, and content ideas.</div>
+        </div>
+      </div>
+
+      <!-- Phase 5 -->
+      <div style="display:grid;grid-template-columns:1fr 2px 1fr;align-items:start;">
+        <div style="padding:0 24px 32px 0;text-align:right;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:2px;">Phase 5</div>
+          <div style="font-size:12px;font-weight:600;color:#6B7280;margin-bottom:6px; display: none;">Weeks 9 — 10</div>
+          <div style="display:inline-block;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600;color:#1D4ED8;">Full sales suite</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;padding-top:4px;">
+          <div style="width:14px;height:14px;border-radius:50%;background:#3B82F6;border:3px solid #EFF6FF;box-shadow:0 0 0 2px #3B82F6;flex-shrink:0;"></div>
+          <div style="width:2px;background:#E5E7EB;flex:1;min-height:28px;"></div>
+        </div>
+        <div style="padding:0 0 32px 24px;">
+          <div style="font-size:18px;font-weight:800;color:#111827;letter-spacing:-.02em;margin-bottom:4px;">Appointments + Sales Intelligence</div>
+          <div style="font-size:13.5px;color:#6B7280;line-height:1.55;">Appointment analytics go live with AI script suggestions. The cross-department intelligence loop begins feeding sales insights to marketing content generation.</div>
+        </div>
+      </div>
+
+      <!-- Phase 6 -->
+      <div style="display:grid;grid-template-columns:1fr 2px 1fr;align-items:start;">
+        <div style="padding:0 24px 32px 0;text-align:right;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:2px;">Phase 6</div>
+          <div style="font-size:12px;font-weight:600;color:#6B7280;margin-bottom:6px; display: none;">Weeks 11 — 12</div>
+          <div style="display:inline-block;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600;color:#EA580C;">Fulfillment goes live</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;padding-top:4px;">
+          <div style="width:14px;height:14px;border-radius:50%;background:#F97316;border:3px solid #FFF7ED;box-shadow:0 0 0 2px #F97316;flex-shrink:0;"></div>
+          <div style="width:2px;background:#E5E7EB;flex:1;min-height:28px;"></div>
+        </div>
+        <div style="padding:0 0 32px 24px;">
+          <div style="font-size:18px;font-weight:800;color:#111827;letter-spacing:-.02em;margin-bottom:4px;">Members + Coaching</div>
+          <div style="font-size:13.5px;color:#6B7280;line-height:1.55;">The Fulfillment Director comes online. Members directory launches with goal tracking and editable profiles. Coaching call analysis launches with a live wins feed and content idea library.</div>
+        </div>
+      </div>
+
+      <!-- Phase 7 -->
+      <div style="display:grid;grid-template-columns:1fr 2px 1fr;align-items:start;">
+        <div style="padding:0 24px 32px 0;text-align:right;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:2px;">Phase 7</div>
+          <div style="font-size:12px;font-weight:600;color:#6B7280;margin-bottom:6px; display: none;">Weeks 13 — 14</div>
+          <div style="display:inline-block;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600;color:#EA580C;">Full fulfillment suite</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;padding-top:4px;">
+          <div style="width:14px;height:14px;border-radius:50%;background:#F97316;border:3px solid #FFF7ED;box-shadow:0 0 0 2px #F97316;flex-shrink:0;"></div>
+          <div style="width:2px;background:#E5E7EB;flex:1;min-height:28px;"></div>
+        </div>
+        <div style="padding:0 0 32px 24px;">
+          <div style="font-size:18px;font-weight:800;color:#111827;letter-spacing:-.02em;margin-bottom:4px;">Accountability + Tech SOS</div>
+          <div style="font-size:13.5px;color:#6B7280;line-height:1.55;">Accountability tracking goes live. Tech SOS centralizes member support requests. All three departments are fully active with cross-department data flow operational.</div>
+        </div>
+      </div>
+
+      <!-- Phase 8 -->
+      <div style="display:grid;grid-template-columns:1fr 2px 1fr;align-items:start;">
+        <div style="padding:0 24px 0 0;text-align:right;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:2px;">Phase 8</div>
+          <div style="font-size:12px;font-weight:600;color:#6B7280;margin-bottom:6px; display: none;">Weeks 15 — 16</div>
+          <div style="display:inline-block;background:#FFF7E6;border:1px solid rgba(244,169,0,.3);border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600;color:#D97706;">Intelligence + Polish</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;padding-top:4px;">
+          <div style="width:14px;height:14px;border-radius:50%;background:#F4A900;border:3px solid #FFFBEB;box-shadow:0 0 0 2px #F4A900;flex-shrink:0;"></div>
+        </div>
+        <div style="padding:0 0 0 24px;">
+          <div style="font-size:18px;font-weight:800;color:#111827;letter-spacing:-.02em;margin-bottom:4px;">Executive Dashboard + Weekly AI Digest</div>
+          <div style="font-size:13.5px;color:#6B7280;line-height:1.55;">The executive command center launches with cross-department KPIs and trends. The Central Intelligence sends you a weekly digest every Monday morning with her top priorities. All ~25 workers — 3 Directors, 15 Specialists, and shared Operators — are fully operational. Central Intelligence is complete.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       11. WHAT WE NEED FROM YOU
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <p class="section-label">Getting Started</p>
+    <h2 class="section-title">What We Need From You</h2>
+    <p class="section-intro">Getting Central Intelligence up and running requires a few things on your end. We keep the list short and will walk you through each one.</p>
+
+    <div style="margin-top:28px;" class="needs-grid">
+      <div class="need-item">
+        <div class="need-icon">&#128190;</div>
+        <div>
+          <div class="need-title">Access to Your Current Data</div>
+          <div class="need-desc">Read-only access to your existing databases so we can import your leads, members, and historical records. Your data moves over — nothing gets left behind.</div>
+        </div>
+      </div>
+      <div class="need-item">
+        <div class="need-icon">&#128273;</div>
+        <div>
+          <div class="need-title">Platform Credentials</div>
+          <div class="need-desc">Access to GoHighLevel and Google Sheets. We use these to pull your live appointment and email data directly into the dashboards.</div>
+        </div>
+      </div>
+      <div class="need-item">
+        <div class="need-icon">&#127908;</div>
+        <div>
+          <div class="need-title">Sample Call Recordings</div>
+          <div class="need-desc">A handful of sales call and coaching call recordings for testing the transcription feature before we go live. These help us tune the AI for your specific language and style.</div>
+        </div>
+      </div>
+      <div class="need-item">
+        <div class="need-icon">&#128172;</div>
+        <div>
+          <div class="need-title">Quick Feedback Sessions</div>
+          <div class="need-desc">A short check-in after each phase delivery — typically 30 minutes — to review what was built and confirm everything meets your expectations before we move on.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="reassurance-box">
+      <div class="reassurance-icon">&#9989;</div>
+      <div>Your existing data and workflows continue to work exactly as they do now while we build. There is no disruption to your current operations. Central Intelligence is built alongside your business, not instead of it.</div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       12. EXPANDABILITY (FOOTER)
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="footer-section">
+    <h2>Central Intelligence Grows With Your Business</h2>
+    <p>Central Intelligence is designed to expand as your needs change. Need a new capability? We add a new Specialist under the right Director, or create a new department entirely — the Central Intelligence automatically learns to delegate to it. No rebuilding, no disruption.</p>
+    <div class="footer-bees">
+      <span class="future-bee">+ SEO Analysis Bee</span>
+      <span class="future-bee">+ Competitor Tracking Bee</span>
+      <span class="future-bee">+ Financial Reporting Bee</span>
+      <span class="future-bee">+ YouTube Analytics Bee</span>
+      <span class="future-bee">+ Community Engagement Bee</span>
+      <span class="future-bee">+ Affiliate Tracking Bee</span>
+      <span class="future-bee">+ Hiring &amp; HR Bee</span>
+      <span class="future-bee">+ Podcast Performance Bee</span>
+    </div>
+    <p style="margin-top:20px;font-size:13px;opacity:.5;">Prepared for Greg &nbsp;|&nbsp; Central Intelligence Project &nbsp;|&nbsp; March 2026</p>
+  </div>
+
+</div><!-- /page -->
+
+</body>
+</html>

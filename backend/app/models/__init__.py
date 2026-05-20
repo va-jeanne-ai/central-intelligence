@@ -1,0 +1,96 @@
+"""SQLAlchemy model registry.
+
+Import order matters: meta must come before operational (User/Team are FK targets),
+and intelligence must come before the forward-reference resolution at the bottom of
+operational.py.  All 21 models are exposed at the package level so Alembic's
+autogenerate can discover every table via Base.metadata.
+"""
+
+from app.models.base import Base, SoftDeleteMixin, TimestampMixin  # noqa: F401
+
+# meta — no internal FK dependencies
+from app.models.meta import Team, User  # noqa: F401
+
+# intelligence — TagDictionary & InsightTag must exist before Insight.tags resolves
+from app.models.intelligence import (  # noqa: F401
+    BusinessProfile,
+    InsightTag,
+    MarketSignal,
+    MonthlyPreference,
+    Offer,
+    TagDictionary,
+)
+
+# operational — depends on User (created_by / coach_id) and InsightTag (relationship)
+from app.models.operational import (  # noqa: F401
+    Call,
+    ContentIdea,
+    Goal,
+    Insight,
+    Lead,
+    Member,
+    Objection,
+    PainPoint,
+    Win,
+)
+
+# marketing — Sprint 3/4 social/email/funnel/ads/dm/promo models (no FK dependencies)
+from app.models.marketing import (  # noqa: F401
+    AdsStats,
+    DmStats,
+    EmailCampaign,
+    FunnelEvent,
+    FunnelStats,
+    Promotion,
+    SocialComment,
+    SocialStats,
+)
+
+# audit — depends on User (user_id FK)
+from app.models.audit import (  # noqa: F401
+    AuditLog,
+    ErrorLog,
+    IdempotencyKey,
+    SyncLog,
+)
+
+__all__ = [
+    # base
+    "Base",
+    "TimestampMixin",
+    "SoftDeleteMixin",
+    # meta
+    "User",
+    "Team",
+    # intelligence
+    "InsightTag",
+    "TagDictionary",
+    "MarketSignal",
+    "Offer",
+    "BusinessProfile",
+    "MonthlyPreference",
+    # operational
+    "Lead",
+    "Member",
+    "Call",
+    "Insight",
+    "ContentIdea",
+    "Goal",
+    "PainPoint",
+    "Win",
+    "Objection",
+    # marketing
+    "SocialStats",
+    "SocialComment",
+    "EmailCampaign",
+    "FunnelEvent",
+    "FunnelStats",
+    "AdsStats",
+    "DmStats",
+    "Promotion",
+    # audit
+    "AuditLog",
+    "ErrorLog",
+    "SyncLog",
+    "IdempotencyKey",
+]
