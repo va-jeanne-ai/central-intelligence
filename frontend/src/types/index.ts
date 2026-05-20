@@ -144,6 +144,17 @@ export interface TranscribeJobResponse {
   estimatedWaitMinutes?: number;
 }
 
+// Response shape returned by POST /api/v1/transcribe/upload (multipart audio
+// uploads). The backend returns snake_case: see TranscribeResponse in
+// backend/app/schemas/transcribe.py and the /transcribe/upload route's return.
+export interface TranscribeUploadResponse {
+  call_id: string;
+  job_id: string;
+  status: string; // "completed" | "duplicate"
+  transcript?: string;
+  message?: string;
+}
+
 // ─── CI Insights ────────────────────────────────────────────────────────────
 
 export interface CIInsight {

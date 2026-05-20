@@ -7,7 +7,7 @@ import type {
   TranscriptFileType,
   TranscriptUploadRequest,
   TranscriptUploadResponse,
-  TranscribeJobResponse,
+  TranscribeUploadResponse,
 } from "@/types";
 
 // ─── Public interface ─────────────────────────────────────────────────────────
@@ -231,18 +231,20 @@ export function TranscriptUploadWidget({
       if (callType !== undefined) payload.callType = callType;
       if (leadId !== undefined) payload.leadId = leadId;
 
-      const data = await apiClient.post<TranscribeJobResponse>(
+      const data = await apiClient.post<TranscribeUploadResponse>(
         "/transcribe",
         payload,
         { silent: true },
       );
 
       complete();
+      setResultCallId(data.call_id);
       setStatus("processing");
 
       const result: TranscriptUploadResult = {
-        jobId: data.jobId,
-        status: data.status === "queued" ? "queued" : "processing",
+        callId: data.call_id,
+        jobId: data.job_id,
+        status: "processing",
       };
 
       onSuccess?.(result);
@@ -317,14 +319,16 @@ export function TranscriptUploadWidget({
             throw new Error(msg);
           }
 
-          const data = (await response.json()) as TranscribeJobResponse;
+          const data = (await response.json()) as TranscribeUploadResponse;
 
           complete();
+          setResultCallId(data.call_id);
           setStatus("processing");
 
           const result: TranscriptUploadResult = {
-            jobId: data.jobId,
-            status: data.status === "queued" ? "queued" : "processing",
+            callId: data.call_id,
+            jobId: data.job_id,
+            status: data.status === "completed" ? "processing" : "processing",
           };
 
           onSuccess?.(result);
