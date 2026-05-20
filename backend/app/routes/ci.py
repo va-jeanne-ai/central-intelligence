@@ -314,6 +314,7 @@ async def get_call(
             transcript_quality=call.transcript_quality,
             processed_date=call.processed_date,
             transcript=call.transcript_text,
+            summary=call.summary,
             created_at=call.created_at,
         ),
         insights=[

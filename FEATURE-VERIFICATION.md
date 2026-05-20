@@ -295,26 +295,31 @@ These are the highest-value items. Each one is hours, not days.
 These need real work to wire up, but the backend largely exists.
 
 ### F19 — Sales Call Analyzer extraction pipeline
-- **Status:** ⬜ pending verification — **the heart of the product, and the biggest piece of NEW work**
-- **What it should do:** When a sales call transcript is uploaded, an automated extraction task should parse it and write structured rows into `insights`, `pain_points`, `wins`, `objections`, `goals` (tagged with the originating `call_id`).
-- **Current state:**
-  - `POST /api/v1/transcribe` works — uploads audio, Whisper transcribes, writes one row to `calls`
-  - **No extraction task exists.** No code reads `Call.transcript_text` and produces structured rows.
-  - As a result, `/ci-insights`, `/ci-market-signals`, scorecard surfaces are all dry — they query real tables, but those tables stay empty for real calls.
-- **What's needed (~1 full sprint):**
-  - Build `backend/app/tasks/call_analyzer.py` Celery task
-  - Use existing `central_intelligence_v1` prompt as starting point; tune on Greg's actual calls
-  - Choose model: Opus 4.7 for highest-quality synthesis; Sonnet for cost
-  - Write `insights`, `pain_points`, `wins`, `objections`, `goals` rows with FK `call_id`
-  - Trigger from `transcribe_video` task (chain) once the call's `transcript_text` is populated
-  - Pre-extract audio with ffmpeg before Whisper (real Greg calls > 25MB cap)
-- **Verify after fix:**
-  - [ ] Upload one of Greg's real sales calls
-  - [ ] Wait for `transcribe_video` + `call_analyzer` to finish (check Celery logs)
-  - [ ] Query: `SELECT count(*) FROM insights WHERE call_id = '<the call uuid>'` → at least one row
-  - [ ] Same for `pain_points`, `wins`, `objections`, `goals`
-  - [ ] `/ci-insights` shows the new insights
-  - [ ] `/ci-market-signals` reflects the new signal counts
+- **Status:** ✅ **verified-working (2026-05-20)** — end-to-end m4a → transcript → 16 insights + summary
+- **What was built:**
+  - `backend/app/prompts/call_analyzer_v1.py` — 22-field VoC extraction prompt with `summary` (4–7 sentence narrative) + `insights` (load-bearing moments)
+  - `backend/app/tasks/call_analyzer.py` — Celery task `analyze_call(call_id)` calls Claude Sonnet 4.6, parses JSON (handles fenced/prose-wrapped variants), writes `summary` to `Call.summary` + N `Insight` rows
+  - Alembic migration `a1b2c3d4e5f6` adds `Call.summary` TEXT column
+  - `POST /api/v1/ci/calls` — paste-transcript ingestion (skips Whisper)
+  - `POST /api/v1/ci/calls/{call_id}/analyze` — re-run analyzer on existing call
+  - `POST /api/v1/transcribe/upload` — multipart audio upload (replaces 25 MB cap with local Whisper, no limit)
+  - **Local Whisper via `faster-whisper` `small` model** — replaces OpenAI Whisper API entirely (free, offline, no quota). Model cached at `backend/.tmp/whisper-models/`
+  - `transcribe_video` Celery task auto-chains `analyze_call` after successful transcription
+  - Transcript saved as `.txt` artifact at `backend/.tmp/transcripts/{call_id}.txt`
+  - `GET /ci/calls/{call_id}/transcript.txt` — download endpoint with DB fallback
+- **Frontend:**
+  - `/sales-calls` rows are clickable → opens new `/sales-calls/[call_id]` detail page
+  - Detail page shows: summary, insights (with raw quotes), content ideas, transcript, plus Download / Re-analyze buttons
+- **Verified end-to-end (2026-05-20):**
+  - [x] Uploaded a 38 MB m4a sales call (Rich/Idaho broker — a real Greg discovery call)
+  - [x] Whisper transcribed locally — 55 KB transcript text written to `Call.transcript_text` + `.tmp/transcripts/CALL_B23D56BB.txt`
+  - [x] `analyze_call` chained automatically; Claude returned summary + 16 insights
+  - [x] `SELECT COUNT(*) FROM insights WHERE call_id='CALL_B23D56BB'` → 16
+  - [x] `Call.summary` populated with 1,163-char narrative
+  - [x] Detail page renders all three: summary, 16 insights with raw quotes, full transcript
+  - [x] Download transcript button works (serves .txt with Content-Disposition)
+- **Operational note:** **Celery worker must be running** for the analyzer chain to fire. Without it, tasks pile up in Redis (`redis-cli llen celery`) and the UI shows 0 insights forever. Start with: `cd backend && set -a && source .env && set +a && PYTHONPATH=. .venv/bin/celery -A app.tasks.celery_app worker --loglevel=info`.
+- **Out of scope (future):** Separate `pain_points`/`wins`/`objections`/`goals` tables aren't being written — the Insight model carries those signals via `insight_type` + `signal_family` columns, which is sufficient for `/ci-insights` and `/ci-market-signals`. If the dedicated tables are wanted later, mirror the Insight write loop.
 
 ### F20 — Social dashboard
 - **Status:** ✅ **verified-working (2026-05-19)**

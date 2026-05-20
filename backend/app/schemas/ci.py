@@ -82,6 +82,7 @@ class CallDetail(BaseModel):
     transcript_quality: str | None = None
     processed_date: datetime | None = None
     transcript: str | None = None
+    summary: str | None = None
     created_at: datetime | None = None
 
 

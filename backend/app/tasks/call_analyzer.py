@@ -105,23 +105,25 @@ def _extract_json_object(raw_text: str) -> str:
     raise ValueError("Unbalanced JSON object in Claude response.")
 
 
-def _call_claude(transcript_text: str, call_type: str | None) -> list[dict]:
-    """Call Claude with the v1 extraction prompt and return parsed insights.
+def _call_claude(transcript_text: str, call_type: str | None) -> tuple[str | None, list[dict]]:
+    """Call Claude with the v1 extraction prompt and return (summary, insights).
 
     Falls back to mock output when ``ANTHROPIC_API_KEY`` is unset or
     ``mock_mode`` is enabled.
 
     Returns
     -------
-    list[dict]
-        Parsed list of insight dicts (0–N items). Each dict has the 21
-        Claude-extracted fields per the prompt schema.
+    tuple[str | None, list[dict]]
+        ``(summary, insights)`` — summary is a narrative paragraph (or None
+        if the model omitted it), insights is the 0–N list of structured
+        dicts with the 21 Claude-extracted fields each.
     """
     if not settings.anthropic_api_key or settings.mock_mode:
         logger.warning(
             "call_analyzer: Anthropic API key missing or mock_mode=True — using mock output."
         )
-        return json.loads(MOCK_CALL_ANALYZER_OUTPUT)["insights"]
+        mock = json.loads(MOCK_CALL_ANALYZER_OUTPUT)
+        return mock.get("summary"), mock.get("insights", [])
 
     import anthropic  # lazy import — large module
 
@@ -144,7 +146,10 @@ def _call_claude(transcript_text: str, call_type: str | None) -> list[dict]:
     insights = parsed.get("insights", [])
     if not isinstance(insights, list):
         raise ValueError("Expected 'insights' to be a list in Claude output.")
-    return insights
+    summary = parsed.get("summary")
+    if summary is not None and not isinstance(summary, str):
+        summary = None  # tolerate malformed; just drop it
+    return summary, insights
 
 
 # ---------------------------------------------------------------------------
@@ -280,7 +285,7 @@ def analyze_call(self, call_id: str) -> dict:
 
         # Run Claude
         try:
-            insights = _call_claude(transcript, call_type=call.call_type)
+            summary, insights = _call_claude(transcript, call_type=call.call_type)
         except Exception as exc:
             logger.exception(
                 "analyze_call: Claude call failed — task_id=%s call_id=%s error=%s",
@@ -300,8 +305,10 @@ def analyze_call(self, call_id: str) -> dict:
         # Persist
         inserted_ids = _write_insights(db, call_id, insights)
 
-        # Stamp the call as processed for downstream filtering.
+        # Stamp the call as processed and write the narrative summary.
         call.processed_date = datetime.now(timezone.utc)
+        if summary:
+            call.summary = summary
         db.add(call)
         db.commit()
 

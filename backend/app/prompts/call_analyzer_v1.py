@@ -137,10 +137,10 @@ def build_user_prompt(
         f"{header}"
         f"{transcript_text}\n\n"
         f"## Your task\n\n"
-        f"Extract Voice-of-Customer insights from this transcript per the system "
-        f"prompt's specification. Return a JSON object with `insights` key. No "
-        f"prose. No markdown fences. ALL 22 fields per insight (null where the "
-        f"transcript genuinely doesn't support them)."
+        f"Produce a JSON object with `summary` (4–7 sentence narrative) and "
+        f"`insights` (array of 0–10 objects with ALL 22 fields, null where the "
+        f"transcript genuinely doesn't support them). No prose around the JSON. "
+        f"No markdown fences."
     )
 
 
@@ -151,8 +151,9 @@ def build_user_prompt(
 
 CALL_ANALYZER_OUTPUT_SCHEMA = {
     "type": "object",
-    "required": ["insights"],
+    "required": ["summary", "insights"],
     "properties": {
+        "summary": {"type": "string"},
         "insights": {
             "type": "array",
             "items": {
@@ -190,6 +191,14 @@ CALL_ANALYZER_OUTPUT_SCHEMA = {
 # Two synthetic insights so tests of the downstream pipeline have non-trivial input.
 MOCK_CALL_ANALYZER_OUTPUT = json.dumps(
     {
+        "summary": (
+            "Discovery call between a coach and a prospective lead exploring a "
+            "high-ticket coaching program. The lead voiced two recurring concerns: "
+            "previous programs they started lost momentum, and they wanted a defined "
+            "timeline before committing financially. The coach surfaced two strong "
+            "load-bearing moments around follow-through identity and timebox certainty. "
+            "Outcome: the lead agreed to think it over and book a follow-up."
+        ),
         "insights": [
             {
                 "speaker_name": "Lead",

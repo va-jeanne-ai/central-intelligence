@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { TranscriptUploadWidget } from "@/components/upload/transcript-upload-widget";
 import type { TranscriptUploadResult } from "@/components/upload/transcript-upload-widget";
@@ -160,9 +161,12 @@ export default function SalesCallsPage() {
                     key={call.call_id}
                     className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors"
                   >
-                    <div className="flex-1 min-w-0">
+                    <Link
+                      href={`/sales-calls/${call.call_id}`}
+                      className="flex-1 min-w-0 group"
+                    >
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                        <p className="text-sm font-medium text-gray-900 truncate group-hover:text-indigo-700">
                           {call.call_type ?? "Call"} — {formatDate(call.date)}
                         </p>
                         {call.processed_date && (
@@ -176,10 +180,13 @@ export default function SalesCallsPage() {
                         {call.call_owner ? ` · ${call.call_owner}` : ""}
                         {` · ${call.insights_count} insight${call.insights_count === 1 ? "" : "s"}`}
                       </p>
-                    </div>
+                    </Link>
                     <button
                       type="button"
-                      onClick={() => void downloadTranscript(call.call_id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void downloadTranscript(call.call_id);
+                      }}
                       className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
                     >
                       Download transcript
