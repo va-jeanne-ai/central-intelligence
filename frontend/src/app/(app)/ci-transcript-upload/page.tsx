@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { TranscriptUploadWidget } from "@/components/upload/transcript-upload-widget";
@@ -74,6 +74,16 @@ function StatusCard({ pending, onReady, onDismiss }: StatusCardProps) {
   const [insightsCount, setInsightsCount] = useState<number>(0);
   const [timedOut, setTimedOut] = useState(false);
 
+  // Keep callback in a ref so changes to it don't restart the poll loop.
+  // Without this, every parent re-render would create a new onReady identity,
+  // cancel the in-flight poller, and start a fresh one — which (combined with
+  // the parent reloading the list inside the same callback) caused the card
+  // to never flip to its 'ready' state.
+  const onReadyRef = useRef(onReady);
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
+
   useEffect(() => {
     let cancelled = false;
     const maxAttempts = 36; // ~3 minutes at 5s
@@ -92,7 +102,7 @@ function StatusCard({ pending, onReady, onDismiss }: StatusCardProps) {
           if (pd && pd !== pending.baseline) {
             setProcessedDate(pd);
             setInsightsCount(data.insights.length);
-            onReady(data.insights.length);
+            onReadyRef.current(data.insights.length);
             return;
           }
         } catch {
@@ -107,7 +117,7 @@ function StatusCard({ pending, onReady, onDismiss }: StatusCardProps) {
     return () => {
       cancelled = true;
     };
-  }, [pending.call_id, pending.baseline, onReady]);
+  }, [pending.call_id, pending.baseline]);
 
   const isReady = processedDate !== null;
 
