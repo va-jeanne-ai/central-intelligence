@@ -311,6 +311,9 @@ class ApiClient {
   put = <T>(path: string, body: unknown, options?: RequestOptions): Promise<T> =>
     this.request<T>(path, { method: "PUT", body: JSON.stringify(body) }, options);
 
+  patch = <T>(path: string, body: unknown, options?: RequestOptions): Promise<T> =>
+    this.request<T>(path, { method: "PATCH", body: JSON.stringify(body) }, options);
+
   delete = <T>(path: string, options?: RequestOptions): Promise<T> =>
     this.request<T>(path, { method: "DELETE" }, options);
 }

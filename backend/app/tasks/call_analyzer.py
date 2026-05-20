@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from celery.exceptions import MaxRetriesExceededError
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
@@ -302,13 +302,21 @@ def analyze_call(self, call_id: str) -> dict:
                 )
                 raise
 
-        # Persist
+        # Re-analyze cleanly: drop any prior insights for this call before
+        # writing the new batch. InsightTag rows cascade-delete with their
+        # parent Insight; ContentIdea.insight_id is SET NULL on delete, so
+        # downstream content ideas survive (just unlinked).
+        deleted = db.execute(delete(Insight).where(Insight.call_id == call_id)).rowcount
+        if deleted:
+            logger.info("analyze_call: cleared %d prior insights for call_id=%s", deleted, call_id)
+
         inserted_ids = _write_insights(db, call_id, insights)
 
-        # Stamp the call as processed and write the narrative summary.
+        # Stamp the call as processed and overwrite the narrative summary.
+        # summary is overwritten unconditionally on re-analyze (even to None)
+        # so the UI never shows stale text after a regen.
         call.processed_date = datetime.now(timezone.utc)
-        if summary:
-            call.summary = summary
+        call.summary = summary
         db.add(call)
         db.commit()
 

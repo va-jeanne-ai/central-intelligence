@@ -75,8 +75,10 @@ from app.schemas.ci import (
     SyncResult,
     TagItem,
     TagListResponse,
+    UpdateCallRequest,
     UpdateContentIdeaRequest,
     UpdateContentIdeaResponse,
+    UpdateInsightRequest,
     UpdateMonthlyPreferencesRequest,
     UploadTranscriptRequest,
     UploadTranscriptResponse,
@@ -497,6 +499,49 @@ async def trigger_call_analysis(call_id: str):
 
 
 # ===================================================================
+# 4d. PATCH /ci/calls/{call_id} — inline-edit summary / metadata
+# ===================================================================
+
+
+@router.patch("/calls/{call_id}", response_model=CallDetail)
+async def update_call(
+    call_id: str,
+    body: UpdateCallRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Partial update of a Call's editable fields.
+
+    Used by the call detail page's inline editors. Only fields present in the
+    request body are written — null vs unset is distinguished via
+    ``model_dump(exclude_unset=True)``. Empty string is treated as "clear".
+    """
+    call = await CallRepository(session).get(call_id)
+    if call is None:
+        raise HTTPException(status_code=404, detail="Call not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(call, field, value)
+
+    session.add(call)
+    await session.commit()
+    await session.refresh(call)
+
+    return CallDetail(
+        call_id=call.id,
+        date=call.date,
+        call_type=call.call_type,
+        call_result=call.call_result,
+        call_owner=call.call_owner,
+        transcript_quality=call.transcript_quality,
+        processed_date=call.processed_date,
+        transcript=call.transcript_text,
+        summary=call.summary,
+        created_at=call.created_at,
+    )
+
+
+# ===================================================================
 # 5. GET /ci/insights
 # ===================================================================
 
@@ -640,6 +685,58 @@ async def get_insight(
             for ci in content_ideas
         ],
     )
+
+
+# ===================================================================
+# 6b. PATCH /ci/insights/{insight_id} — inline-edit a single insight
+# ===================================================================
+
+
+@router.patch("/insights/{insight_id}", response_model=InsightBrief)
+async def update_insight(
+    insight_id: str,
+    body: UpdateInsightRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Partial update of an Insight's editable fields shown on the call detail page."""
+    insight_repo = InsightRepository(session)
+    insight = await insight_repo.get(insight_id)
+    if insight is None:
+        raise HTTPException(status_code=404, detail="Insight not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(insight, field, value)
+
+    session.add(insight)
+    await session.commit()
+    await session.refresh(insight)
+
+    return InsightBrief(
+        insight_id=insight.id,
+        insight_type=insight.insight_type,
+        signal_family=insight.signal_family,
+        signal=insight.signal,
+        raw_quote=insight.raw_quote,
+    )
+
+
+# ===================================================================
+# 6c. DELETE /ci/insights/{insight_id} — remove an insight
+# ===================================================================
+
+
+@router.delete("/insights/{insight_id}", status_code=204)
+async def delete_insight(
+    insight_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Hard-delete an Insight. InsightTag rows cascade; ContentIdea links go to NULL."""
+    deleted = await InsightRepository(session).delete(insight_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Insight not found")
+    await session.commit()
+    return None
 
 
 # ===================================================================

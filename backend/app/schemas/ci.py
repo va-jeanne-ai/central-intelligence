@@ -94,6 +94,36 @@ class InsightBrief(BaseModel):
     raw_quote: str | None = None
 
 
+# Inline-edit payloads for the call detail page.
+
+
+class UpdateCallRequest(BaseModel):
+    """Partial-update payload for PATCH /ci/calls/{call_id}.
+
+    All fields optional — only provided keys are written. ``summary`` set to
+    an empty string clears the column; omitting it leaves it untouched.
+    """
+
+    summary: str | None = None
+    call_type: str | None = None
+    call_owner: str | None = None
+    call_result: str | None = None
+
+
+class UpdateInsightRequest(BaseModel):
+    """Partial-update payload for PATCH /ci/insights/{insight_id}.
+
+    Only the four fields shown on the call detail page are editable here.
+    Deeper insight fields can be edited via the standalone insight detail
+    page when that surface exists.
+    """
+
+    signal: str | None = None
+    signal_family: str | None = None
+    insight_type: str | None = None
+    raw_quote: str | None = None
+
+
 class ContentIdeaBrief(BaseModel):
     content_id: str
     content_format: str | None = None
