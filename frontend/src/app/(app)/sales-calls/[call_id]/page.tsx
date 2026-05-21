@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { showError, showWarning } from "@/lib/toast";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,7 +73,11 @@ async function downloadTranscript(callId: string): Promise<void> {
     headers,
   });
   if (!res.ok) {
-    alert(res.status === 404 ? "No transcript on file for this call." : `Download failed (${res.status})`);
+    if (res.status === 404) {
+      showWarning("No transcript on file for this call.");
+    } else {
+      showError(`Download failed (${res.status})`);
+    }
     return;
   }
   const blob = await res.blob();
@@ -144,7 +150,7 @@ function InlineTextEdit({
       await onSave(next);
       setIsEditing(false);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Save failed.");
+      showError(err instanceof Error ? err.message : "Save failed.");
     } finally {
       setIsSaving(false);
     }
@@ -232,7 +238,7 @@ function InlineTextareaEdit({
       await onSave(next);
       setIsEditing(false);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Save failed.");
+      showError(err instanceof Error ? err.message : "Save failed.");
     } finally {
       setIsSaving(false);
     }
@@ -285,6 +291,13 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
   const [detail, setDetail] = useState<CallDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Pending-delete state for the confirm dialog. When non-null, the dialog
+  // is open and confirming deletes this insight id.
+  const [pendingDeleteInsightId, setPendingDeleteInsightId] = useState<
+    string | null
+  >(null);
+  const [isDeletingInsight, setIsDeletingInsight] = useState(false);
   const [isReanalyzing, setIsReanalyzing] = useState(false);
 
   // Track the processed_date at the moment Re-analyze starts so polls can
@@ -335,7 +348,7 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
       }
       await load({ showSpinner: false, commit: true });
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Re-analyze failed.");
+      showError(err instanceof Error ? err.message : "Re-analyze failed.");
     } finally {
       setIsReanalyzing(false);
     }
@@ -367,12 +380,28 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
     );
   }
 
-  async function deleteInsight(insightId: string) {
-    if (!window.confirm("Delete this insight? This cannot be undone.")) return;
-    await apiClient.delete(`/ci/insights/${insightId}`, { silent: true });
-    setDetail((d) =>
-      d ? { ...d, insights: d.insights.filter((i) => i.insight_id !== insightId) } : d,
-    );
+  function deleteInsight(insightId: string) {
+    // Don't delete inline — open the ConfirmDialog and defer the actual
+    // call to confirmDeleteInsight below. Using window.confirm here would
+    // bypass the project's toast/dialog UX (CLAUDE.md rule).
+    setPendingDeleteInsightId(insightId);
+  }
+
+  async function confirmDeleteInsight() {
+    const insightId = pendingDeleteInsightId;
+    if (!insightId) return;
+    setIsDeletingInsight(true);
+    try {
+      await apiClient.delete(`/ci/insights/${insightId}`, { silent: true });
+      setDetail((d) =>
+        d ? { ...d, insights: d.insights.filter((i) => i.insight_id !== insightId) } : d,
+      );
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setIsDeletingInsight(false);
+      setPendingDeleteInsightId(null);
+    }
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -621,6 +650,17 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
           )}
         </section>
       </main>
+
+      <ConfirmDialog
+        open={pendingDeleteInsightId !== null}
+        onClose={() => setPendingDeleteInsightId(null)}
+        onConfirm={() => void confirmDeleteInsight()}
+        title="Delete this insight?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+        loading={isDeletingInsight}
+      />
     </>
   );
 }

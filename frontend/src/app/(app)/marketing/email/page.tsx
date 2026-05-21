@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { showError, showSuccess } from "@/lib/toast";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
@@ -220,6 +221,7 @@ function DraftRow({
   const [nameDraft, setNameDraft] = useState(draft.name);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
 
   // Reset the local rename buffer if the upstream row changes.
@@ -251,10 +253,11 @@ function DraftRow({
     }
   }
 
-  async function handleDelete() {
-    if (!window.confirm(`Delete "${draft.name}"? This can't be undone from the UI.`)) {
-      return;
-    }
+  function handleDelete() {
+    setIsDeleteConfirmOpen(true);
+  }
+
+  async function confirmDelete() {
     setIsDeleting(true);
     try {
       await apiClient.delete(`/email/campaigns/${draft.id}`, { silent: true });
@@ -264,6 +267,7 @@ function DraftRow({
       showError(err instanceof Error ? err.message : "Delete failed.");
     } finally {
       setIsDeleting(false);
+      setIsDeleteConfirmOpen(false);
     }
   }
 
@@ -370,6 +374,16 @@ function DraftRow({
         </div>
       </div>
       {isExpanded && <CampaignDetail c={draft} />}
+      <ConfirmDialog
+        open={isDeleteConfirmOpen}
+        onClose={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={() => void confirmDelete()}
+        title={`Delete "${draft.name}"?`}
+        description="This can't be undone from the UI."
+        confirmLabel="Delete"
+        variant="danger"
+        loading={isDeleting}
+      />
     </div>
   );
 }

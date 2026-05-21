@@ -66,6 +66,16 @@ All frontend pages must use the shared atomic UI components in `frontend/src/com
 - Barrel export available at `@/components/ui` for convenience.
 - Existing skeleton components (`skeleton.tsx`) stay as-is for loading states.
 
+## Pop-up messages — never use native browser dialogs
+
+**Never call `window.alert`, `window.confirm`, or `window.prompt`.** They look like 1998, block the JS thread, and don't match the project's UX. Use these instead:
+
+- **Toasts for transient feedback** — success / error / warning / info messages that auto-dismiss. Import from `@/lib/toast`: `showSuccess`, `showError`, `showWarning`, `showInfo`, `showApiError`.
+- **`ConfirmDialog` for destructive / yes-no decisions** — modal with focus trap and ESC support, lives at `@/components/ui/confirm-dialog`. Pair with a `useState` flag (`isConfirmOpen`) and an async `confirm*()` handler that runs the action then closes the dialog.
+- **Custom modal** for anything more elaborate (multi-field forms, previews). Don't reach for an `alert` as a placeholder.
+
+If you find an existing call to `window.alert/confirm/prompt`, treat it as a bug and fix it in the same change. ESLint isn't configured to catch this — the rule lives here.
+
 ## Project Notes
 
 - `New Documents/` and `template/` are reference material — do not modify without asking.

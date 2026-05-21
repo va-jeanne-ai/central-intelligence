@@ -15,6 +15,7 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { showError, showSuccess } from "@/lib/toast";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type {
   IntegrationDetail,
   TestIntegrationResponse,
@@ -45,6 +46,9 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [testResult, setTestResult] = useState<TestIntegrationResponse | null>(null);
+  // Confirm-dialog state for Disconnect — replaces window.confirm()
+  // (CLAUDE.md rule: never use native popups).
+  const [isDisconnectConfirmOpen, setIsDisconnectConfirmOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -121,9 +125,13 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
     }
   }
 
-  async function handleDisconnect() {
+  function handleDisconnect() {
     if (!detail) return;
-    if (!window.confirm(`Disconnect ${detail.name}? Stored credentials will be deleted.`)) return;
+    setIsDisconnectConfirmOpen(true);
+  }
+
+  async function confirmDisconnect() {
+    if (!detail) return;
     setIsDisconnecting(true);
     try {
       await apiClient.delete(`/integrations/${slug}`, { silent: true });
@@ -134,6 +142,7 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
       showError(err instanceof Error ? err.message : "Disconnect failed.");
     } finally {
       setIsDisconnecting(false);
+      setIsDisconnectConfirmOpen(false);
     }
   }
 
@@ -279,6 +288,17 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
           </Card>
         )}
       </main>
+
+      <ConfirmDialog
+        open={isDisconnectConfirmOpen}
+        onClose={() => setIsDisconnectConfirmOpen(false)}
+        onConfirm={() => void confirmDisconnect()}
+        title={detail ? `Disconnect ${detail.name}?` : "Disconnect?"}
+        description="Stored credentials will be deleted from this app. The connection on the provider's side is not affected."
+        confirmLabel="Disconnect"
+        variant="danger"
+        loading={isDisconnecting}
+      />
     </>
   );
 }

@@ -7,6 +7,7 @@ import { TranscriptUploadWidget } from "@/components/upload/transcript-upload-wi
 import type { TranscriptUploadResult } from "@/components/upload/transcript-upload-widget";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { showError, showWarning } from "@/lib/toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,11 @@ async function downloadTranscript(callId: string): Promise<void> {
     headers,
   });
   if (!res.ok) {
-    alert(res.status === 404 ? "No transcript on file for this call." : `Download failed (${res.status})`);
+    if (res.status === 404) {
+      showWarning("No transcript on file for this call.");
+    } else {
+      showError(`Download failed (${res.status})`);
+    }
     return;
   }
 
