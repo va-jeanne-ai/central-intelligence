@@ -37,6 +37,7 @@ interface EmailData {
   avg_click_rate: number;
   generated_at: string;
   recent_campaigns: EmailCampaignRow[];
+  drafts: EmailCampaignRow[];
 }
 
 // ─── Source pill ──────────────────────────────────────────────────────────────
@@ -200,6 +201,66 @@ function CampaignDetail({ c }: { c: EmailCampaignRow }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function DraftsCard({ drafts }: { drafts: EmailCampaignRow[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  if (drafts.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader
+        title="Drafts"
+        action={
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400">
+              {drafts.length} draft{drafts.length === 1 ? "" : "s"}
+            </span>
+            <Button variant="ghost" size="sm" href="/marketing/email/compose">
+              + New Draft
+            </Button>
+          </div>
+        }
+      />
+      <CardBody noPadding>
+        <div className="divide-y divide-gray-100">
+          {drafts.map((d) => {
+            const isOpen = expandedId === d.id;
+            return (
+              <div key={d.id}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isOpen ? null : d.id)}
+                  className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-gray-50 transition-colors"
+                  aria-expanded={isOpen}
+                >
+                  <span
+                    className={`text-gray-400 text-xs shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                    aria-hidden
+                  >
+                    ▶
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900 truncate">{d.name}</p>
+                      <SourcePill source={d.source} />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                        Draft
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">
+                      {d.subject ?? "(no subject)"}
+                      {d.audience_name && ` · ${d.audience_name}`}
+                    </p>
+                  </div>
+                </button>
+                {isOpen && <CampaignDetail c={d} />}
+              </div>
+            );
+          })}
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -382,6 +443,7 @@ export default function EmailPage() {
         <ComposeCtaCard />
 
         {/* Row 3: Recent campaigns */}
+        <DraftsCard drafts={data?.drafts ?? []} />
         <RecentCampaignsCard campaigns={data?.recent_campaigns ?? []} />
       </main>
     </>

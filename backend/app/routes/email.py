@@ -200,34 +200,36 @@ async def get_email_data(
     repo = EmailCampaignRepository(session)
     stats = await repo.aggregate_stats()
     sent_rows = await repo.find_sent(limit=20)
+    draft_rows = await repo.find_drafts(limit=50)
+
+    def _to_row(row) -> EmailCampaignRow:
+        return EmailCampaignRow(
+            id=str(row.id),
+            name=row.name,
+            subject=row.subject,
+            campaign_type=row.campaign_type,
+            status=row.status,
+            sent_at=row.sent_at.isoformat() if row.sent_at else None,
+            recipients_count=row.recipients_count,
+            open_count=row.open_count,
+            click_count=row.click_count,
+            open_rate=row.open_rate,
+            click_rate=row.click_rate,
+            source=row.source,
+            external_id=row.external_id,
+            audience_name=row.audience_name,
+            segment_text=row.segment_text,
+            body_html=row.body_html,
+            archive_url=row.archive_url,
+        )
 
     return EmailDataResponse(
         campaigns=stats["campaigns"],
         avg_open_rate=stats["avg_open_rate"],
         avg_click_rate=stats["avg_click_rate"],
         generated_at=datetime.now(timezone.utc).isoformat(),
-        recent_campaigns=[
-            EmailCampaignRow(
-                id=str(row.id),
-                name=row.name,
-                subject=row.subject,
-                campaign_type=row.campaign_type,
-                status=row.status,
-                sent_at=row.sent_at.isoformat() if row.sent_at else None,
-                recipients_count=row.recipients_count,
-                open_count=row.open_count,
-                click_count=row.click_count,
-                open_rate=row.open_rate,
-                click_rate=row.click_rate,
-                source=row.source,
-                external_id=row.external_id,
-                audience_name=row.audience_name,
-                segment_text=row.segment_text,
-                body_html=row.body_html,
-                archive_url=row.archive_url,
-            )
-            for row in sent_rows
-        ],
+        recent_campaigns=[_to_row(r) for r in sent_rows],
+        drafts=[_to_row(r) for r in draft_rows],
     )
 
 

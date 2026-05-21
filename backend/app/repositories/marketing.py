@@ -189,6 +189,21 @@ class EmailCampaignRepository(RepositoryBase[EmailCampaign]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_drafts(self, limit: int = 50) -> list[EmailCampaign]:
+        """Return draft campaigns, newest first by updated_at.
+
+        Drafts have no sent_at, so we order by updated_at — the most
+        recently edited drafts sit at the top of the list.
+        """
+        stmt = (
+            self._base_select()
+            .where(EmailCampaign.status == "draft")
+            .order_by(EmailCampaign.updated_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def aggregate_stats(self) -> dict:
         """Return count of sent campaigns and average open/click rates."""
         stmt = (

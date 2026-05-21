@@ -77,3 +77,6 @@ class EmailDataResponse(BaseModel):
     generated_at: str
     # 20 most-recent sent campaigns with their per-row metrics + source badge.
     recent_campaigns: list[EmailCampaignRow] = []
+    # 50 most-recently-edited drafts, newest first. Surfaced on
+    # /marketing/email as a separate section above the sent list.
+    drafts: list[EmailCampaignRow] = []
