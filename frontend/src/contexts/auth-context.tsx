@@ -69,14 +69,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const mockMode = isMockConfigured();
 
-  // Seed React state from the localStorage cache so the first render
-  // already has a populated user when we have one — eliminates the
-  // ~100-300ms "Loading…" flash on every page navigation while
-  // supabase.auth.getSession() round-trips. The cache is identity-only
-  // (no tokens) and self-evicts on expiry. See lib/auth-cache.ts.
+  // Seed `user` from the localStorage cache so the sidebar avatar / name
+  // etc. render with real data on the first paint — no avatar-shaped hole.
+  // `isLoading` stays TRUE until the apiClient also has a valid access
+  // token: consumers gate API calls on `isLoading`, and firing fetches
+  // before the token lands would 401 every cold nav. The token is set in
+  // the useEffect below when supabase.auth.getSession() resolves.
+  // Cache is identity-only (no tokens) and self-evicts on expiry. See
+  // lib/auth-cache.ts.
   const cached = mockMode ? null : readCachedUser();
   const [user, setUser] = useState<AuthUser>(cached as AuthUser);
-  const [isLoading, setIsLoading] = useState(cached === null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // ── Initialisation ─────────────────────────────────────────────────────────
 
