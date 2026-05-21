@@ -8,6 +8,7 @@ import {
   Card,
   CardBody,
   CardHeader,
+  CopyButton,
   FormField,
   FormInput,
   StatusBadge,
@@ -97,7 +98,19 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
       setForm(seeded);
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 2500);
-      showSuccess("Saved — dashboard will refresh in ~30 seconds.");
+      // Toast wording depends on what the user just did. Webhook-only
+      // providers don't trigger a sync — they hand back a URL the user
+      // pastes into the upstream tool. The credential-style providers
+      // (Mailchimp) DO trigger a sync, hence the dashboard refresh note.
+      if (updated.webhook_only) {
+        showSuccess(
+          detail.connected
+            ? "Secret rotated — old URL no longer works."
+            : "Webhook URL generated. Copy it into your provider's webhook config.",
+        );
+      } else {
+        showSuccess("Saved — dashboard will refresh in ~30 seconds.");
+      }
     } catch (err) {
       showError(err instanceof Error ? err.message : "Save failed.");
     } finally {
@@ -175,6 +188,10 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
 
   // Special-case: Google Calendar (OAuth flow not yet wired).
   const isOauthPending = detail.oauth_pending;
+  // Special-case: webhook-receive providers like GHL — no credentials form;
+  // we show the generated webhook URL the user pastes into the upstream
+  // tool, plus Rotate Secret / Disconnect actions.
+  const isWebhookOnly = detail.webhook_only;
 
   return (
     <>
@@ -224,6 +241,71 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
               <Button variant="primary" disabled>
                 Connect with Google (coming soon)
               </Button>
+            </CardBody>
+          </Card>
+        ) : isWebhookOnly ? (
+          // Webhook-receive providers (GHL today, Stripe/Calendly later).
+          // No credentials form — we generate a token server-side and the
+          // user pastes the URL into the upstream tool's webhook config.
+          <Card>
+            <CardHeader title="Webhook URL" />
+            <CardBody className="space-y-4">
+              {!detail.connected ? (
+                <>
+                  <p className="text-sm text-gray-700">
+                    Generate a unique webhook URL for this integration. You&apos;ll
+                    copy it into {detail.name}&apos;s Custom Webhook workflow action.
+                  </p>
+                  <Button onClick={handleSave} disabled={isSaving}>
+                    {isSaving ? "Generating…" : "Generate webhook URL"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-[13px] text-gray-700">
+                    Paste this URL into the URL field of {detail.name}&apos;s
+                    Custom Webhook workflow action. Set the method to{" "}
+                    <span className="font-mono">POST</span>, payload to{" "}
+                    <span className="font-mono">JSON</span>, and map the
+                    contact fields you want to push.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code
+                      className="flex-1 min-w-0 text-[12px] font-mono bg-gray-50 border border-gray-200 rounded-md px-3 py-2 overflow-x-auto whitespace-nowrap text-gray-800"
+                      aria-label="Webhook URL"
+                    >
+                      {detail.values.webhook_url ?? "(no URL)"}
+                    </code>
+                    <CopyButton
+                      text={detail.values.webhook_url ?? ""}
+                      label="Copy"
+                    />
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800">
+                    <strong>Heads up:</strong> the URL contains a secret token.
+                    Treat it like a password. If it leaks, click{" "}
+                    <strong>Rotate Secret</strong> below — the old URL stops
+                    working immediately.
+                  </div>
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button
+                      variant="ghost"
+                      onClick={handleSave}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? "Rotating…" : "Rotate Secret"}
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={handleDisconnect}
+                      disabled={isDisconnecting}
+                      className="ml-auto"
+                    >
+                      {isDisconnecting ? "Disconnecting…" : "Disconnect"}
+                    </Button>
+                  </div>
+                </>
+              )}
             </CardBody>
           </Card>
         ) : (

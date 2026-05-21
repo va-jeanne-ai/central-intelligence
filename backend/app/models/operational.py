@@ -34,6 +34,13 @@ class Lead(Base, TimestampMixin, SoftDeleteMixin):
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Stable upstream identifier from the source provider (e.g. GHL
+    # contact_id). When source + external_id are both present, the lead
+    # webhook upsert dedups on the pair — surviving email-changes and
+    # rename storms. Partial unique index enforces this at the DB level.
+    external_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),

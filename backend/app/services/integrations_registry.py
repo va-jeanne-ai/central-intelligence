@@ -75,6 +75,21 @@ PROVIDERS: dict[str, dict[str, Any]] = {
             ),
         ],
     },
+    "ghl": {
+        "slug": "ghl",
+        "name": "Go High Level",
+        "icon": "🎯",
+        "category": "crm",
+        "status": "available",
+        "description": "Receive leads pushed from GHL workflows via Custom Webhook action. New contacts land on /leads tagged source='ghl'.",
+        "trigger_task": None,  # GHL pushes to us — no scheduled pull
+        # Marker the frontend reads to render the "generated URL + Copy +
+        # Rotate Secret" UI instead of a form. The integrations POST route
+        # also branches on this to generate a token instead of validating
+        # user input.
+        "webhook_only": True,
+        "fields": [],  # All credentials are server-generated; nothing for the user to type.
+    },
     "google_calendar": {
         "slug": "google_calendar",
         "name": "Google Calendar",

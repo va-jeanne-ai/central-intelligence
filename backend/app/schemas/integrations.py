@@ -33,6 +33,10 @@ class ProviderSummary(BaseModel):
     last_synced_at: datetime | None = None
     last_sync_status: str | None = None
     oauth_pending: bool = False
+    # True for providers like GHL where there's no form — the integration
+    # row holds a server-generated webhook token, and the UI shows the
+    # webhook URL + Copy + Rotate Secret instead of a credentials form.
+    webhook_only: bool = False
 
 
 class IntegrationDetail(ProviderSummary):

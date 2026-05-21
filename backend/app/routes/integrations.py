@@ -68,7 +68,20 @@ def _summary_from(provider: dict, row: Integration | None) -> ProviderSummary:
         last_synced_at=row.last_synced_at if row else None,
         last_sync_status=row.last_sync_status if row else None,
         oauth_pending=bool(provider.get("oauth_pending", False)),
+        webhook_only=bool(provider.get("webhook_only", False)),
     )
+
+
+def _ghl_webhook_url(token: str) -> str:
+    """Build the absolute URL the user copies into GHL's Custom Webhook action.
+
+    Uses ``settings.public_api_base_url`` so dev/staging/prod each produce
+    a URL that's actually reachable from GHL. Path matches the route in
+    ``app/routes/webhooks.py``.
+    """
+    from app.config import settings as _settings
+    base = _settings.public_api_base_url.rstrip("/")
+    return f"{base}/api/v1/webhooks/ghl/{token}/leads"
 
 
 def _decrypt_blob(ciphertext: str | None) -> dict[str, str]:
@@ -80,6 +93,70 @@ def _decrypt_blob(ciphertext: str | None) -> dict[str, str]:
     except (ValueError, json.JSONDecodeError) as exc:
         logger.warning("Failed to decrypt integration blob: %s", exc)
         return {}
+
+
+async def _upsert_webhook_only(
+    slug: str,
+    provider: dict,
+    session: AsyncSession,
+    current_user: CurrentUser,
+) -> "IntegrationDetail":
+    """Generate-and-store flow for webhook-only providers (GHL, future Stripe/Calendly).
+
+    Mints a fresh URL-safe token, encrypts it as ``{"webhook_token": ...}``,
+    upserts the integration row with ``status='connected'``. Calling again
+    rotates the token (old URL stops working). Caller already verified
+    ``provider['webhook_only']`` is true.
+    """
+    # Use stdlib secrets module (not our app.services.secrets) for the
+    # token. URL-safe means it slots into the path component without
+    # encoding fiddling on the user's copy-paste.
+    import secrets as _stdlib_secrets
+    import json
+
+    token = _stdlib_secrets.token_urlsafe(32)
+    blob = secrets.encrypt(json.dumps({"webhook_token": token}))
+
+    row = await _get_row(session, slug)
+    if row is None:
+        row = Integration(
+            provider=slug,
+            status="connected",
+            credentials_encrypted=blob,
+            config=None,
+        )
+        session.add(row)
+        logger.info("upsert_webhook_only: INSERT for slug=%s", slug)
+    else:
+        row.status = "connected"
+        row.credentials_encrypted = blob
+        row.config = None
+        row.last_sync_error = None  # rotation clears stale error context
+        logger.info(
+            "upsert_webhook_only: ROTATE for slug=%s row=%s", slug, row.id,
+        )
+
+    await session.commit()
+    await session.refresh(row)
+
+    # Build the detail payload directly (mirrors the form-style upsert path
+    # at the bottom of upsert_integration).
+    values: dict[str, str] = {}
+    if slug == "ghl":
+        values["webhook_url"] = _ghl_webhook_url(token)
+
+    summary = _summary_from(provider, row)
+    detail = IntegrationDetail(
+        **summary.model_dump(),
+        fields=[ProviderFieldSchema(**f) for f in provider.get("fields", [])],
+        values=values,
+        last_sync_error=row.last_sync_error,
+    )
+    logger.info(
+        "upsert_webhook_only: returning detail slug=%s connected=%s",
+        slug, detail.connected,
+    )
+    return detail
 
 
 def _trigger_sync(slug: str) -> str | None:
@@ -139,6 +216,18 @@ async def get_integration(
             else:
                 values[key] = plain  # belt-and-braces — shouldn't happen
 
+    # Webhook-only providers (GHL today, Stripe/Calendly later) surface a
+    # full webhook URL the user copies into the upstream tool. The token is
+    # NOT masked — the URL itself IS the secret, and the user needs the
+    # actual value to paste. (Anyone with access to this auth'd endpoint
+    # already controls the integration.) Rotate Secret regenerates it.
+    if provider.get("webhook_only") and row is not None:
+        blob = _decrypt_blob(row.credentials_encrypted)
+        tok = blob.get("webhook_token")
+        if tok:
+            if slug == "ghl":
+                values["webhook_url"] = _ghl_webhook_url(tok)
+
     summary = _summary_from(provider, row)
     return IntegrationDetail(
         **summary.model_dump(),
@@ -161,6 +250,13 @@ async def upsert_integration(
         raise HTTPException(status_code=404, detail=f"Unknown provider: {slug}")
     if provider["status"] != "available":
         raise HTTPException(status_code=400, detail=f"Provider {slug} is not yet available")
+
+    # Webhook-only providers don't validate user-supplied fields — they
+    # generate a server-side token on connect. Calling this endpoint again
+    # rotates the token (old URL stops working). The form-validation +
+    # encrypt-blob path below is for credential-style providers only.
+    if provider.get("webhook_only"):
+        return await _upsert_webhook_only(slug, provider, session, current_user)
 
     incoming = body.values or {}
     secret_field_keys = secret_keys(slug)

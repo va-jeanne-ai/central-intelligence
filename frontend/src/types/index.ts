@@ -300,6 +300,10 @@ export interface IntegrationSummary {
   last_synced_at: string | null;
   last_sync_status: string | null;
   oauth_pending: boolean;
+  // True for providers like GHL where there's no credentials form —
+  // the integration row holds a server-generated webhook token and the
+  // detail page renders a Copy-URL + Rotate Secret UI instead.
+  webhook_only: boolean;
 }
 
 export interface IntegrationDetail extends IntegrationSummary {

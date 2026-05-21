@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     integrations_encryption_key: str = ""
 
+    # Public base URL for constructing webhook URLs we hand to third parties
+    # (GHL, future Stripe/Calendly, etc.). Local dev uses the default; in
+    # prod set to https://api.<domain> so the user can copy a working URL
+    # straight into GHL's Custom Webhook action. Defaults to the local
+    # uvicorn binding so curl-based verification works out of the box.
+    public_api_base_url: str = "http://localhost:8000"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

@@ -98,6 +98,7 @@ def create_app() -> FastAPI:
     from app.routes.offers import router as offers_router, generate_router as offer_generate_router
     from app.routes.promo_calendar import router as promo_calendar_router
     from app.routes.integrations import router as integrations_router
+    from app.routes.webhooks import router as webhooks_router
 
     # Health check under /api/v1 (prefix applied here).
     app.include_router(health_router, prefix="/api/v1")
@@ -166,6 +167,12 @@ def create_app() -> FastAPI:
     #               POST   /api/v1/integrations/{slug}/test
     #               DELETE /api/v1/integrations/{slug}
     app.include_router(integrations_router, prefix="/api/v1")
+
+    # Inbound webhook receivers — UNAUTHENTICATED (path is exempted in
+    # AuthMiddleware via _EXEMPT_PREFIXES). Per-integration tokens in the
+    # URL path are the auth mechanism. See app/routes/webhooks.py.
+    # Resolves to:  POST /api/v1/webhooks/ghl/{webhook_token}/leads
+    app.include_router(webhooks_router, prefix="/api/v1")
 
     # ICP endpoints under /api/v1 (prefix applied here).
     # Resolves to:  POST /api/v1/icp/generate

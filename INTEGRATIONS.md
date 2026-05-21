@@ -64,6 +64,47 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 
 ---
 
+## Go High Level (GHL) ✅
+
+**What it does today**
+
+Receives leads pushed from GHL via the Custom Webhook workflow action. New contacts land on `/leads` within seconds, tagged `source='ghl'`, deduplicated against future writes by the same contact.
+
+- **Direction:** GHL → CI (push, not pull). Unlike Mailchimp, GHL pushes events natively, so we don't burn API quota polling.
+- **Auth model:** token-in-URL. The integration page generates a URL-safe token (`secrets.token_urlsafe(32)`), stores it Fernet-encrypted in the integrations row, and shows the user the full URL to paste into GHL: `https://<your-api>/api/v1/webhooks/ghl/<token>/leads`. Token comparison uses `secrets.compare_digest` (constant-time). Mismatched tokens return **404** — never 401 — so the URL never confirms its own shape to a probing attacker.
+- **Path:** [`backend/app/routes/webhooks.py`](backend/app/routes/webhooks.py).
+- **Payload tolerance:** GHL's workflow Custom Webhook sends whatever the user mapped, and field names vary across triggers (Form Submitted vs Contact Created vs Tag Added). The endpoint accepts a raw dict and reads from a `GHL_FIELD_VARIANTS` table (`email`/`Email`/`contact_email`, `contact_id`/`contactId`/`id`, etc.) — first hit wins. The full raw payload is JSON-stringified into `lead.notes` so nothing's lost downstream.
+- **Dedup order:** `(source='ghl', external_id=contact_id)` first, then `email` (lowercased + stripped). Partial unique index on `(source, external_id)` enforces this at the DB level.
+- **Partial updates are safe:** A GHL "tag added" trigger fires with just `contact_id` + `tags`. The upsert path only overwrites fields the payload contains; the existing name/phone/status survive. Email is one-way too (only filled if previously null) — mid-life email changes are rare and dangerous to auto-apply.
+- **Rotation:** the **Rotate Secret** button on the integration page generates a fresh token. The old URL stops working immediately (GHL will start getting 404s). User pastes the new URL back into GHL.
+- **Last-sync stamp:** every successful webhook hit updates `integration.last_synced_at + last_sync_status='ok'`. Parse failures stamp `'error'` + the message but still return 200 — GHL retries aggressively on non-2xx and we don't want a single malformed payload to retry-storm.
+- **Auth-middleware bypass:** `/api/v1/webhooks/` is in `_EXEMPT_PREFIXES` ([`backend/app/middleware/auth.py`](backend/app/middleware/auth.py)). Third parties don't have JWTs; the path-token comparison inside the route is the auth check.
+
+**Surfaces it powers today**
+
+| Surface | What it shows |
+|---|---|
+| [`/leads`](frontend/src/app/(app)/leads/page.tsx) | Every pushed GHL contact appears as a row, `source='ghl'`. KPI cards (`/leads/stats`) fill in once leads start arriving. |
+| [`/integrations/ghl`](frontend/src/app/(app)/integrations/[slug]/page.tsx) | Webhook URL in a copyable code block, Rotate Secret + Disconnect actions, "Last synced" timestamp updating on every webhook hit. |
+
+**What it could power but doesn't yet**
+
+- **Appointments webhook** — a second endpoint `POST /webhooks/ghl/appointments` to feed the `appointments` table. GHL has appointment-booked / -rescheduled / -cancelled triggers. Would populate the Sales Calls "next 7 days" surface.
+- **Tags as a real `lead_tags` table** — today GHL tags land inside `notes` JSON. A dedicated `lead_tags` table would unlock "all leads tagged 'hot-lead'" queries from the Marketing Director chat.
+- **Custom-field mapping UI** — let the user map their GHL custom fields (LTV, lead score, etc.) into specific Lead columns instead of stuffing them into `notes`. Mailchimp-style "field schema" approach.
+- **Reverse sync (CI → GHL)** — push CI-side enrichments back into GHL. Examples: lead score from the call analyzer, "best contact time" from the calendar integration. Requires real GHL API OAuth — significant scope.
+- **Multi-location support** — GHL has `location_id` for agencies running sub-accounts. Today we ignore it (single integration row per provider). A multi-location version would add `location_id` to the leads table and route incoming contacts accordingly.
+
+**Operational notes**
+
+- **Setup in GHL:** Workflows → Add Action → Custom Webhook → paste URL → Method `POST` → Body type `JSON` → map the contact fields. Done.
+- **Test without GHL:** `curl -X POST '<webhook_url>' -H 'Content-Type: application/json' -d '{"contact_id":"test1","email":"a@b.com","firstName":"Test"}'` → expect 200 `{"ok":true}` → check `/leads`.
+- **Token rotation:** the old URL stops working the instant Rotate Secret is clicked. Don't rotate during business hours unless you've already updated the URL in GHL. (If you do, GHL retries for ~24h, so updating shortly after is fine.)
+- **`public_api_base_url` setting** — defaults to `http://localhost:8000`. In prod, set this in `.env` to the externally-reachable URL (e.g. `https://api.centralintelligence.ai`) or the URL the user copies won't be reachable from GHL's servers.
+- **No GHL credentials are stored.** We only store the webhook token we generated. Disconnecting deletes the token; we never had GHL's API key in the first place.
+
+---
+
 ## Google Calendar 🟡
 
 **What it does today**
