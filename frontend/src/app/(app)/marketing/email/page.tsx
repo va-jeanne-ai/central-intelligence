@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { showError, showSuccess } from "@/lib/toast";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
@@ -204,8 +206,180 @@ function CampaignDetail({ c }: { c: EmailCampaignRow }) {
   );
 }
 
-function DraftsCard({ drafts }: { drafts: EmailCampaignRow[] }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+function DraftRow({
+  draft,
+  onChange,
+}: {
+  draft: EmailCampaignRow;
+  onChange: () => Promise<void> | void;
+}) {
+  const router = useRouter();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState(draft.name);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
+
+  // Reset the local rename buffer if the upstream row changes.
+  useEffect(() => {
+    if (!isRenaming) setNameDraft(draft.name);
+  }, [draft.name, isRenaming]);
+
+  async function saveRename() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed || trimmed === draft.name) {
+      setIsRenaming(false);
+      setNameDraft(draft.name);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await apiClient.patch(
+        `/email/campaigns/${draft.id}`,
+        { name: trimmed },
+        { silent: true },
+      );
+      showSuccess("Renamed.");
+      setIsRenaming(false);
+      await onChange();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Rename failed.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`Delete "${draft.name}"? This can't be undone from the UI.`)) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await apiClient.delete(`/email/campaigns/${draft.id}`, { silent: true });
+      showSuccess("Draft deleted.");
+      await onChange();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  async function handleDuplicate() {
+    setIsDuplicating(true);
+    try {
+      const res = await apiClient.post<{ id: string }>(
+        `/email/campaigns/${draft.id}/duplicate`,
+        {},
+        { silent: true },
+      );
+      showSuccess("Draft duplicated. Opening the copy…");
+      router.push(`/marketing/email/compose?draft_id=${res.id}`);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Duplicate failed.");
+      setIsDuplicating(false);
+    }
+    // Don't reset isDuplicating on success — we're navigating away.
+  }
+
+  return (
+    <div>
+      <div className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          className="shrink-0 text-gray-400 text-xs hover:text-gray-600"
+          aria-label="Preview draft"
+          aria-expanded={isExpanded}
+        >
+          <span
+            className={`inline-block transition-transform ${isExpanded ? "rotate-90" : ""}`}
+          >
+            ▶
+          </span>
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            {isRenaming ? (
+              <input
+                type="text"
+                value={nameDraft}
+                autoFocus
+                disabled={isSaving}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void saveRename();
+                  if (e.key === "Escape") {
+                    setIsRenaming(false);
+                    setNameDraft(draft.name);
+                  }
+                }}
+                onBlur={() => void saveRename()}
+                className="text-sm font-medium text-gray-900 border border-indigo-300 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-300/50 min-w-[200px]"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsRenaming(true)}
+                className="text-sm font-medium text-gray-900 truncate hover:bg-amber-50/60 rounded px-1 -mx-1 transition-colors text-left"
+                title="Click to rename"
+              >
+                {draft.name}
+              </button>
+            )}
+            <SourcePill source={draft.source} />
+            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+              Draft
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5 truncate">
+            {draft.subject ?? "(no subject)"}
+            {draft.audience_name && ` · ${draft.audience_name}`}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDuplicate}
+            disabled={isDuplicating}
+            title="Duplicate as a new draft"
+          >
+            {isDuplicating ? "…" : "Duplicate"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            href={`/marketing/email/compose?draft_id=${draft.id}`}
+          >
+            Edit
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            title="Delete draft"
+          >
+            {isDeleting ? "…" : "Delete"}
+          </Button>
+        </div>
+      </div>
+      {isExpanded && <CampaignDetail c={draft} />}
+    </div>
+  );
+}
+
+function DraftsCard({
+  drafts,
+  onChange,
+}: {
+  drafts: EmailCampaignRow[];
+  onChange: () => Promise<void> | void;
+}) {
   if (drafts.length === 0) return null;
   return (
     <Card>
@@ -224,50 +398,9 @@ function DraftsCard({ drafts }: { drafts: EmailCampaignRow[] }) {
       />
       <CardBody noPadding>
         <div className="divide-y divide-gray-100">
-          {drafts.map((d) => {
-            const isOpen = expandedId === d.id;
-            return (
-              <div key={d.id}>
-                <div className="w-full px-5 py-3 flex items-center gap-4 hover:bg-gray-50 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId(isOpen ? null : d.id)}
-                    className="flex-1 min-w-0 flex items-center gap-4 text-left"
-                    aria-expanded={isOpen}
-                    aria-label="Preview draft"
-                  >
-                    <span
-                      className={`text-gray-400 text-xs shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
-                      aria-hidden
-                    >
-                      ▶
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium text-gray-900 truncate">{d.name}</p>
-                        <SourcePill source={d.source} />
-                        <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
-                          Draft
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-0.5 truncate">
-                        {d.subject ?? "(no subject)"}
-                        {d.audience_name && ` · ${d.audience_name}`}
-                      </p>
-                    </div>
-                  </button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    href={`/marketing/email/compose?draft_id=${d.id}`}
-                  >
-                    Edit
-                  </Button>
-                </div>
-                {isOpen && <CampaignDetail c={d} />}
-              </div>
-            );
-          })}
+          {drafts.map((d) => (
+            <DraftRow key={d.id} draft={d} onChange={onChange} />
+          ))}
         </div>
       </CardBody>
     </Card>
@@ -395,27 +528,24 @@ export default function EmailPage() {
   const [data, setData] = useState<EmailData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Lifted so child cards can trigger a refresh (after delete / duplicate /
+  // rename). Stays stable across renders via useCallback so it's safe to
+  // pass as a prop without re-mounting children every render.
+  const refresh = useCallback(async () => {
+    try {
+      const result = await apiClient.get<EmailData>("/email", { silent: true });
+      setData(result);
+    } catch {
+      // On error, data stays as-is — keep showing the previous snapshot.
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (authLoading) return;
-
-    let cancelled = false;
-
-    async function fetchData(): Promise<void> {
-      try {
-        const result = await apiClient.get<EmailData>("/email", {
-          silent: true,
-        });
-        if (!cancelled) setData(result);
-      } catch {
-        // On error, data stays null — page renders with "—" fallbacks.
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    }
-
-    void fetchData();
-    return () => { cancelled = true; };
-  }, [authLoading]);
+    void refresh();
+  }, [authLoading, refresh]);
 
   if (isLoading) {
     return (
@@ -453,7 +583,7 @@ export default function EmailPage() {
         <ComposeCtaCard />
 
         {/* Row 3: Recent campaigns */}
-        <DraftsCard drafts={data?.drafts ?? []} />
+        <DraftsCard drafts={data?.drafts ?? []} onChange={refresh} />
         <RecentCampaignsCard campaigns={data?.recent_campaigns ?? []} />
       </main>
     </>

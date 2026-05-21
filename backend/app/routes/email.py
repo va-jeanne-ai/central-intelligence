@@ -366,3 +366,104 @@ async def update_campaign(
         status=row.status,
         source=row.source or "manual",
     )
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/v1/email/campaigns/{id}  — soft-delete a draft
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/campaigns/{campaign_id}", status_code=204)
+async def delete_campaign(
+    campaign_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Soft-delete a draft campaign.
+
+    Sets `deleted_at` (the SoftDeleteMixin column) rather than removing
+    the row, so it's recoverable from the DB if needed. Sent campaigns
+    are protected — deleting historical metrics is a different
+    operation and not exposed here.
+    """
+    from uuid import UUID
+    try:
+        uid = UUID(campaign_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    repo = EmailCampaignRepository(session)
+    row = await repo.get(uid)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if row.status != "draft":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete campaign in status={row.status!r}; only drafts can be deleted via this surface.",
+        )
+
+    await repo.soft_delete(uid)
+    await session.commit()
+
+    logger.info(
+        "delete_campaign — user=%s id=%s", current_user.id, row.id,
+    )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/email/campaigns/{id}/duplicate  — copy a draft
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/campaigns/{campaign_id}/duplicate",
+    response_model=CreateCampaignDraftResponse,
+    status_code=201,
+)
+async def duplicate_campaign(
+    campaign_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CreateCampaignDraftResponse:
+    """Clone an existing campaign as a new draft.
+
+    The clone always starts in status='draft' regardless of the source's
+    status — duplicating a sent campaign is a legitimate "I want to send
+    something similar" workflow. We copy the editable content but reset
+    metrics/timestamps and append "(copy)" to the name so the user can
+    spot it in the list.
+    """
+    from uuid import UUID
+    try:
+        uid = UUID(campaign_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    repo = EmailCampaignRepository(session)
+    src = await repo.get(uid)
+    if src is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    clone = await repo.create(
+        name=f"{src.name} (copy)",
+        subject=src.subject,
+        body_html=src.body_html,
+        audience_name=src.audience_name,
+        segment_text=src.segment_text,
+        campaign_type=src.campaign_type,
+        blocks_json=src.blocks_json,
+        status="draft",
+        source="manual",
+    )
+    await session.commit()
+
+    logger.info(
+        "duplicate_campaign — user=%s src=%s clone=%s",
+        current_user.id, src.id, clone.id,
+    )
+    return CreateCampaignDraftResponse(
+        id=str(clone.id),
+        status=clone.status,
+        source=clone.source or "manual",
+    )
