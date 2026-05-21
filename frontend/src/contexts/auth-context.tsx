@@ -11,6 +11,11 @@ import { useRouter } from "next/navigation";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { apiClient } from "@/lib/api-client";
+import {
+  clearCachedUser,
+  readCachedUser,
+  writeCachedUser,
+} from "@/lib/auth-cache";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,8 +69,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const mockMode = isMockConfigured();
 
-  const [user, setUser] = useState<AuthUser>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Seed React state from the localStorage cache so the first render
+  // already has a populated user when we have one — eliminates the
+  // ~100-300ms "Loading…" flash on every page navigation while
+  // supabase.auth.getSession() round-trips. The cache is identity-only
+  // (no tokens) and self-evicts on expiry. See lib/auth-cache.ts.
+  const cached = mockMode ? null : readCachedUser();
+  const [user, setUser] = useState<AuthUser>(cached as AuthUser);
+  const [isLoading, setIsLoading] = useState(cached === null);
 
   // ── Initialisation ─────────────────────────────────────────────────────────
 
@@ -89,6 +100,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.access_token) {
         apiClient.setToken(session.access_token);
       }
+      if (session?.user) {
+        writeCachedUser(session.user, session);
+      } else {
+        // No live session — drop any stale cache (e.g. user signed out in
+        // another tab, refresh token expired).
+        clearCachedUser();
+      }
       setIsLoading(false);
     });
 
@@ -101,6 +119,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         apiClient.setToken(session.access_token);
       } else {
         apiClient.clearToken();
+      }
+      // Mirror the cache against the live session for SIGNED_IN,
+      // TOKEN_REFRESHED, USER_UPDATED (fresh write) and SIGNED_OUT (clear).
+      if (session?.user) {
+        writeCachedUser(session.user, session);
+      } else {
+        clearCachedUser();
       }
     });
 
@@ -162,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     apiClient.clearToken();
+    clearCachedUser();
     setUser(null);
     router.push("/login");
   }, [mockMode, router]);
