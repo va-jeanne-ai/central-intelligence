@@ -20,7 +20,9 @@ from uuid import uuid4
 import httpx
 from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from app.models.integration import Integration
 from app.models.marketing import EmailCampaign
 from app.services import mailchimp_client
 from app.tasks.celery_app import celery_app
@@ -33,6 +35,34 @@ _SEED_CAMPAIGNS = [
     {"name": "New Program Launch", "subject": "Introducing: Scale Your Practice", "campaign_type": "broadcast", "status": "sent", "recipients_count": 3100, "open_count": 1178, "click_count": 341, "unsubscribe_count": 25, "bounce_count": 15, "open_rate": 38.0, "click_rate": 11.0},
     {"name": "Re-engagement Sequence", "subject": "We miss you! Here's what's new", "campaign_type": "sequence", "status": "sent", "recipients_count": 890, "open_count": 178, "click_count": 45, "unsubscribe_count": 8, "bounce_count": 3, "open_rate": 20.0, "click_rate": 5.1},
 ]
+
+
+def _stamp_integration_sync(
+    db: Session,
+    provider: str,
+    *,
+    when: datetime,
+    status: str,
+    error: str | None = None,
+) -> None:
+    """Update integrations.{last_synced_at, last_sync_status, last_sync_error}.
+
+    Only writes when a row already exists for the provider — we don't want a
+    seed-only run to create an integration record the user never configured.
+    Best-effort: any DB error is logged and swallowed so the parent task
+    completes normally.
+    """
+    try:
+        row = db.execute(
+            select(Integration).where(Integration.provider == provider)
+        ).scalar_one_or_none()
+        if row is None:
+            return
+        row.last_synced_at = when
+        row.last_sync_status = status
+        row.last_sync_error = error
+    except Exception as exc:
+        logger.warning("Failed to stamp integration sync for %s: %s", provider, exc)
 
 
 def _upsert_campaign(db, campaign_data: dict, sent_at_default: datetime) -> None:
@@ -87,6 +117,7 @@ def update_email_stats(self) -> dict:
             source = "seed"
             campaigns_to_write: list[dict] = []
 
+            mailchimp_error: str | None = None
             if mailchimp_client.is_configured():
                 try:
                     rows = mailchimp_client.fetch_normalised_campaigns(limit=50)
@@ -127,12 +158,27 @@ def update_email_stats(self) -> dict:
                         "Mailchimp fetch failed — falling back to seed (task_id=%s): %s",
                         task_id, exc,
                     )
+                    mailchimp_error = str(exc)[:500]
 
             if source == "seed":
                 campaigns_to_write = [dict(c) for c in _SEED_CAMPAIGNS]
 
             for campaign_data in campaigns_to_write:
                 _upsert_campaign(db, campaign_data, sent_at_default=now)
+
+            # Stamp the integration row with this sync's outcome so the UI's
+            # "Last synced" / "Last sync error" surface reflects reality.
+            # Only when the user has actually configured Mailchimp via the
+            # integrations page — we don't want a pure-seed run to fabricate
+            # an integration record.
+            if mailchimp_client.is_configured():
+                _stamp_integration_sync(
+                    db,
+                    "mailchimp",
+                    when=now,
+                    status="ok" if mailchimp_error is None and source == "mailchimp" else "error",
+                    error=mailchimp_error,
+                )
 
             db.commit()
             checked = len(campaigns_to_write)
