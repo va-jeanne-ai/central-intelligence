@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import {
   type BlockType,
 } from "@/components/email/blocks/types";
 import {
+  decodeHtml,
   escapeHtml,
   renderBlocksToHtml,
 } from "@/components/email/blocks/render";
@@ -35,6 +36,19 @@ interface CreateCampaignDraftResponse {
   id: string;
   status: string;
   source: string;
+}
+
+interface CampaignDetail {
+  id: string;
+  name: string;
+  subject: string | null;
+  body_html: string;
+  audience_name: string | null;
+  segment_text: string | null;
+  campaign_type: string | null;
+  status: string;
+  source: string | null;
+  blocks_json: string | null;
 }
 
 // ─── Type-picker tiles ────────────────────────────────────────────────────────
@@ -74,6 +88,8 @@ const TYPE_OPTIONS: TypeOption[] = [
 
 export default function EmailComposePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const draftIdParam = searchParams.get("draft_id");
 
   // Flow
   const [step, setStep] = useState<Step>("type");
@@ -97,6 +113,84 @@ export default function EmailComposePage() {
   // I/O
   const [isSaving, setIsSaving] = useState(false);
   const [isAssisting, setIsAssisting] = useState(false);
+
+  // Editing-existing-draft state
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [isLoadingDraft, setIsLoadingDraft] = useState(false);
+  const [legacyDraftNotice, setLegacyDraftNotice] = useState<string | null>(
+    null,
+  );
+
+  // ── Load an existing draft when ?draft_id=... is in the URL ────────────────
+
+  const loadDraft = useCallback(async (draftId: string) => {
+    setIsLoadingDraft(true);
+    setLegacyDraftNotice(null);
+    try {
+      const data = await apiClient.get<CampaignDetail>(
+        `/email/campaigns/${draftId}`,
+        { silent: true },
+      );
+      // Hydrate metadata
+      setEditingDraftId(data.id);
+      setName(data.name ?? "");
+      setSubject(data.subject ?? "");
+      setSegment(data.audience_name ?? "");
+
+      const type =
+        (data.campaign_type as CampaignType | null) ?? "regular";
+      setCampaignType(type);
+      setStep("edit");
+
+      if (type === "plain_text") {
+        // body_html for plain-text drafts is wrapped in <pre>...</pre> by the
+        // save handler. Pull the inner text back out.
+        const match = data.body_html.match(/<pre[^>]*>([\s\S]*)<\/pre>/);
+        setPlainText(
+          match ? decodeHtml(match[1]) : decodeHtml(data.body_html ?? ""),
+        );
+        setBlocks([]);
+      } else if (data.blocks_json) {
+        try {
+          const parsed = JSON.parse(data.blocks_json) as Block[];
+          if (Array.isArray(parsed)) {
+            setBlocks(parsed);
+            setLegacyDraftNotice(null);
+          } else {
+            setBlocks([]);
+            setLegacyDraftNotice(
+              "This draft's stored block data was malformed. Starting with an empty canvas.",
+            );
+          }
+        } catch {
+          setBlocks([]);
+          setLegacyDraftNotice(
+            "This draft's stored block data couldn't be read. Starting with an empty canvas.",
+          );
+        }
+      } else {
+        // Legacy draft saved before block editing existed.
+        setBlocks([]);
+        setLegacyDraftNotice(
+          "This draft was saved before block editing was added. Start fresh, or copy from the preview shown on /marketing/email.",
+        );
+      }
+      setSelectedBlockIndex(null);
+    } catch (err) {
+      showError(
+        err instanceof Error ? err.message : "Couldn't load that draft.",
+      );
+      router.replace("/marketing/email/compose");
+    } finally {
+      setIsLoadingDraft(false);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (draftIdParam && draftIdParam !== editingDraftId) {
+      void loadDraft(draftIdParam);
+    }
+  }, [draftIdParam, editingDraftId, loadDraft]);
 
   // ── Step transitions ───────────────────────────────────────────────────────
 
@@ -229,25 +323,42 @@ export default function EmailComposePage() {
   async function handleSaveDraft() {
     if (isSaving) return;
 
-    const finalBody =
-      campaignType === "plain_text"
-        ? `<pre style="font-family:inherit;white-space:pre-wrap;margin:0;">${escapeHtml(plainText)}</pre>`
-        : renderBlocksToHtml(blocks);
+    const isPlain = campaignType === "plain_text";
+    const finalBody = isPlain
+      ? `<pre style="font-family:inherit;white-space:pre-wrap;margin:0;">${escapeHtml(plainText)}</pre>`
+      : renderBlocksToHtml(blocks);
+
+    // Plain-text drafts don't carry a block list — leave blocks_json null.
+    // HTML drafts persist their block array so a later edit round-trips
+    // cleanly via the GET /campaigns/{id} → setBlocks(blocks_json) flow.
+    const blocksJsonPayload = isPlain ? null : JSON.stringify(blocks);
+
+    const payload = {
+      name: name.trim() || subject.trim() || "Untitled draft",
+      subject: subject.trim() || null,
+      body_html: finalBody,
+      audience_name: segment.trim() || null,
+      campaign_type: campaignType,
+      blocks_json: blocksJsonPayload,
+    };
 
     setIsSaving(true);
     try {
-      await apiClient.post<CreateCampaignDraftResponse>(
-        "/email/campaigns",
-        {
-          name: name.trim() || subject.trim() || "Untitled draft",
-          subject: subject.trim() || null,
-          body_html: finalBody,
-          audience_name: segment.trim() || null,
-          campaign_type: campaignType,
-        },
-        { silent: true },
-      );
-      showSuccess("Draft saved.");
+      if (editingDraftId) {
+        await apiClient.patch<CreateCampaignDraftResponse>(
+          `/email/campaigns/${editingDraftId}`,
+          payload,
+          { silent: true },
+        );
+        showSuccess("Draft updated.");
+      } else {
+        await apiClient.post<CreateCampaignDraftResponse>(
+          "/email/campaigns",
+          payload,
+          { silent: true },
+        );
+        showSuccess("Draft saved.");
+      }
       router.push("/marketing/email");
     } catch (err) {
       showError(err instanceof Error ? err.message : "Save failed.");
@@ -264,14 +375,30 @@ export default function EmailComposePage() {
 
       <main className="flex-1 overflow-y-auto p-7 space-y-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Compose Email</h1>
+          <h1 className="text-xl font-bold text-gray-900">
+            {editingDraftId ? "Edit Draft" : "Compose Email"}
+          </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Pick a campaign type, edit the content block-by-block, save as a draft. Sending via Mailchimp coming soon.
+            {editingDraftId
+              ? "Editing an existing draft. Your changes update the same draft on save."
+              : "Pick a campaign type, edit the content block-by-block, save as a draft. Sending via Mailchimp coming soon."}
           </p>
         </div>
 
-        {/* ── Step 1: Type picker ──────────────────────────────────────────── */}
-        {step === "type" && (
+        {/* Loading indicator while draft is being fetched */}
+        {isLoadingDraft && (
+          <p className="text-sm text-gray-400">Loading draft…</p>
+        )}
+
+        {/* Legacy-draft notice — older drafts without blocks_json */}
+        {legacyDraftNotice && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-[13px] text-amber-800">
+            {legacyDraftNotice}
+          </div>
+        )}
+
+        {/* ── Step 1: Type picker (hidden when editing an existing draft) ─── */}
+        {step === "type" && !editingDraftId && (
           <section aria-label="Choose campaign type">
             <h2 className="text-[11px] font-bold tracking-widest uppercase text-emerald-600 mb-3">
               Step 1 — Choose campaign type
@@ -409,7 +536,11 @@ export default function EmailComposePage() {
             {/* Actions */}
             <div className="flex items-center gap-2 mt-5">
               <Button onClick={handleSaveDraft} disabled={isSaving}>
-                {isSaving ? "Saving…" : "Save Draft"}
+                {isSaving
+                  ? "Saving…"
+                  : editingDraftId
+                    ? "Update Draft"
+                    : "Save Draft"}
               </Button>
               <Button
                 variant="primary"

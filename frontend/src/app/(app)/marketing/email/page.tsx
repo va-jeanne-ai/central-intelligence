@@ -228,32 +228,42 @@ function DraftsCard({ drafts }: { drafts: EmailCampaignRow[] }) {
             const isOpen = expandedId === d.id;
             return (
               <div key={d.id}>
-                <button
-                  type="button"
-                  onClick={() => setExpandedId(isOpen ? null : d.id)}
-                  className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-gray-50 transition-colors"
-                  aria-expanded={isOpen}
-                >
-                  <span
-                    className={`text-gray-400 text-xs shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
-                    aria-hidden
+                <div className="w-full px-5 py-3 flex items-center gap-4 hover:bg-gray-50 transition-colors">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(isOpen ? null : d.id)}
+                    className="flex-1 min-w-0 flex items-center gap-4 text-left"
+                    aria-expanded={isOpen}
+                    aria-label="Preview draft"
                   >
-                    ▶
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium text-gray-900 truncate">{d.name}</p>
-                      <SourcePill source={d.source} />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
-                        Draft
-                      </span>
+                    <span
+                      className={`text-gray-400 text-xs shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                      aria-hidden
+                    >
+                      ▶
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-gray-900 truncate">{d.name}</p>
+                        <SourcePill source={d.source} />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                          Draft
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">
+                        {d.subject ?? "(no subject)"}
+                        {d.audience_name && ` · ${d.audience_name}`}
+                      </p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5 truncate">
-                      {d.subject ?? "(no subject)"}
-                      {d.audience_name && ` · ${d.audience_name}`}
-                    </p>
-                  </div>
-                </button>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    href={`/marketing/email/compose?draft_id=${d.id}`}
+                  >
+                    Edit
+                  </Button>
+                </div>
                 {isOpen && <CampaignDetail c={d} />}
               </div>
             );

@@ -45,6 +45,24 @@ export function escapeHtml(input: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Reverse of escapeHtml — used when round-tripping plain-text drafts.
+ * Save wraps plain text in `<pre>${escapeHtml(text)}</pre>`; load
+ * extracts the inner and calls this to get the original back.
+ *
+ * The ordering matters: `&amp;` must be decoded LAST (otherwise we'd
+ * re-decode literal sequences in the user's text). Same constraint as
+ * forward escape, mirrored.
+ */
+export function decodeHtml(input: string): string {
+  return input
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
 // ─── Scaffold ─────────────────────────────────────────────────────────────────
 // Outer grey body → centred 620px white card with rounded corners + shadow.
 // Same shape every email has — block list slots into the inner <table>.

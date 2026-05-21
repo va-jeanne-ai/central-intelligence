@@ -21,6 +21,7 @@ from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.repositories.marketing import EmailCampaignRepository
 from app.schemas.email import (
+    CampaignDetailResponse,
     CreateCampaignDraftRequest,
     CreateCampaignDraftResponse,
     EmailAnalyzeRequest,
@@ -29,6 +30,7 @@ from app.schemas.email import (
     EmailDataResponse,
     EmailDraftRequest,
     EmailDraftResponse,
+    UpdateCampaignDraftRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -253,6 +255,7 @@ async def create_campaign_draft(
         audience_name=body.audience_name,
         segment_text=body.segment_text,
         campaign_type=body.campaign_type,
+        blocks_json=body.blocks_json,
         status="draft",
         source="manual",
     )
@@ -265,4 +268,101 @@ async def create_campaign_draft(
         id=str(instance.id),
         status=instance.status,
         source=instance.source or "manual",
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/email/campaigns/{id}  — load a draft for editing
+# ---------------------------------------------------------------------------
+
+
+@router.get("/campaigns/{campaign_id}", response_model=CampaignDetailResponse)
+async def get_campaign(
+    campaign_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CampaignDetailResponse:
+    """Load a single campaign by id.
+
+    Used by the compose page when opening an existing draft for editing —
+    the response carries blocks_json so the page builder can hydrate its
+    state. Legacy drafts (saved before block editing) have blocks_json=null;
+    the compose page handles that by mounting an empty canvas with a notice.
+    """
+    from uuid import UUID
+    try:
+        uid = UUID(campaign_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    repo = EmailCampaignRepository(session)
+    row = await repo.get(uid)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    return CampaignDetailResponse(
+        id=str(row.id),
+        name=row.name,
+        subject=row.subject,
+        body_html=row.body_html or "",
+        audience_name=row.audience_name,
+        segment_text=row.segment_text,
+        campaign_type=row.campaign_type,
+        status=row.status,
+        source=row.source,
+        blocks_json=row.blocks_json,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/v1/email/campaigns/{id}  — update an existing draft in place
+# ---------------------------------------------------------------------------
+
+
+@router.patch("/campaigns/{campaign_id}", response_model=CreateCampaignDraftResponse)
+async def update_campaign(
+    campaign_id: str,
+    body: UpdateCampaignDraftRequest,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CreateCampaignDraftResponse:
+    """Partial-update a campaign draft.
+
+    Only fields present in the request body are written (Pydantic v2's
+    model_dump(exclude_unset=True) distinguishes missing vs. explicit null).
+    Refuses to touch rows where status != 'draft' — sent/sending campaigns
+    are read-only via this surface.
+    """
+    from uuid import UUID
+    try:
+        uid = UUID(campaign_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    repo = EmailCampaignRepository(session)
+    row = await repo.get(uid)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if row.status != "draft":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot edit campaign in status={row.status!r}; only drafts are editable.",
+        )
+
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(row, field, value)
+
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+
+    logger.info(
+        "update_campaign — user=%s id=%s fields=%s",
+        current_user.id, row.id, list(updates.keys()),
+    )
+    return CreateCampaignDraftResponse(
+        id=str(row.id),
+        status=row.status,
+        source=row.source or "manual",
     )

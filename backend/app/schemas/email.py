@@ -38,12 +38,49 @@ class CreateCampaignDraftRequest(BaseModel):
     audience_name: str | None = None
     segment_text: str | None = None
     campaign_type: str | None = None  # "regular" | "plain_text" | "template"
+    # JSON-serialized Block[] from the page builder. When present, lets
+    # the compose page round-trip via PATCH /campaigns/{id}.
+    blocks_json: str | None = None
 
 
 class CreateCampaignDraftResponse(BaseModel):
     id: str
     status: str
     source: str
+
+
+class UpdateCampaignDraftRequest(BaseModel):
+    """Payload for PATCH /api/v1/email/campaigns/{id} — partial draft update.
+
+    All fields optional; only provided ones overwrite. Empty string clears.
+    """
+
+    name: str | None = None
+    subject: str | None = None
+    body_html: str | None = None
+    audience_name: str | None = None
+    segment_text: str | None = None
+    campaign_type: str | None = None
+    blocks_json: str | None = None
+
+
+class CampaignDetailResponse(BaseModel):
+    """Payload for GET /api/v1/email/campaigns/{id} — load a draft for editing.
+
+    Returns the full row including blocks_json so the compose page can
+    hydrate the block builder state.
+    """
+
+    id: str
+    name: str
+    subject: str | None = None
+    body_html: str
+    audience_name: str | None = None
+    segment_text: str | None = None
+    campaign_type: str | None = None
+    status: str
+    source: str | None = None
+    blocks_json: str | None = None
 
 
 class EmailCampaignRow(BaseModel):

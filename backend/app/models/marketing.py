@@ -121,6 +121,15 @@ class EmailCampaign(Base, TimestampMixin, SoftDeleteMixin):
     # campaign in a new tab when the inline iframe isn't enough.
     archive_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
+    # Page-builder block source for manual drafts. JSON-serialized Block[]
+    # from frontend/src/components/email/blocks/types.ts. Populated by the
+    # /email/campaigns POST when the compose page sends it; nullable for
+    # legacy rows (drafts saved before block editing) and for Mailchimp-
+    # sourced rows (no block representation upstream). When set, the
+    # compose page can round-trip — load → edit → save back to the same
+    # row — without losing fidelity.
+    blocks_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
 
 class FunnelEvent(Base, TimestampMixin):
     """Raw funnel conversion event received via webhook."""
