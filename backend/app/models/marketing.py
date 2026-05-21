@@ -91,6 +91,19 @@ class EmailCampaign(Base, TimestampMixin, SoftDeleteMixin):
     open_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     click_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Provenance: which integration (or local source) produced this row.
+    # Values: "mailchimp" | "seed" | "manual" | NULL (pre-tagging rows).
+    # Used by the dashboard to badge each campaign with its source and by
+    # the email-stats Celery task to dedup against external_id when the
+    # provider supplies a stable identifier.
+    source: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+
+    # Stable upstream identifier from the source provider (e.g. Mailchimp
+    # campaign_id). When present, the email-stats task dedups on
+    # (source, external_id) instead of name — so renames in Mailchimp
+    # update the existing row rather than inserting a duplicate.
+    external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+
 
 class FunnelEvent(Base, TimestampMixin):
     """Raw funnel conversion event received via webhook."""

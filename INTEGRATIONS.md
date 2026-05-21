@@ -25,6 +25,7 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 - **Sync trigger:** Celery task `update_email_stats` ([`backend/app/tasks/email_stats.py`](backend/app/tasks/email_stats.py)). Fires on the Celery beat schedule (every 6h at :15 UTC) AND immediately when the user clicks **Save & Connect** on `/integrations/mailchimp`.
 - **API calls:** `GET /3.0/campaigns?status=sent&sort_field=send_time&sort_dir=DESC&count=50` for the list, then `GET /3.0/reports/{campaign_id}` per campaign for the metric breakdown.
 - **Data pulled per campaign:** name, subject, type (regular/automation/rss), status, send time, recipients, opens, clicks, unsubscribes, bounces, open rate, click rate.
+- **Provenance tagging:** every row Mailchimp writes is tagged `source="mailchimp"` + `external_id=<Mailchimp campaign_id>`. Seed-fallback rows get `source="seed"`. The task dedups on `(source, external_id)` first (survives renames in Mailchimp), then falls back to `name` for legacy untagged rows. The recent-campaigns list on `/marketing/email` shows a badge per row.
 - **Failure mode:** if the Mailchimp HTTP call fails (bad key, outage, network), the task logs the error, stamps `last_sync_status="error"` + `last_sync_error=<msg>` on the integration row, and falls back to seed data so the dashboard keeps rendering.
 - **Credential auto-derive:** `server_prefix` (e.g. `us21`) is parsed from the API key's `-<dc>` suffix when the form's server-prefix field is left blank.
 - **Client implementation:** [`backend/app/services/mailchimp_client.py`](backend/app/services/mailchimp_client.py) — thin `httpx` wrapper, no SDK.
@@ -51,12 +52,11 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 
 - API key format: `<32 hex chars>-<dc>` (e.g. `abc123def...-us21`). Find at Mailchimp → Profile → Extras → API keys.
 - Rate limit: 10 concurrent connections per key. We use one connection serially — never an issue.
-- Seed rows (`Weekly Newsletter #42`, `New Program Launch`, `Re-engagement Sequence`) coexist with real data until manually deleted. To clean up after first real sync:
+- Seed rows (`Weekly Newsletter #42`, `New Program Launch`, `Re-engagement Sequence`) coexist with real Mailchimp rows until manually deleted. Distinguishable via the `source` column or the badge on the dashboard. To clean up after first real sync:
   ```sql
-  DELETE FROM email_campaigns
-   WHERE name IN ('Weekly Newsletter #42','New Program Launch','Re-engagement Sequence');
+  DELETE FROM email_campaigns WHERE source = 'seed';
   ```
-- The task dedups by `name`. If you rename a campaign in Mailchimp mid-life, the next sync inserts a new row instead of updating the old one — minor data hygiene caveat.
+- Renames in Mailchimp now update the existing row (dedup is on `(source, external_id)` first, where `external_id` is Mailchimp's stable `campaign_id`). Falls back to dedup-by-name only when external_id is missing (e.g. pre-tagging legacy rows).
 
 ---
 

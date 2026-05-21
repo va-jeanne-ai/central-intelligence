@@ -11,11 +11,70 @@ import { Button } from "@/components/ui/button";
 
 // ─── API response type ───────────────────────────────────────────────────────
 
+interface EmailCampaignRow {
+  id: string;
+  name: string;
+  subject: string | null;
+  campaign_type: string | null;
+  status: string;
+  sent_at: string | null;
+  recipients_count: number;
+  open_count: number;
+  click_count: number;
+  open_rate: number | null;
+  click_rate: number | null;
+  source: string | null;
+  external_id: string | null;
+}
+
 interface EmailData {
   campaigns: number;
   avg_open_rate: number;
   avg_click_rate: number;
   generated_at: string;
+  recent_campaigns: EmailCampaignRow[];
+}
+
+// ─── Source pill ──────────────────────────────────────────────────────────────
+
+function SourcePill({ source }: { source: string | null }) {
+  if (!source) {
+    return (
+      <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 border border-gray-200">
+        Untagged
+      </span>
+    );
+  }
+  // mailchimp → emerald (live data), seed → amber (placeholder), other → gray
+  const styles: Record<string, string> = {
+    mailchimp: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    seed: "bg-amber-50 text-amber-700 border-amber-200",
+    manual: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  };
+  const cls = styles[source] ?? "bg-gray-100 text-gray-600 border-gray-200";
+  return (
+    <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border ${cls}`}>
+      {source}
+    </span>
+  );
+}
+
+function formatPercent(value: number | null): string {
+  if (value === null || value === undefined) return "—";
+  return `${value.toFixed(1)}%`;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 // ─── Compose CTA card ─────────────────────────────────────────────────────────
@@ -67,19 +126,56 @@ function RecentCampaignsEmptyState() {
 
 // ─── Recent campaigns card ────────────────────────────────────────────────────
 
-function RecentCampaignsCard() {
+function RecentCampaignsCard({ campaigns }: { campaigns: EmailCampaignRow[] }) {
   return (
     <Card>
       <CardHeader
         title="Recent Campaigns"
         action={
-          <Button variant="ghost" size="sm" href="/marketing/email/compose">
-            + New Campaign
-          </Button>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400">
+              {campaigns.length} shown
+            </span>
+            <Button variant="ghost" size="sm" href="/marketing/email/compose">
+              + New Campaign
+            </Button>
+          </div>
         }
       />
-      <CardBody>
-        <RecentCampaignsEmptyState />
+      <CardBody noPadding>
+        {campaigns.length === 0 ? (
+          <RecentCampaignsEmptyState />
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {campaigns.map((c) => (
+              <div key={c.id} className="px-5 py-3 flex items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
+                    <SourcePill source={c.source} />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">
+                    {c.subject ?? "(no subject)"} · {formatDate(c.sent_at)}
+                  </p>
+                </div>
+                <div className="hidden sm:flex items-center gap-6 text-right shrink-0">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-gray-400">Sent</p>
+                    <p className="text-sm font-semibold text-gray-900">{c.recipients_count.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-gray-400">Open</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatPercent(c.open_rate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-gray-400">Click</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatPercent(c.click_rate)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </CardBody>
     </Card>
   );
@@ -190,7 +286,7 @@ export default function EmailPage() {
         <ComposeCtaCard />
 
         {/* Row 3: Recent campaigns */}
-        <RecentCampaignsCard />
+        <RecentCampaignsCard campaigns={data?.recent_campaigns ?? []} />
       </main>
     </>
   );

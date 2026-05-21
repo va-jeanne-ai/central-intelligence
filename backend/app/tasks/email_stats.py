@@ -66,18 +66,37 @@ def _stamp_integration_sync(
 
 
 def _upsert_campaign(db, campaign_data: dict, sent_at_default: datetime) -> None:
-    """Upsert one campaign row keyed on ``name``.
+    """Upsert one campaign row.
 
-    Same dedup key as the seed-data path, so re-running the task is
-    idempotent and Mailchimp / seed rows don't fight each other when the
-    user flips MAILCHIMP_API_KEY on or off.
+    Dedup key:
+      1. ``(source, external_id)`` when both are present (Mailchimp etc.)
+         — survives upstream renames since the ID is stable.
+      2. ``name`` otherwise (seed data, legacy untagged rows).
+
+    Same idempotency contract either way: re-running the task doesn't
+    duplicate, Mailchimp/seed rows don't fight each other when the user
+    flips MAILCHIMP_API_KEY on or off.
     """
-    existing = db.execute(
-        select(EmailCampaign).where(
-            EmailCampaign.name == campaign_data["name"],
-            EmailCampaign.deleted_at.is_(None),
-        )
-    ).scalar_one_or_none()
+    source = campaign_data.get("source")
+    external_id = campaign_data.get("external_id")
+
+    existing = None
+    if source and external_id:
+        existing = db.execute(
+            select(EmailCampaign).where(
+                EmailCampaign.source == source,
+                EmailCampaign.external_id == external_id,
+                EmailCampaign.deleted_at.is_(None),
+            )
+        ).scalar_one_or_none()
+
+    if existing is None:
+        existing = db.execute(
+            select(EmailCampaign).where(
+                EmailCampaign.name == campaign_data["name"],
+                EmailCampaign.deleted_at.is_(None),
+            )
+        ).scalar_one_or_none()
 
     if existing:
         for key, value in campaign_data.items():
@@ -144,6 +163,11 @@ def update_email_stats(self) -> dict:
                             "bounce_count": row.bounce_count,
                             "open_rate": row.open_rate,
                             "click_rate": row.click_rate,
+                            # Provenance — used by _upsert_campaign to dedup
+                            # on (source, external_id) and by the dashboard
+                            # to badge each row with its origin.
+                            "source": "mailchimp",
+                            "external_id": row.mailchimp_id or None,
                         })
                     logger.info(
                         "update_email_stats — fetched %d campaigns from Mailchimp",
@@ -161,7 +185,10 @@ def update_email_stats(self) -> dict:
                     mailchimp_error = str(exc)[:500]
 
             if source == "seed":
-                campaigns_to_write = [dict(c) for c in _SEED_CAMPAIGNS]
+                campaigns_to_write = [
+                    {**dict(c), "source": "seed", "external_id": None}
+                    for c in _SEED_CAMPAIGNS
+                ]
 
             for campaign_data in campaigns_to_write:
                 _upsert_campaign(db, campaign_data, sent_at_default=now)
