@@ -100,6 +100,53 @@ class ApiClient {
     this.refresher = fn;
   }
 
+  /** Decode the `exp` claim of a JWT (unix seconds) without verifying. */
+  private tokenExpiry(token: string): number | null {
+    try {
+      const payload = token.split(".")[1];
+      if (!payload) return null;
+      // base64url → base64
+      const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const json = atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), "="));
+      const claims = JSON.parse(json) as { exp?: number };
+      return typeof claims.exp === "number" ? claims.exp : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * If the current token is expired (or expires within `skewSeconds`), ask
+   * the refresher for a fresh one before firing the request. Called once at
+   * the start of every request; the 401-retry path is still in place as a
+   * safety net for the case where Supabase's server-side state disagrees
+   * with our local view of expiry.
+   */
+  private async ensureFreshToken(skewSeconds = 30): Promise<void> {
+    if (!this.refresher) return;
+    if (this.token === null) {
+      // No token yet — try to load one. If we still have none after that,
+      // the request will fire without an Authorization header and 401.
+      try {
+        const fresh = await this.refresher();
+        if (fresh) this.token = fresh;
+      } catch {
+        // fall through
+      }
+      return;
+    }
+    const exp = this.tokenExpiry(this.token);
+    if (exp === null) return; // unparseable — let the request go and rely on 401-retry
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (exp - nowSeconds > skewSeconds) return; // still fresh
+    try {
+      const fresh = await this.refresher();
+      if (fresh) this.token = fresh;
+    } catch {
+      // fall through — the actual request will surface the real error
+    }
+  }
+
   private buildHeaders(extra: HeadersInit = {}): Headers {
     const headers = new Headers({
       "Content-Type": "application/json",
@@ -129,6 +176,13 @@ class ApiClient {
     const retryDelaysMs = [1000, 2000];
 
     let lastError: ApiError | null = null;
+
+    // Pre-flight token check: if the in-memory access token has expired (or
+    // is about to within 30s), refresh it before firing the request. This
+    // avoids the visible-in-DevTools 401 → refresh → 200 round-trip that
+    // happens after a tab suspend or long idle. The 401-retry below is
+    // still the safety net.
+    await this.ensureFreshToken();
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       // Exponential backoff — sleep before every retry (not the first attempt).
