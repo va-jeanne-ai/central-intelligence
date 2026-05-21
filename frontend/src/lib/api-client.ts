@@ -184,20 +184,24 @@ class ApiClient {
         // hit a stale token. Asking Supabase for a fresh session here is
         // cheap and usually succeeds, sparing the user a forced re-login.
         if (response.status === 401) {
-          let refreshedOk = false;
-          if (this.refresher && attempt === 1) {
+          // Try a single token refresh + retry before giving up. Supabase
+          // access tokens last 60 min and auto-refresh in the background,
+          // but the browser tab can lose sync (suspended, network blip,
+          // etc.) and hit a stale token. Asking Supabase for a fresh
+          // session here is cheap and usually succeeds, sparing the user
+          // a forced re-login. Only retry on the first 401 of this
+          // request; a second 401 means the refresh token is gone too.
+          if (this.refresher && attempt === 0) {
+            let fresh: string | null = null;
             try {
-              const fresh = await this.refresher();
-              if (fresh) {
-                this.token = fresh;
-                refreshedOk = true;
-              }
+              fresh = await this.refresher();
             } catch {
-              // Fall through to the normal clear-and-bail path.
+              // fall through
             }
-          }
-          if (refreshedOk) {
-            continue; // retry the request once with the new token
+            if (fresh) {
+              this.token = fresh;
+              continue; // retry the request once with the new token
+            }
           }
           this.clearToken();
           if (!silent && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
