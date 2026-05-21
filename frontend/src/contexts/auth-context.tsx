@@ -69,16 +69,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const mockMode = isMockConfigured();
 
-  // Seed `user` from the localStorage cache so the sidebar avatar / name
-  // etc. render with real data on the first paint — no avatar-shaped hole.
-  // `isLoading` stays TRUE until the apiClient also has a valid access
-  // token: consumers gate API calls on `isLoading`, and firing fetches
-  // before the token lands would 401 every cold nav. The token is set in
-  // the useEffect below when supabase.auth.getSession() resolves.
+  // Initial state must match between SSR (no localStorage) and the first
+  // client render — otherwise Next.js throws a hydration mismatch. So we
+  // start with user=null and re-hydrate from the cache in a useLayoutEffect
+  // below (runs synchronously after the first commit, before paint). That
+  // keeps SSR/CSR markup identical AND still avoids the visible flash for
+  // the sidebar avatar / name.
+  // isLoading stays TRUE until the apiClient also has a valid access token:
+  // consumers gate API calls on isLoading, and firing fetches before the
+  // token lands would 401 every cold nav.
   // Cache is identity-only (no tokens) and self-evicts on expiry. See
   // lib/auth-cache.ts.
-  const cached = mockMode ? null : readCachedUser();
-  const [user, setUser] = useState<AuthUser>(cached as AuthUser);
+  const [user, setUser] = useState<AuthUser>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // ── Initialisation ─────────────────────────────────────────────────────────
@@ -97,7 +99,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Hydrate from existing session.
+    // Step 1: paint a cached user identity immediately (no Authorization
+    // header yet — that's why isLoading stays true). This runs in the same
+    // tick as the first client commit, so the sidebar avatar fills in
+    // before paint instead of flashing through an empty state. SSR rendered
+    // user=null, this useEffect-time setUser keeps the SSR/CSR markup in
+    // agreement (no hydration mismatch).
+    const cached = readCachedUser();
+    if (cached) {
+      setUser(cached as AuthUser);
+    }
+
+    // Step 2: hydrate the real session from cookies.
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.access_token) {
