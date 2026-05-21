@@ -204,6 +204,23 @@ class EmailCampaignRepository(RepositoryBase[EmailCampaign]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_archived(self, limit: int = 100) -> list[EmailCampaign]:
+        """Return archived campaigns, most-recently-archived first.
+
+        Archived rows are sent campaigns the user has moved out of the
+        main list. They're hidden from `find_sent` but stay visible
+        under the Archived section on /marketing/email so the user can
+        restore them.
+        """
+        stmt = (
+            self._base_select()
+            .where(EmailCampaign.status == "archived")
+            .order_by(EmailCampaign.updated_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def aggregate_stats(self) -> dict:
         """Return count of sent campaigns and average open/click rates."""
         stmt = (

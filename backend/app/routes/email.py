@@ -203,6 +203,7 @@ async def get_email_data(
     stats = await repo.aggregate_stats()
     sent_rows = await repo.find_sent(limit=20)
     draft_rows = await repo.find_drafts(limit=50)
+    archived_rows = await repo.find_archived(limit=100)
 
     def _to_row(row) -> EmailCampaignRow:
         return EmailCampaignRow(
@@ -232,6 +233,7 @@ async def get_email_data(
         generated_at=datetime.now(timezone.utc).isoformat(),
         recent_campaigns=[_to_row(r) for r in sent_rows],
         drafts=[_to_row(r) for r in draft_rows],
+        archived=[_to_row(r) for r in archived_rows],
     )
 
 
@@ -466,4 +468,99 @@ async def duplicate_campaign(
         id=str(clone.id),
         status=clone.status,
         source=clone.source or "manual",
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/email/campaigns/{id}/archive
+# POST /api/v1/email/campaigns/{id}/unarchive
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/campaigns/{campaign_id}/archive",
+    response_model=CreateCampaignDraftResponse,
+)
+async def archive_campaign(
+    campaign_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CreateCampaignDraftResponse:
+    """Move a sent campaign into the archived state.
+
+    Sent campaigns can accumulate clutter once the user has moved on.
+    Archiving sets status='archived' (separate from soft delete — the
+    row stays visible in the Archived section so the user can restore
+    it). Drafts use Delete instead; trying to archive a draft 400s.
+    """
+    from uuid import UUID
+    try:
+        uid = UUID(campaign_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    repo = EmailCampaignRepository(session)
+    row = await repo.get(uid)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if row.status == "draft":
+        raise HTTPException(
+            status_code=400,
+            detail="Drafts use Delete, not Archive. Archive is for sent campaigns.",
+        )
+    if row.status == "archived":
+        # Idempotent — return current state instead of 400ing.
+        return CreateCampaignDraftResponse(
+            id=str(row.id), status=row.status, source=row.source or "manual",
+        )
+
+    row.status = "archived"
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+
+    logger.info("archive_campaign — user=%s id=%s", current_user.id, row.id)
+    return CreateCampaignDraftResponse(
+        id=str(row.id), status=row.status, source=row.source or "manual",
+    )
+
+
+@router.post(
+    "/campaigns/{campaign_id}/unarchive",
+    response_model=CreateCampaignDraftResponse,
+)
+async def unarchive_campaign(
+    campaign_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CreateCampaignDraftResponse:
+    """Restore an archived campaign back to status='sent'.
+
+    Only archived rows are restorable through this endpoint. Anything
+    else 400s — there's no ambiguous target state.
+    """
+    from uuid import UUID
+    try:
+        uid = UUID(campaign_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    repo = EmailCampaignRepository(session)
+    row = await repo.get(uid)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if row.status != "archived":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot unarchive campaign in status={row.status!r}.",
+        )
+
+    row.status = "sent"
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+
+    logger.info("unarchive_campaign — user=%s id=%s", current_user.id, row.id)
+    return CreateCampaignDraftResponse(
+        id=str(row.id), status=row.status, source=row.source or "manual",
     )

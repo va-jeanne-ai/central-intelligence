@@ -117,3 +117,7 @@ class EmailDataResponse(BaseModel):
     # 50 most-recently-edited drafts, newest first. Surfaced on
     # /marketing/email as a separate section above the sent list.
     drafts: list[EmailCampaignRow] = []
+    # Archived campaigns — sent rows the user moved out of the main list.
+    # Surfaced under a collapsible "Archived" section on /marketing/email
+    # with a Restore action.
+    archived: list[EmailCampaignRow] = []

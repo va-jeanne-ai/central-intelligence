@@ -40,6 +40,7 @@ interface EmailData {
   generated_at: string;
   recent_campaigns: EmailCampaignRow[];
   drafts: EmailCampaignRow[];
+  archived: EmailCampaignRow[];
 }
 
 // ─── Source pill ──────────────────────────────────────────────────────────────
@@ -407,8 +408,102 @@ function DraftsCard({
   );
 }
 
-function RecentCampaignsCard({ campaigns }: { campaigns: EmailCampaignRow[] }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+function SentRow({
+  c,
+  onChange,
+}: {
+  c: EmailCampaignRow;
+  onChange: () => Promise<void> | void;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+
+  async function handleArchive() {
+    setIsArchiving(true);
+    try {
+      await apiClient.post(
+        `/email/campaigns/${c.id}/archive`,
+        {},
+        { silent: true },
+      );
+      showSuccess("Archived.");
+      await onChange();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Archive failed.");
+      setIsArchiving(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          className="shrink-0 text-gray-400 text-xs hover:text-gray-600"
+          aria-expanded={isExpanded}
+          aria-label="Preview campaign"
+        >
+          <span
+            className={`inline-block transition-transform ${isExpanded ? "rotate-90" : ""}`}
+          >
+            ▶
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
+            <SourcePill source={c.source} />
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5 truncate">
+            {c.subject ?? "(no subject)"} · {formatDate(c.sent_at)}
+            {c.audience_name && ` · ${c.audience_name}`}
+          </p>
+        </button>
+
+        <div className="hidden sm:flex items-center gap-6 text-right shrink-0">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-gray-400">Sent</p>
+            <p className="text-sm font-semibold text-gray-900">{c.recipients_count.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-gray-400">Open</p>
+            <p className="text-sm font-semibold text-gray-900">{formatPercent(c.open_rate)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-gray-400">Click</p>
+            <p className="text-sm font-semibold text-gray-900">{formatPercent(c.click_rate)}</p>
+          </div>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleArchive}
+          disabled={isArchiving}
+          title="Archive — hides from this list, can be restored"
+          className="shrink-0"
+        >
+          {isArchiving ? "…" : "Archive"}
+        </Button>
+      </div>
+      {isExpanded && <CampaignDetail c={c} />}
+    </div>
+  );
+}
+
+function RecentCampaignsCard({
+  campaigns,
+  onChange,
+}: {
+  campaigns: EmailCampaignRow[];
+  onChange: () => Promise<void> | void;
+}) {
   return (
     <Card>
       <CardHeader
@@ -429,54 +524,129 @@ function RecentCampaignsCard({ campaigns }: { campaigns: EmailCampaignRow[] }) {
           <RecentCampaignsEmptyState />
         ) : (
           <div className="divide-y divide-gray-100">
-            {campaigns.map((c) => {
-              const isOpen = expandedId === c.id;
-              return (
-                <div key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId(isOpen ? null : c.id)}
-                    className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-gray-50 transition-colors"
-                    aria-expanded={isOpen}
-                  >
-                    <span
-                      className={`text-gray-400 text-xs shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
-                      aria-hidden
-                    >
-                      ▶
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
-                        <SourcePill source={c.source} />
-                      </div>
-                      <p className="text-xs text-gray-500 mt-0.5 truncate">
-                        {c.subject ?? "(no subject)"} · {formatDate(c.sent_at)}
-                        {c.audience_name && ` · ${c.audience_name}`}
-                      </p>
-                    </div>
-                    <div className="hidden sm:flex items-center gap-6 text-right shrink-0">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-gray-400">Sent</p>
-                        <p className="text-sm font-semibold text-gray-900">{c.recipients_count.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-gray-400">Open</p>
-                        <p className="text-sm font-semibold text-gray-900">{formatPercent(c.open_rate)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-gray-400">Click</p>
-                        <p className="text-sm font-semibold text-gray-900">{formatPercent(c.click_rate)}</p>
-                      </div>
-                    </div>
-                  </button>
-                  {isOpen && <CampaignDetail c={c} />}
-                </div>
-              );
-            })}
+            {campaigns.map((c) => (
+              <SentRow key={c.id} c={c} onChange={onChange} />
+            ))}
           </div>
         )}
       </CardBody>
+    </Card>
+  );
+}
+
+function ArchivedRow({
+  c,
+  onChange,
+}: {
+  c: EmailCampaignRow;
+  onChange: () => Promise<void> | void;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  async function handleRestore() {
+    setIsRestoring(true);
+    try {
+      await apiClient.post(
+        `/email/campaigns/${c.id}/unarchive`,
+        {},
+        { silent: true },
+      );
+      showSuccess("Restored.");
+      await onChange();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Restore failed.");
+      setIsRestoring(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          className="shrink-0 text-gray-400 text-xs hover:text-gray-600"
+          aria-expanded={isExpanded}
+          aria-label="Preview campaign"
+        >
+          <span
+            className={`inline-block transition-transform ${isExpanded ? "rotate-90" : ""}`}
+          >
+            ▶
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium text-gray-600 truncate">{c.name}</p>
+            <SourcePill source={c.source} />
+            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 border border-gray-200">
+              Archived
+            </span>
+          </div>
+          <p className="text-xs text-gray-400 mt-0.5 truncate">
+            {c.subject ?? "(no subject)"} · {formatDate(c.sent_at)}
+          </p>
+        </button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleRestore}
+          disabled={isRestoring}
+          title="Restore to Recent Campaigns"
+          className="shrink-0"
+        >
+          {isRestoring ? "…" : "Restore"}
+        </Button>
+      </div>
+      {isExpanded && <CampaignDetail c={c} />}
+    </div>
+  );
+}
+
+function ArchivedCard({
+  archived,
+  onChange,
+}: {
+  archived: EmailCampaignRow[];
+  onChange: () => Promise<void> | void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  if (archived.length === 0) return null;
+  return (
+    <Card>
+      <button
+        type="button"
+        onClick={() => setIsOpen((v) => !v)}
+        className="w-full px-5 py-4 flex items-center justify-between border-b border-gray-100 hover:bg-gray-50 transition-colors text-left"
+        aria-expanded={isOpen}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={`text-gray-400 text-xs transition-transform ${isOpen ? "rotate-90" : ""}`}
+            aria-hidden
+          >
+            ▶
+          </span>
+          <h2 className="text-sm font-bold text-gray-800">Archived</h2>
+        </div>
+        <span className="text-xs text-gray-400">
+          {archived.length} campaign{archived.length === 1 ? "" : "s"}
+        </span>
+      </button>
+      {isOpen && (
+        <CardBody noPadding>
+          <div className="divide-y divide-gray-100">
+            {archived.map((c) => (
+              <ArchivedRow key={c.id} c={c} onChange={onChange} />
+            ))}
+          </div>
+        </CardBody>
+      )}
     </Card>
   );
 }
@@ -584,7 +754,8 @@ export default function EmailPage() {
 
         {/* Row 3: Recent campaigns */}
         <DraftsCard drafts={data?.drafts ?? []} onChange={refresh} />
-        <RecentCampaignsCard campaigns={data?.recent_campaigns ?? []} />
+        <RecentCampaignsCard campaigns={data?.recent_campaigns ?? []} onChange={refresh} />
+        <ArchivedCard archived={data?.archived ?? []} onChange={refresh} />
       </main>
     </>
   );
