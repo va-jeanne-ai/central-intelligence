@@ -209,14 +209,20 @@ async def upsert_integration(
             config=new_config or None,
         )
         session.add(row)
+        logger.info("upsert_integration: INSERT new row for slug=%s", slug)
     else:
         row.status = "connected"
         row.credentials_encrypted = ciphertext
         row.config = new_config or None
         row.last_sync_error = None  # clear stale errors on successful save
+        logger.info("upsert_integration: UPDATE existing row id=%s for slug=%s", row.id, slug)
 
     await session.commit()
     await session.refresh(row)
+    logger.info(
+        "upsert_integration: committed row id=%s provider=%s status=%s has_creds=%s",
+        row.id, row.provider, row.status, row.credentials_encrypted is not None,
+    )
 
     # Fire the matching Celery task so the dashboard updates without waiting
     # for the next beat tick. Best-effort — failure to enqueue doesn't roll
@@ -227,8 +233,33 @@ async def upsert_integration(
     else:
         logger.info("Integration %s saved; no sync task wired", slug)
 
-    # Re-render the detail payload for the response (consistent shape).
-    return await get_integration(slug=slug, session=session, current_user=current_user)
+    # Re-render the detail payload for the response. Build it directly from
+    # the row we just committed instead of recursing into get_integration —
+    # the recursive call was harder to reason about and triggered a fresh
+    # SELECT against the same session that might race with the just-finished
+    # commit in some pooler modes.
+    secret_field_keys = secret_keys(slug)
+    values: dict[str, str] = {}
+    if row.config:
+        values.update({k: str(v) for k, v in row.config.items() if v is not None})
+    for key, plain in _decrypt_blob(row.credentials_encrypted).items():
+        if key in secret_field_keys:
+            values[key] = secrets.mask(plain)
+        else:
+            values[key] = plain
+
+    summary = _summary_from(provider, row)
+    detail = IntegrationDetail(
+        **summary.model_dump(),
+        fields=[ProviderFieldSchema(**f) for f in provider.get("fields", [])],
+        values=values,
+        last_sync_error=row.last_sync_error,
+    )
+    logger.info(
+        "upsert_integration: returning detail connected=%s values_keys=%s",
+        detail.connected, list(detail.values.keys()),
+    )
+    return detail
 
 
 @router.post("/{slug}/test", response_model=TestIntegrationResponse)

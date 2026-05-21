@@ -104,8 +104,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // Token-refresh hook for the api-client. Called when a request 401s; we
+    // ask Supabase for a fresh session (auto-refreshes the access token if
+    // the refresh token is still valid) and hand the new access_token back
+    // so the api-client can retry once before bouncing the user to /login.
+    apiClient.setRefresher(async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session?.access_token ?? null;
+    });
+
     return () => {
       subscription.unsubscribe();
+      apiClient.setRefresher(null);
     };
   }, [mockMode]);
 

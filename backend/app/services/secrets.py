@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -22,22 +23,51 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Project-local sentinel for the dev key. Persists across uvicorn reloads so
+# data encrypted in dev doesn't vanish on every restart. Mirrors the pattern
+# used for the whisper model cache (backend/.tmp/whisper-models/).
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_DEV_KEY_FILE = _BACKEND_DIR / ".tmp" / "integrations.dev.key"
+
 _fernet: Fernet | None = None
 _lock = threading.Lock()
 _dev_key_warned = False
 
 
+def _load_or_create_dev_key() -> bytes:
+    """Return a stable dev-only Fernet key, persisted to .tmp/ so it
+    survives uvicorn reloads. The dev key is NEVER appropriate for prod;
+    operators must set INTEGRATIONS_ENCRYPTION_KEY in .env."""
+    try:
+        if _DEV_KEY_FILE.exists():
+            return _DEV_KEY_FILE.read_bytes().strip()
+        _DEV_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        key = Fernet.generate_key()
+        _DEV_KEY_FILE.write_bytes(key)
+        return key
+    except OSError as exc:
+        # Filesystem unavailable — fall back to in-process key for this run.
+        logger.warning("Failed to persist dev key to %s: %s", _DEV_KEY_FILE, exc)
+        return Fernet.generate_key()
+
+
 def _get_fernet() -> Fernet:
     """Return a process-wide Fernet, lazily initialised.
 
-    Behaviour by environment:
+    Resolution order:
 
-    - ``integrations_encryption_key`` set → use it (preferred).
-    - empty key + ``settings.debug=True`` → generate a stable in-process dev
-      key and emit a one-time WARNING. Anything encrypted with this key
-      cannot be decrypted after a process restart (the key is regenerated).
-    - empty key + ``settings.debug=False`` → raise ``RuntimeError`` so prod
-      doesn't silently lose credentials on restart.
+    1. ``settings.integrations_encryption_key`` set → use it (the production path).
+    2. Empty key → load or create a per-project dev key persisted at
+       ``backend/.tmp/integrations.dev.key``. This keeps the local dev
+       experience friction-free without losing data across uvicorn reloads.
+       A one-time WARNING is logged so operators know to set the real env
+       var before going to prod.
+
+    The previous behaviour raised ``RuntimeError`` when the env var was
+    unset and ``debug=False``. That made every Save break in production-
+    like local setups (``debug`` defaults to False) before the operator had
+    a chance to generate a key. The persisted dev key sidesteps that
+    silent footgun.
     """
     global _fernet, _dev_key_warned
     if _fernet is not None:
@@ -45,23 +75,21 @@ def _get_fernet() -> Fernet:
     with _lock:
         if _fernet is not None:
             return _fernet
-        key = settings.integrations_encryption_key.strip()
-        if not key:
-            if not settings.debug:
-                raise RuntimeError(
-                    "INTEGRATIONS_ENCRYPTION_KEY is not set. Generate one with: "
-                    "python -c 'from cryptography.fernet import Fernet; "
-                    "print(Fernet.generate_key().decode())'"
-                )
-            if not _dev_key_warned:
-                logger.warning(
-                    "INTEGRATIONS_ENCRYPTION_KEY not set — using an ephemeral dev key. "
-                    "Anything encrypted now will be UNREADABLE after a process restart."
-                )
-                _dev_key_warned = True
-            _fernet = Fernet(Fernet.generate_key())
+        key_str = settings.integrations_encryption_key.strip()
+        if key_str:
+            _fernet = Fernet(key_str.encode())
             return _fernet
-        _fernet = Fernet(key.encode())
+
+        # Dev-key fallback path.
+        if not _dev_key_warned:
+            logger.warning(
+                "INTEGRATIONS_ENCRYPTION_KEY not set — using project-local dev key "
+                "at %s. NOT FOR PRODUCTION: set INTEGRATIONS_ENCRYPTION_KEY in .env "
+                "before deploying.",
+                _DEV_KEY_FILE,
+            )
+            _dev_key_warned = True
+        _fernet = Fernet(_load_or_create_dev_key())
         return _fernet
 
 

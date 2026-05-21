@@ -90,6 +90,16 @@ class ApiClient {
     return this.token;
   }
 
+  // Pluggable token-refresh hook. Set by the auth context so the api-client
+  // can recover from a 401 caused by an expired access token by asking
+  // Supabase for a fresh one mid-request, instead of immediately bouncing
+  // the user to /login.
+  private refresher: (() => Promise<string | null>) | null = null;
+
+  setRefresher(fn: (() => Promise<string | null>) | null): void {
+    this.refresher = fn;
+  }
+
   private buildHeaders(extra: HeadersInit = {}): Headers {
     const headers = new Headers({
       "Content-Type": "application/json",
@@ -168,8 +178,27 @@ class ApiClient {
           // Non-JSON body — parsedBody stays null.
         }
 
-        // 401: clear token — redirect to login unless the caller opted out via silent.
+        // 401: try a single token-refresh + retry before giving up. Supabase
+        // access tokens last 60 min and auto-refresh in the background, but
+        // the browser tab can lose sync (suspended, network blip, etc.) and
+        // hit a stale token. Asking Supabase for a fresh session here is
+        // cheap and usually succeeds, sparing the user a forced re-login.
         if (response.status === 401) {
+          let refreshedOk = false;
+          if (this.refresher && attempt === 1) {
+            try {
+              const fresh = await this.refresher();
+              if (fresh) {
+                this.token = fresh;
+                refreshedOk = true;
+              }
+            } catch {
+              // Fall through to the normal clear-and-bail path.
+            }
+          }
+          if (refreshedOk) {
+            continue; // retry the request once with the new token
+          }
           this.clearToken();
           if (!silent && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
             showApiError("Session expired. Please sign in again.");
