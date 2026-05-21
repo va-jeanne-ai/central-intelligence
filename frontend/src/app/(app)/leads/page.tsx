@@ -128,6 +128,42 @@ const SOURCE_CONFIG: Record<
   other: { label: "Other", badgeClasses: "bg-gray-100 text-gray-500" },
 };
 
+// Fallback resolvers — leads now arrive from real integrations (GHL pushes
+// e.g. source='facebook_ads', 'instagram_ads', 'podcast_referral'; status
+// can be anything the upstream system uses). Looking those up in the
+// enum-keyed records above returns undefined and the row render crashes
+// on `.badgeClasses`. These helpers always return a sane shape so the
+// page renders any string the backend hands us.
+
+function _humanise(value: string): string {
+  // 'facebook_ads' → 'Facebook Ads'. Best-effort prettifier for unknown
+  // values; falls back to the raw string for anything weird.
+  return value
+    .split(/[_\-\s]+/)
+    .filter(Boolean)
+    .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1).toLowerCase()))
+    .join(" ");
+}
+
+function resolveSource(raw: string) {
+  return (
+    SOURCE_CONFIG[raw as LeadSource] ?? {
+      label: _humanise(raw),
+      badgeClasses: "bg-gray-100 text-gray-600",
+    }
+  );
+}
+
+function resolveStatus(raw: string) {
+  return (
+    STATUS_CONFIG[raw as LeadStatus] ?? {
+      label: _humanise(raw),
+      dotColor: "#9CA3AF",
+      badgeClasses: "bg-gray-100 text-gray-600",
+    }
+  );
+}
+
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 function LeadsKpiCard({
@@ -558,8 +594,10 @@ function ScoreBar({ score }: { score: number }) {
 // ─── Table Row ────────────────────────────────────────────────────────────────
 
 function LeadTableRow({ lead }: { lead: Lead }) {
-  const status = STATUS_CONFIG[lead.status];
-  const source = SOURCE_CONFIG[lead.source];
+  // Use the resolver helpers so unknown values (e.g. GHL pushing
+  // source='facebook_ads') get a sensible default instead of crashing.
+  const status = resolveStatus(lead.status);
+  const source = resolveSource(lead.source);
   const date = new Date(lead.createdAt);
   const formattedDate = date.toLocaleDateString("en-US", {
     month: "short",
