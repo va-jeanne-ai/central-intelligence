@@ -19,6 +19,16 @@ class Settings(BaseSettings):
     supabase_anon_key: str = ""
     supabase_jwt_secret: str = ""
 
+    # ------------------------------------------------------------------
+    # Mailchimp — F28 connector for email stats. When mailchimp_api_key is
+    # empty, the email_stats Celery task falls back to its seed data so
+    # local/dev environments still produce a populated dashboard.
+    # mailchimp_server_prefix is auto-derived from the dc suffix of the
+    # API key (e.g. "abc123-us21" → "us21") when left empty.
+    # ------------------------------------------------------------------
+    mailchimp_api_key: str = ""
+    mailchimp_server_prefix: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

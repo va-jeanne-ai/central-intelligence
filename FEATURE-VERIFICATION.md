@@ -420,12 +420,18 @@ These are bigger than wiring jobs. Each is a sprint of its own.
   - UI: agent scorecard, manager dashboard, director rollup, CEO summary
 
 ### F28 — Real-platform connectors
-- **Status:** ⬜ not started
+- **Status:** 🟡 **partial (2026-05-21)** — Mailchimp shipped; 4 platforms remain
 - **What it should do:** Replace the 5 Celery tasks' embedded seed data with real API calls to Meta Ads, Google Ads, Mailchimp/ActiveCampaign, Instagram/LinkedIn/Facebook, TikTok.
-- **Current state:** All 5 tasks have placeholder seed data hardcoded inside them.
-- **What's needed (~1 sprint per integration, more or less):**
-  - One-by-one: pick a platform, get API credentials in `.env`, replace seed-data loop with real API calls
-- **Recommended start:** Email (Mailchimp/ActiveCampaign) — likely the cleanest API to integrate first
+- **Shipped:**
+  - **Mailchimp connector for `update_email_stats`** — `backend/app/services/mailchimp_client.py` (httpx, no SDK). Task now hits `/3.0/campaigns` + `/3.0/reports/{id}`, normalises into the existing `EmailCampaign` shape, upserts by name. When `MAILCHIMP_API_KEY` is empty, falls back to the original seed data so the dashboard still renders. Returns `source: "mailchimp" | "seed"` for visibility.
+  - **Settings:** `MAILCHIMP_API_KEY` + `MAILCHIMP_SERVER_PREFIX` (auto-derived from key suffix when empty)
+  - **Resilience:** HTTP errors during Mailchimp fetch log and fall through to seed — task never crashes the beat tick on API outage
+- **Still needed:** Meta Ads (for `update_ads_stats`), Google Ads (also `update_ads_stats`), Instagram/LinkedIn/Facebook (`update_social_stats`), TikTok (same), comments collector
+- **Verify Mailchimp:**
+  - [ ] Add `MAILCHIMP_API_KEY=us21-abc...` to `backend/.env`
+  - [ ] Restart Celery worker; trigger task: `cd backend && PYTHONPATH=. .venv/bin/celery -A app.tasks.celery_app call app.tasks.email_stats.update_email_stats`
+  - [ ] Task result should report `source: "mailchimp"` and `campaigns_checked > 0`
+  - [ ] `/marketing/email` page shows real campaign rows with live open/click rates
 
 ### F29 — Multi-tenancy
 - **Status:** ⬜ not started
