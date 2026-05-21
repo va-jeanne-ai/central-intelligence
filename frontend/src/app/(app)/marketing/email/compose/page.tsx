@@ -1,28 +1,24 @@
 "use client";
 
-import { useRef, useState } from "react";
-import dynamic from "next/dynamic";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { FormField, FormInput, FormTextarea } from "@/components/ui/form-field";
+import PageBuilder from "@/components/email/PageBuilder";
+import {
+  createBlock,
+  type Block,
+  type BlockType,
+} from "@/components/email/blocks/types";
+import {
+  escapeHtml,
+  renderBlocksToHtml,
+} from "@/components/email/blocks/render";
 import { apiClient } from "@/lib/api-client";
 import { showError, showSuccess } from "@/lib/toast";
 import { EMAIL_TEMPLATES, getTemplate } from "@/lib/email-templates";
-import type { EmailEditorHandle } from "@/components/email/EmailEditor";
-
-// TipTap depends on browser-only APIs. Dynamic import with ssr:false avoids
-// hydration mismatches and shrinks the initial bundle for users who never
-// reach this page.
-const EmailEditor = dynamic(() => import("@/components/email/EmailEditor"), {
-  ssr: false,
-  loading: () => (
-    <div className="border border-gray-200 rounded-lg min-h-[400px] flex items-center justify-center text-sm text-gray-400 bg-white">
-      Loading editor…
-    </div>
-  ),
-});
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,32 +37,7 @@ interface CreateCampaignDraftResponse {
   source: string;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function aiResultToHtml(result: DraftSuggestion): string {
-  // Convert the AI's plain-text body (split on double newlines) into <p> tags.
-  // The Fill-with-AI button overwrites the editor body, so we want valid HTML
-  // that TipTap can parse cleanly.
-  const paragraphs = result.body
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  const ctaHtml = result.cta
-    ? `<p><strong>${escapeHtml(result.cta)}</strong></p>`
-    : "";
-  return paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("") + ctaHtml;
-}
-
-function escapeHtml(input: string): string {
-  return input
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-// ─── Type picker tile ─────────────────────────────────────────────────────────
+// ─── Type-picker tiles ────────────────────────────────────────────────────────
 
 interface TypeOption {
   id: CampaignType;
@@ -79,19 +50,22 @@ const TYPE_OPTIONS: TypeOption[] = [
   {
     id: "regular",
     name: "Regular (HTML)",
-    description: "Rich-text editor with formatting, colors, links, and images. Start from scratch.",
+    description:
+      "Start from a blank canvas. Add blocks one at a time: hero, headings, paragraphs, images, buttons.",
     icon: "📧",
   },
   {
     id: "plain_text",
     name: "Plain text",
-    description: "Simple text-only campaign. No formatting, no images. Best deliverability.",
+    description:
+      "Simple text-only campaign. No formatting, no images. Best deliverability.",
     icon: "📝",
   },
   {
     id: "template",
     name: "Template",
-    description: "Pick a starter design and edit it. Three starters: newsletter, promo, welcome.",
+    description:
+      "Pick a starter design and edit each block. Three starters: newsletter, promo, welcome.",
     icon: "🎨",
   },
 ];
@@ -100,20 +74,27 @@ const TYPE_OPTIONS: TypeOption[] = [
 
 export default function EmailComposePage() {
   const router = useRouter();
-  const editorRef = useRef<EmailEditorHandle>(null);
 
-  // Flow state
+  // Flow
   const [step, setStep] = useState<Step>("type");
   const [campaignType, setCampaignType] = useState<CampaignType | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
 
-  // Form fields
+  // Metadata
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [segment, setSegment] = useState("");
-  const [bodyHtml, setBodyHtml] = useState("");
 
-  // Save / AI state
+  // Page-builder state (HTML campaigns)
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(
+    null,
+  );
+
+  // Plain-text state (separate from block list)
+  const [plainText, setPlainText] = useState("");
+
+  // I/O
   const [isSaving, setIsSaving] = useState(false);
   const [isAssisting, setIsAssisting] = useState(false);
 
@@ -124,7 +105,9 @@ export default function EmailComposePage() {
     if (type === "template") {
       setStep("template");
     } else {
-      setBodyHtml("");
+      setBlocks([]);
+      setSelectedBlockIndex(null);
+      setPlainText("");
       setStep("edit");
     }
   }
@@ -133,28 +116,70 @@ export default function EmailComposePage() {
     const tpl = getTemplate(id);
     if (!tpl) return;
     setTemplateId(id);
-    setBodyHtml(tpl.html);
+    setBlocks(tpl.blocks);
+    setSelectedBlockIndex(null);
     setStep("edit");
-    // The editor mounts after this render; the ref will be ready then. We
-    // pass initialHtml=bodyHtml when it mounts, so no setContent call needed
-    // here. (setContent is only used for AI overwrites + template re-pick.)
   }
 
   function backToType() {
     setStep("type");
     setCampaignType(null);
     setTemplateId(null);
-    setBodyHtml("");
+    setBlocks([]);
+    setSelectedBlockIndex(null);
+    setPlainText("");
   }
 
   function backToTemplate() {
     if (campaignType !== "template") return;
     setStep("template");
     setTemplateId(null);
-    setBodyHtml("");
+    setBlocks([]);
+    setSelectedBlockIndex(null);
   }
 
-  // ── AI assist ──────────────────────────────────────────────────────────────
+  // ── Block mutations ────────────────────────────────────────────────────────
+
+  function addBlock(type: BlockType) {
+    const next = createBlock(type);
+    setBlocks((prev) => {
+      const idx = prev.length;
+      setSelectedBlockIndex(idx);
+      return [...prev, next];
+    });
+  }
+
+  function removeBlock(index: number) {
+    setBlocks((prev) => prev.filter((_, i) => i !== index));
+    setSelectedBlockIndex((curr) => (curr === index ? null : curr));
+  }
+
+  function moveBlock(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    setBlocks((prev) => {
+      if (target < 0 || target >= prev.length) return prev;
+      const next = prev.slice();
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    // Keep the same block selected after move so the user can keep editing it.
+    setSelectedBlockIndex((curr) => {
+      if (curr === null) return curr;
+      if (curr === index) return target;
+      if (curr === target) return index;
+      return curr;
+    });
+  }
+
+  function updateBlock(index: number, patch: Partial<Block>) {
+    setBlocks((prev) =>
+      prev.map((b, i) =>
+        i === index ? ({ ...b, ...patch } as Block) : b,
+      ),
+    );
+  }
+
+  // ── AI Fill ────────────────────────────────────────────────────────────────
 
   async function handleAiAssist() {
     if (isAssisting) return;
@@ -169,13 +194,29 @@ export default function EmailComposePage() {
         },
         { silent: true, timeout: 120_000 },
       );
-      // Apply directly — the old "review and confirm" panel was friction.
-      // User can undo via the editor's history if they don't like it.
+
       if (result.subject) setSubject(result.subject);
-      const html = aiResultToHtml(result);
-      editorRef.current?.setContent(html);
-      setBodyHtml(html);
-      showSuccess("AI draft applied. Edit it however you like.");
+
+      // Build a block list from the AI's plain-text body. One Heading,
+      // N Paragraphs (split on \n\n), one Button if a CTA came back.
+      const paragraphs = result.body
+        .split(/\n{2,}/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const next: Block[] = [
+        createBlock("heading", {
+          text: result.subject || "New email",
+          level: 1,
+          alignment: "center",
+        }),
+        ...paragraphs.map((p) => createBlock("paragraph", { text: p })),
+        ...(result.cta
+          ? [createBlock("button", { text: result.cta, href: "https://" })]
+          : []),
+      ];
+      setBlocks(next);
+      setSelectedBlockIndex(null);
+      showSuccess("AI draft applied. Edit any block from the right panel.");
     } catch (err) {
       showError(err instanceof Error ? err.message : "AI Assist failed.");
     } finally {
@@ -187,12 +228,11 @@ export default function EmailComposePage() {
 
   async function handleSaveDraft() {
     if (isSaving) return;
-    // For plain text, bodyHtml is the raw text — wrap it so the iframe
-    // preview and downstream rendering treat it sensibly.
+
     const finalBody =
       campaignType === "plain_text"
-        ? `<pre style="font-family:inherit;white-space:pre-wrap;margin:0;">${escapeHtml(bodyHtml)}</pre>`
-        : bodyHtml;
+        ? `<pre style="font-family:inherit;white-space:pre-wrap;margin:0;">${escapeHtml(plainText)}</pre>`
+        : renderBlocksToHtml(blocks);
 
     setIsSaving(true);
     try {
@@ -222,11 +262,11 @@ export default function EmailComposePage() {
     <>
       <Header title="Compose Email" />
 
-      <main className="flex-1 overflow-y-auto p-7 space-y-6 max-w-5xl">
+      <main className="flex-1 overflow-y-auto p-7 space-y-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Compose Email</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Pick a campaign type, edit the content, save as a draft. Sending via Mailchimp coming soon.
+            Pick a campaign type, edit the content block-by-block, save as a draft. Sending via Mailchimp coming soon.
           </p>
         </div>
 
@@ -238,20 +278,13 @@ export default function EmailComposePage() {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {TYPE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => pickType(opt.id)}
-                  className="text-left"
-                >
+                <button key={opt.id} type="button" onClick={() => pickType(opt.id)} className="text-left">
                   <Card className="h-full hover:shadow-md transition-shadow">
                     <CardBody className="space-y-3">
                       <div className="text-3xl leading-none" aria-hidden>{opt.icon}</div>
                       <h3 className="text-[15px] font-bold text-gray-900">{opt.name}</h3>
                       <p className="text-[13px] text-gray-600 leading-relaxed">{opt.description}</p>
-                      <span className="block text-[11px] font-medium text-indigo-600">
-                        Continue →
-                      </span>
+                      <span className="block text-[11px] font-medium text-indigo-600">Continue →</span>
                     </CardBody>
                   </Card>
                 </button>
@@ -348,26 +381,27 @@ export default function EmailComposePage() {
               </div>
             </div>
 
-            {/* Body editor — WYSIWYG. The editor renders the template's
-                inline styles directly, so editing IS previewing. Click any
-                text to type, click any image to swap its URL. No separate
-                preview mode needed. */}
+            {/* Body editor — page builder for HTML, textarea for plain text */}
             {campaignType === "plain_text" ? (
               <FormField label="Body" htmlFor="cmp-body">
                 <FormTextarea
                   id="cmp-body"
                   rows={16}
-                  value={bodyHtml}
+                  value={plainText}
                   placeholder="Write your email. Plain text, no formatting."
-                  onChange={(e) => setBodyHtml(e.target.value)}
+                  onChange={(e) => setPlainText(e.target.value)}
                 />
               </FormField>
             ) : (
-              <EmailEditor
-                ref={editorRef}
-                initialHtml={bodyHtml}
-                onChange={setBodyHtml}
-                onAiAssistClick={handleAiAssist}
+              <PageBuilder
+                blocks={blocks}
+                selectedIndex={selectedBlockIndex}
+                onSelect={setSelectedBlockIndex}
+                onAdd={addBlock}
+                onRemove={removeBlock}
+                onMove={moveBlock}
+                onUpdate={updateBlock}
+                onAiAssist={handleAiAssist}
                 aiBusy={isAssisting}
               />
             )}
@@ -386,7 +420,9 @@ export default function EmailComposePage() {
                 Send
               </Button>
               <span className="ml-auto text-[11px] text-gray-400">
-                {bodyHtml.length.toLocaleString()} chars in body
+                {campaignType === "plain_text"
+                  ? `${plainText.length.toLocaleString()} chars`
+                  : `${blocks.length} block${blocks.length === 1 ? "" : "s"}`}
               </span>
             </div>
           </section>
