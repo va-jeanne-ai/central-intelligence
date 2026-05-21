@@ -81,6 +81,14 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Data Import", icon: "📥", href: "/data-import", department: "admin" },
     ],
   },
+  {
+    id: "settings",
+    label: "Settings",
+    department: "admin",
+    items: [
+      { label: "Integrations", icon: "🔌", href: "/integrations", department: "admin" },
+    ],
+  },
 ];
 
 // ─── Department Style Maps ─────────────────────────────────────────────────────

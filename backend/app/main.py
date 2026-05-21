@@ -97,6 +97,7 @@ def create_app() -> FastAPI:
     from app.routes.dm import router as dm_router
     from app.routes.offers import router as offers_router, generate_router as offer_generate_router
     from app.routes.promo_calendar import router as promo_calendar_router
+    from app.routes.integrations import router as integrations_router
 
     # Health check under /api/v1 (prefix applied here).
     app.include_router(health_router, prefix="/api/v1")
@@ -157,6 +158,14 @@ def create_app() -> FastAPI:
     #               PUT    /api/v1/promo-calendar/{promotion_id}
     #               DELETE /api/v1/promo-calendar/{promotion_id}
     app.include_router(promo_calendar_router, prefix="/api/v1", tags=["promo-calendar"])
+
+    # Integrations CRUD — UI-driven third-party connector activation.
+    # Resolves to:  GET    /api/v1/integrations
+    #               GET    /api/v1/integrations/{slug}
+    #               POST   /api/v1/integrations/{slug}
+    #               POST   /api/v1/integrations/{slug}/test
+    #               DELETE /api/v1/integrations/{slug}
+    app.include_router(integrations_router, prefix="/api/v1")
 
     # ICP endpoints under /api/v1 (prefix applied here).
     # Resolves to:  POST /api/v1/icp/generate

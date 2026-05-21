@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     mailchimp_api_key: str = ""
     mailchimp_server_prefix: str = ""
 
+    # ------------------------------------------------------------------
+    # Integrations master key — used by app/services/secrets.py to encrypt
+    # third-party credentials at rest in the `integrations` table. Generate
+    # one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # In debug mode an empty value generates a per-process dev key (data
+    # written with it won't survive a restart). In non-debug mode this is
+    # required at first use or operations raise.
+    # ------------------------------------------------------------------
+    integrations_encryption_key: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

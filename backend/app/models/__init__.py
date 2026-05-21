@@ -54,6 +54,9 @@ from app.models.audit import (  # noqa: F401
     SyncLog,
 )
 
+# integrations — no FK dependencies (tenant_id is FK-less for now)
+from app.models.integration import Integration  # noqa: F401
+
 __all__ = [
     # base
     "Base",
@@ -93,4 +96,6 @@ __all__ = [
     "ErrorLog",
     "SyncLog",
     "IdempotencyKey",
+    # integrations
+    "Integration",
 ]

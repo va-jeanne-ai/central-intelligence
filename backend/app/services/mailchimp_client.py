@@ -50,35 +50,100 @@ class CampaignRow:
     click_rate: float | None
 
 
-def is_configured() -> bool:
-    """True when an API key is set. Callers should gate real-API paths on this."""
-    return bool(settings.mailchimp_api_key)
+def _resolve_creds() -> tuple[str, str] | None:
+    """Return ``(api_key, server_prefix)`` for Mailchimp.
 
+    Resolution order:
+      1. ``integrations`` row where provider='mailchimp' and status='connected'
+         (decrypted credentials_encrypted + config.server_prefix)
+      2. ``settings.mailchimp_api_key`` + ``settings.mailchimp_server_prefix``
 
-def _server_prefix() -> str:
-    """Derive the dc subdomain from settings, falling back to the key suffix.
+    Returns ``None`` when neither path yields a usable key, so callers can
+    gate real-API attempts via ``is_configured()``.
 
-    Raises if neither is available — caller should check ``is_configured()``
-    first.
+    The DB path runs synchronously via ``make_sync_session`` because this
+    helper is called from both Celery (sync) and FastAPI route handlers; a
+    single sync session works in both.
     """
-    if settings.mailchimp_server_prefix:
-        return settings.mailchimp_server_prefix
-    key = settings.mailchimp_api_key
-    if "-" in key:
-        return key.rsplit("-", 1)[-1]
-    raise ValueError(
-        "Cannot derive Mailchimp server prefix — set MAILCHIMP_SERVER_PREFIX "
-        "or use an API key with the standard 'xxxxx-us21' format."
-    )
+    # --- DB first ---
+    api_key: str | None = None
+    server_prefix: str | None = None
+    try:
+        # Local imports keep this module importable in contexts where the
+        # full app (models, sessionmaker) isn't fully bootstrapped yet.
+        import json
+        from sqlalchemy import select as _select
+        from app.models.integration import Integration as _Integration
+        from app.services import secrets as _secrets
+        from app.tasks.db import make_sync_session as _make_sync_session
+
+        db = _make_sync_session()
+        try:
+            row = db.execute(
+                _select(_Integration).where(_Integration.provider == "mailchimp")
+            ).scalar_one_or_none()
+            if row is not None and row.status == "connected":
+                if row.credentials_encrypted:
+                    try:
+                        blob = json.loads(_secrets.decrypt(row.credentials_encrypted))
+                        api_key = blob.get("api_key") or None
+                    except ValueError as exc:
+                        logger.warning("Mailchimp creds decrypt failed: %s", exc)
+                if row.config and isinstance(row.config, dict):
+                    sp = row.config.get("server_prefix")
+                    if sp:
+                        server_prefix = str(sp)
+        finally:
+            db.close()
+    except Exception as exc:
+        # Database unreachable / module import error / etc. — log and
+        # fall through to settings. Never let resolution itself crash a
+        # higher-level operation.
+        logger.warning("Mailchimp DB resolve fallback: %s", exc)
+
+    # --- Settings fallback ---
+    if not api_key:
+        api_key = settings.mailchimp_api_key or None
+    if not server_prefix:
+        server_prefix = settings.mailchimp_server_prefix or None
+
+    if not api_key:
+        return None
+
+    # Derive server_prefix from the key suffix if still missing.
+    if not server_prefix:
+        if "-" in api_key:
+            server_prefix = api_key.rsplit("-", 1)[-1]
+        else:
+            logger.warning(
+                "Mailchimp API key present but server_prefix can't be derived; "
+                "set MAILCHIMP_SERVER_PREFIX or save one via /api/v1/integrations/mailchimp.",
+            )
+            return None
+
+    return api_key, server_prefix
+
+
+def is_configured() -> bool:
+    """True when a usable Mailchimp credential is resolvable (DB or settings)."""
+    return _resolve_creds() is not None
 
 
 def _base_url() -> str:
-    return f"https://{_server_prefix()}.api.mailchimp.com/3.0"
+    creds = _resolve_creds()
+    if creds is None:
+        raise RuntimeError("Mailchimp not configured")
+    _, server_prefix = creds
+    return f"https://{server_prefix}.api.mailchimp.com/3.0"
 
 
 def _auth() -> tuple[str, str]:
+    creds = _resolve_creds()
+    if creds is None:
+        raise RuntimeError("Mailchimp not configured")
+    api_key, _ = creds
     # Mailchimp accepts any non-empty username; the key goes in the password slot.
-    return ("anystring", settings.mailchimp_api_key)
+    return ("anystring", api_key)
 
 
 def _client() -> httpx.Client:

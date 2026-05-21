@@ -276,3 +276,40 @@ export interface Promotion {
   created_at: string;
   updated_at: string;
 }
+
+// ─── Integrations ────────────────────────────────────────────────────────────
+
+export interface ProviderFieldSchema {
+  key: string;
+  label: string;
+  type: string; // "text" | "password" | "select"
+  secret: boolean;
+  required: boolean;
+  placeholder: string;
+  help: string;
+}
+
+export interface IntegrationSummary {
+  slug: string;
+  name: string;
+  icon: string;
+  category: string;
+  status: "available" | "coming_soon";
+  description: string;
+  connected: boolean;
+  last_synced_at: string | null;
+  last_sync_status: string | null;
+  oauth_pending: boolean;
+}
+
+export interface IntegrationDetail extends IntegrationSummary {
+  fields: ProviderFieldSchema[];
+  values: Record<string, string>;
+  last_sync_error: string | null;
+}
+
+export interface TestIntegrationResponse {
+  ok: boolean;
+  message: string;
+  details?: Record<string, unknown> | null;
+}
