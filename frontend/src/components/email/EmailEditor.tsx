@@ -32,6 +32,11 @@ import StarterKit from "@tiptap/starter-kit";
 import { TextStyle, Color } from "@tiptap/extension-text-style";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
+// Tables are how email templates lay out — Outlook + Gmail strip flexbox
+// and most CSS positioning, so every well-built email is table-based. The
+// stock TipTap schema strips tables; TableKit bundles Table + TableRow +
+// TableCell + TableHeader so our template HTML round-trips unchanged.
+import { TableKit } from "@tiptap/extension-table";
 
 // ─── Public ref API ───────────────────────────────────────────────────────────
 
@@ -244,7 +249,10 @@ const EmailEditor = forwardRef<EmailEditorHandle, EmailEditorProps>(function Ema
       TextStyle,
       Color,
       Link.configure({ openOnClick: false, autolink: true }),
-      Image,
+      // Allow images inline so they survive being nested inside table cells
+      // — that's where email-template images always live.
+      Image.configure({ inline: true, allowBase64: false }),
+      TableKit,
     ],
     content: initialHtml,
     immediatelyRender: false,
@@ -257,8 +265,35 @@ const EmailEditor = forwardRef<EmailEditorHandle, EmailEditorProps>(function Ema
     },
     editorProps: {
       attributes: {
-        class:
-          "prose prose-sm max-w-none min-h-[400px] px-4 py-3 focus:outline-none",
+        // Deliberately NOT using `.prose` — our email templates carry inline
+        // styles (background colors, table layouts, custom fonts) that we
+        // want to render exactly. Tailwind's prose class would inject its
+        // own typography rules and override the template's look. The editor
+        // surface becomes what-you-see-is-what-you-send.
+        class: "min-h-[500px] focus:outline-none",
+        // Light grey backdrop around the email so users see the email's
+        // background-color (often white-on-white otherwise).
+        style: "background-color:#f6f7f9;padding:24px;",
+      },
+      handleClickOn: (view, pos, node) => {
+        // Click on an <img> → prompt to replace the src. We update via a
+        // direct ProseMirror transaction (not editor.chain()) because at
+        // the time these editorProps are constructed, the React `editor`
+        // ref isn't bound yet. Operating on `view.state.tr` is the
+        // canonical way to mutate during a ProseMirror event handler.
+        if (node.type.name === "image") {
+          const current = (node.attrs as { src?: string }).src ?? "";
+          const next = window.prompt("Image URL", current);
+          if (next && next !== current) {
+            const tr = view.state.tr.setNodeMarkup(pos, undefined, {
+              ...node.attrs,
+              src: next,
+            });
+            view.dispatch(tr);
+          }
+          return true;
+        }
+        return false;
       },
     },
   });

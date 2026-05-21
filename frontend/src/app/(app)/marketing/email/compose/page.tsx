@@ -28,7 +28,6 @@ const EmailEditor = dynamic(() => import("@/components/email/EmailEditor"), {
 
 type CampaignType = "regular" | "plain_text" | "template";
 type Step = "type" | "template" | "edit";
-type ViewMode = "edit" | "preview";
 
 interface DraftSuggestion {
   subject: string;
@@ -107,7 +106,6 @@ export default function EmailComposePage() {
   const [step, setStep] = useState<Step>("type");
   const [campaignType, setCampaignType] = useState<CampaignType | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("edit");
 
   // Form fields
   const [name, setName] = useState("");
@@ -147,7 +145,6 @@ export default function EmailComposePage() {
     setCampaignType(null);
     setTemplateId(null);
     setBodyHtml("");
-    setViewMode("edit");
   }
 
   function backToTemplate() {
@@ -155,7 +152,6 @@ export default function EmailComposePage() {
     setStep("template");
     setTemplateId(null);
     setBodyHtml("");
-    setViewMode("edit");
   }
 
   // ── AI assist ──────────────────────────────────────────────────────────────
@@ -352,35 +348,10 @@ export default function EmailComposePage() {
               </div>
             </div>
 
-            {/* Editor / Preview toggle */}
-            {campaignType !== "plain_text" && (
-              <div className="flex items-center gap-2 mb-3">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("edit")}
-                  className={`text-xs font-semibold px-3 py-1 rounded-md border transition-colors ${
-                    viewMode === "edit"
-                      ? "bg-indigo-50 border-indigo-200 text-indigo-700"
-                      : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("preview")}
-                  className={`text-xs font-semibold px-3 py-1 rounded-md border transition-colors ${
-                    viewMode === "preview"
-                      ? "bg-indigo-50 border-indigo-200 text-indigo-700"
-                      : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  Preview
-                </button>
-              </div>
-            )}
-
-            {/* Body editor */}
+            {/* Body editor — WYSIWYG. The editor renders the template's
+                inline styles directly, so editing IS previewing. Click any
+                text to type, click any image to swap its URL. No separate
+                preview mode needed. */}
             {campaignType === "plain_text" ? (
               <FormField label="Body" htmlFor="cmp-body">
                 <FormTextarea
@@ -391,22 +362,13 @@ export default function EmailComposePage() {
                   onChange={(e) => setBodyHtml(e.target.value)}
                 />
               </FormField>
-            ) : viewMode === "edit" ? (
+            ) : (
               <EmailEditor
                 ref={editorRef}
                 initialHtml={bodyHtml}
                 onChange={setBodyHtml}
                 onAiAssistClick={handleAiAssist}
                 aiBusy={isAssisting}
-              />
-            ) : (
-              // Same sandboxed-iframe pattern as the click-to-expand row on
-              // /marketing/email — guarantees email HTML can't touch the host.
-              <iframe
-                title="Preview"
-                sandbox=""
-                srcDoc={bodyHtml}
-                className="w-full h-[600px] bg-white rounded border border-gray-200"
               />
             )}
 
