@@ -36,6 +36,7 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 | Surface | What it shows |
 |---|---|
 | [`/marketing/email`](frontend/src/app/(app)/marketing/email/page.tsx) | KPI cards (avg open/click rate) + the list of recent campaigns with per-row metrics, provenance badge, and click-to-expand showing subject / audience / segment / rendered body (sandboxed iframe) / Open-in-Mailchimp link |
+| [`/marketing/email/compose`](frontend/src/app/(app)/marketing/email/compose/page.tsx) | Mailchimp-style compose flow: pick campaign type (Regular/Plain text/Template) → pick one of 3 starter templates (Newsletter, Promo, Welcome) → TipTap WYSIWYG editor with bold/italic/headings/lists/link/image/color/undo + Fill-with-AI → Save Draft writes to `email_campaigns` (source='manual', status='draft'). Sending via Mailchimp is intentionally deferred — Send button stays disabled with a tooltip. |
 | [`/marketing`](frontend/src/app/(app)/marketing/page.tsx) | Marketing overview hub — pulls aggregate email KPIs |
 | [`/integrations/mailchimp`](frontend/src/app/(app)/integrations/[slug]/page.tsx) | "Last synced" timestamp + last sync error if any |
 
@@ -47,6 +48,9 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 - **Cohort analysis** — newsletter vs broadcast vs sequence performance over time. Schema supports it via `campaign_type`; needs a chart.
 - **Re-send / variant suggestions** — the email compose page (`/marketing/email/compose`) could draft a follow-up specifically tuned for non-openers of a prior campaign.
 - **Anomaly alerts** — when open rate on a new campaign is materially lower than the rolling baseline, surface a warning ("This send is tracking 12% below your 30-day average").
+- **Send manual drafts via Mailchimp** — `/marketing/email/compose` writes drafts locally today (source='manual'). Wiring `POST /3.0/campaigns` + `/actions/send` (with a "send test only" guardrail + confirm dialog) would let Greg compose AND send from CI instead of bouncing to Mailchimp's UI.
+- **User-saved templates** — the 3 starter templates are hardcoded in `frontend/src/lib/email-templates.ts`. A future `email_templates` table + CRUD would let Greg save his own.
+- **Image upload to storage** — compose currently accepts image URLs only. Adding S3 / Supabase Storage uploads is its own task.
 
 **Operational notes**
 

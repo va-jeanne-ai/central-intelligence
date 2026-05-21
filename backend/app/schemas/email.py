@@ -29,6 +29,23 @@ class EmailDraftResponse(BaseModel):
     cta: str | None = None
 
 
+class CreateCampaignDraftRequest(BaseModel):
+    """Payload for POST /api/v1/email/campaigns — manual draft creation from the compose UI."""
+
+    name: str
+    subject: str | None = None
+    body_html: str
+    audience_name: str | None = None
+    segment_text: str | None = None
+    campaign_type: str | None = None  # "regular" | "plain_text" | "template"
+
+
+class CreateCampaignDraftResponse(BaseModel):
+    id: str
+    status: str
+    source: str
+
+
 class EmailCampaignRow(BaseModel):
     """One row in the recent-campaigns list on /marketing/email."""
 

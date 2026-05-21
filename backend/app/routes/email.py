@@ -21,6 +21,8 @@ from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.repositories.marketing import EmailCampaignRepository
 from app.schemas.email import (
+    CreateCampaignDraftRequest,
+    CreateCampaignDraftResponse,
     EmailAnalyzeRequest,
     EmailAnalyzeResponse,
     EmailCampaignRow,
@@ -226,4 +228,39 @@ async def get_email_data(
             )
             for row in sent_rows
         ],
+    )
+
+
+@router.post("/campaigns", response_model=CreateCampaignDraftResponse, status_code=201)
+async def create_campaign_draft(
+    body: CreateCampaignDraftRequest,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CreateCampaignDraftResponse:
+    """Create a manual draft campaign from the compose UI.
+
+    Writes to email_campaigns with source='manual', status='draft'. The new
+    row shows up on /marketing/email immediately with the indigo 'manual'
+    badge. Sending is deferred to a separate, guarded flow.
+    """
+    repo = EmailCampaignRepository(session)
+    instance = await repo.create(
+        name=body.name,
+        subject=body.subject,
+        body_html=body.body_html,
+        audience_name=body.audience_name,
+        segment_text=body.segment_text,
+        campaign_type=body.campaign_type,
+        status="draft",
+        source="manual",
+    )
+    await session.commit()
+    logger.info(
+        "create_campaign_draft — user=%s id=%s name=%r",
+        current_user.id, instance.id, body.name,
+    )
+    return CreateCampaignDraftResponse(
+        id=str(instance.id),
+        status=instance.status,
+        source=instance.source or "manual",
     )
