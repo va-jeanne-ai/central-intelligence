@@ -46,6 +46,11 @@ class EmailCampaignRow(BaseModel):
     # Provenance: which integration produced this row.
     source: str | None = None
     external_id: str | None = None
+    # Read-only context surfaced in the click-to-expand row.
+    audience_name: str | None = None
+    segment_text: str | None = None
+    body_html: str | None = None
+    archive_url: str | None = None
 
 
 class EmailDataResponse(BaseModel):

@@ -104,6 +104,23 @@ class EmailCampaign(Base, TimestampMixin, SoftDeleteMixin):
     # update the existing row rather than inserting a duplicate.
     external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
 
+    # Audience (Mailchimp list name, e.g. "Subscribers — newsletter").
+    audience_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Segment description if the campaign was sent to a slice rather than the
+    # whole list (e.g. "members who clicked the last campaign"). Free text;
+    # Mailchimp constructs it dynamically.
+    segment_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Rendered HTML body. Pulled from /3.0/campaigns/{id}/content. Can be
+    # large (50-500KB) — kept here for read-only preview in a sandboxed
+    # iframe. Editing happens in Mailchimp; we never write back.
+    body_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Public archive URL on Mailchimp's side. Lets users open the rendered
+    # campaign in a new tab when the inline iframe isn't enough.
+    archive_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
 
 class FunnelEvent(Base, TimestampMixin):
     """Raw funnel conversion event received via webhook."""

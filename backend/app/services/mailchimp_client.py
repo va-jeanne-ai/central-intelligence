@@ -48,6 +48,11 @@ class CampaignRow:
     bounce_count: int
     open_rate: float | None  # percentage (e.g. 36.0 for 36 %)
     click_rate: float | None
+    # Audience & content (added 2026-05-21 — surfaced read-only in the UI)
+    audience_name: str | None
+    segment_text: str | None
+    body_html: str | None
+    archive_url: str | None
 
 
 def _resolve_creds() -> tuple[str, str] | None:
@@ -167,11 +172,15 @@ def list_recent_sent_campaigns(limit: int = _DEFAULT_PAGE_SIZE) -> list[dict[str
         "sort_field": "send_time",
         "sort_dir": "DESC",
         "count": str(limit),
-        # Trim the heavy `content` payload — we only need metadata.
+        # Trim the heavy `content` payload — we fetch it separately per
+        # campaign via /content. Includes recipients.* for the
+        # audience/segment surface added 2026-05-21.
         "fields": (
             "campaigns.id,campaigns.web_id,campaigns.status,campaigns.send_time,"
             "campaigns.emails_sent,campaigns.type,campaigns.settings.subject_line,"
-            "campaigns.settings.title,campaigns.report_summary"
+            "campaigns.settings.title,campaigns.report_summary,campaigns.archive_url,"
+            "campaigns.long_archive_url,campaigns.recipients.list_name,"
+            "campaigns.recipients.segment_text"
         ),
     }
     with _client() as c:
@@ -193,6 +202,23 @@ def fetch_report(campaign_id: str) -> dict[str, Any] | None:
     url = f"{_base_url()}/reports/{campaign_id}"
     with _client() as c:
         resp = c.get(url)
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()
+
+
+def fetch_content(campaign_id: str) -> dict[str, Any] | None:
+    """Pull the rendered campaign body (HTML + plain text).
+
+    Mailchimp's /campaigns/{id}/content returns
+    ``{html, plain_text, archive_html}``. We only need ``html`` — the
+    UI shows it in a sandboxed iframe. Returns None on 404 or when the
+    campaign has no associated content (drafts, deleted campaigns).
+    """
+    url = f"{_base_url()}/campaigns/{campaign_id}/content"
+    with _client() as c:
+        resp = c.get(url, params={"fields": "html"})
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
@@ -221,11 +247,24 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
-def to_campaign_row(campaign: dict[str, Any], report: dict[str, Any] | None) -> CampaignRow:
-    """Fold a campaigns-list entry + its report into a flat upsert row."""
+def to_campaign_row(
+    campaign: dict[str, Any],
+    report: dict[str, Any] | None,
+    content: dict[str, Any] | None = None,
+) -> CampaignRow:
+    """Fold a campaigns-list entry + its report + its content into a flat upsert row."""
     settings_obj = campaign.get("settings") or {}
     name = settings_obj.get("title") or settings_obj.get("subject_line") or "Untitled campaign"
     subject = settings_obj.get("subject_line")
+    recipients = campaign.get("recipients") or {}
+    audience_name = recipients.get("list_name") or None
+    segment_text = recipients.get("segment_text") or None
+    archive_url = campaign.get("long_archive_url") or campaign.get("archive_url") or None
+    body_html: str | None = None
+    if content is not None:
+        html_val = content.get("html")
+        if isinstance(html_val, str) and html_val.strip():
+            body_html = html_val
 
     if report is not None:
         opens = _safe_int(report.get("opens", {}).get("unique_opens"))
@@ -264,16 +303,27 @@ def to_campaign_row(campaign: dict[str, Any], report: dict[str, Any] | None) -> 
         bounce_count=bounces,
         open_rate=open_rate,
         click_rate=click_rate,
+        audience_name=audience_name,
+        segment_text=segment_text,
+        body_html=body_html,
+        archive_url=archive_url,
     )
 
 
 def fetch_normalised_campaigns(limit: int = _DEFAULT_PAGE_SIZE) -> list[CampaignRow]:
-    """One-shot helper used by the Celery task. Returns ready-to-upsert rows."""
+    """One-shot helper used by the Celery task. Returns ready-to-upsert rows.
+
+    For each campaign we do two extra HTTP calls: /reports for the metric
+    breakdown and /content for the rendered HTML body. Both failures are
+    logged and tolerated — the row still gets written with whatever fields
+    we could resolve.
+    """
     campaigns = list_recent_sent_campaigns(limit=limit)
     rows: list[CampaignRow] = []
     for campaign in campaigns:
         campaign_id = campaign.get("id")
         report: dict[str, Any] | None = None
+        content: dict[str, Any] | None = None
         if campaign_id:
             try:
                 report = fetch_report(str(campaign_id))
@@ -282,5 +332,12 @@ def fetch_normalised_campaigns(limit: int = _DEFAULT_PAGE_SIZE) -> list[Campaign
                     "Mailchimp report fetch failed — campaign_id=%s error=%s",
                     campaign_id, exc,
                 )
-        rows.append(to_campaign_row(campaign, report))
+            try:
+                content = fetch_content(str(campaign_id))
+            except httpx.HTTPError as exc:
+                logger.warning(
+                    "Mailchimp content fetch failed — campaign_id=%s error=%s",
+                    campaign_id, exc,
+                )
+        rows.append(to_campaign_row(campaign, report, content))
     return rows

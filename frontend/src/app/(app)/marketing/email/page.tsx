@@ -25,6 +25,10 @@ interface EmailCampaignRow {
   click_rate: number | null;
   source: string | null;
   external_id: string | null;
+  audience_name: string | null;
+  segment_text: string | null;
+  body_html: string | null;
+  archive_url: string | null;
 }
 
 interface EmailData {
@@ -126,7 +130,81 @@ function RecentCampaignsEmptyState() {
 
 // ─── Recent campaigns card ────────────────────────────────────────────────────
 
+function CampaignDetail({ c }: { c: EmailCampaignRow }) {
+  const hasExtras =
+    c.audience_name || c.segment_text || c.body_html || c.archive_url || c.subject;
+  if (!hasExtras) {
+    return (
+      <div className="px-5 pb-4 text-xs text-gray-400 italic">
+        No additional details available for this campaign.
+      </div>
+    );
+  }
+  return (
+    <div className="px-5 pb-4 space-y-3 bg-gray-50 border-t border-gray-100">
+      {/* Metadata grid */}
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs pt-3">
+        {c.subject && (
+          <div>
+            <dt className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Subject</dt>
+            <dd className="text-gray-800 mt-0.5">{c.subject}</dd>
+          </div>
+        )}
+        {c.audience_name && (
+          <div>
+            <dt className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Audience</dt>
+            <dd className="text-gray-800 mt-0.5">{c.audience_name}</dd>
+          </div>
+        )}
+        {c.segment_text && (
+          <div className="sm:col-span-2">
+            <dt className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Segment</dt>
+            <dd className="text-gray-800 mt-0.5">{c.segment_text}</dd>
+          </div>
+        )}
+      </dl>
+
+      {/* Body — sandboxed iframe so embedded scripts/links can't touch the host page */}
+      {c.body_html ? (
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Body</span>
+            {c.archive_url && (
+              <a
+                href={c.archive_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+              >
+                Open in Mailchimp ↗
+              </a>
+            )}
+          </div>
+          <iframe
+            title={`Campaign body — ${c.name}`}
+            sandbox=""
+            srcDoc={c.body_html}
+            className="w-full h-96 bg-white rounded border border-gray-200"
+          />
+        </div>
+      ) : c.archive_url ? (
+        <div>
+          <a
+            href={c.archive_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+          >
+            Open in Mailchimp ↗
+          </a>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function RecentCampaignsCard({ campaigns }: { campaigns: EmailCampaignRow[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   return (
     <Card>
       <CardHeader
@@ -147,33 +225,51 @@ function RecentCampaignsCard({ campaigns }: { campaigns: EmailCampaignRow[] }) {
           <RecentCampaignsEmptyState />
         ) : (
           <div className="divide-y divide-gray-100">
-            {campaigns.map((c) => (
-              <div key={c.id} className="px-5 py-3 flex items-center gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
-                    <SourcePill source={c.source} />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5 truncate">
-                    {c.subject ?? "(no subject)"} · {formatDate(c.sent_at)}
-                  </p>
+            {campaigns.map((c) => {
+              const isOpen = expandedId === c.id;
+              return (
+                <div key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(isOpen ? null : c.id)}
+                    className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-gray-50 transition-colors"
+                    aria-expanded={isOpen}
+                  >
+                    <span
+                      className={`text-gray-400 text-xs shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                      aria-hidden
+                    >
+                      ▶
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
+                        <SourcePill source={c.source} />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">
+                        {c.subject ?? "(no subject)"} · {formatDate(c.sent_at)}
+                        {c.audience_name && ` · ${c.audience_name}`}
+                      </p>
+                    </div>
+                    <div className="hidden sm:flex items-center gap-6 text-right shrink-0">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400">Sent</p>
+                        <p className="text-sm font-semibold text-gray-900">{c.recipients_count.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400">Open</p>
+                        <p className="text-sm font-semibold text-gray-900">{formatPercent(c.open_rate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400">Click</p>
+                        <p className="text-sm font-semibold text-gray-900">{formatPercent(c.click_rate)}</p>
+                      </div>
+                    </div>
+                  </button>
+                  {isOpen && <CampaignDetail c={c} />}
                 </div>
-                <div className="hidden sm:flex items-center gap-6 text-right shrink-0">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-gray-400">Sent</p>
-                    <p className="text-sm font-semibold text-gray-900">{c.recipients_count.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-gray-400">Open</p>
-                    <p className="text-sm font-semibold text-gray-900">{formatPercent(c.open_rate)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-gray-400">Click</p>
-                    <p className="text-sm font-semibold text-gray-900">{formatPercent(c.click_rate)}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </CardBody>

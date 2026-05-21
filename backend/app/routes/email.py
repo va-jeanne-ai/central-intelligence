@@ -219,6 +219,10 @@ async def get_email_data(
                 click_rate=row.click_rate,
                 source=row.source,
                 external_id=row.external_id,
+                audience_name=row.audience_name,
+                segment_text=row.segment_text,
+                body_html=row.body_html,
+                archive_url=row.archive_url,
             )
             for row in sent_rows
         ],

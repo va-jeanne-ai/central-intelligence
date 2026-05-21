@@ -168,6 +168,12 @@ def update_email_stats(self) -> dict:
                             # to badge each row with its origin.
                             "source": "mailchimp",
                             "external_id": row.mailchimp_id or None,
+                            # Read-only context fields surfaced in the
+                            # click-to-expand row on /marketing/email.
+                            "audience_name": row.audience_name,
+                            "segment_text": row.segment_text,
+                            "body_html": row.body_html,
+                            "archive_url": row.archive_url,
                         })
                     logger.info(
                         "update_email_stats — fetched %d campaigns from Mailchimp",
