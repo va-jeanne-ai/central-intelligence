@@ -72,6 +72,12 @@ All frontend pages must use the shared atomic UI components in `frontend/src/com
 - Architecture diagram: `New Documents/architecture-diagram.html`
 - Webapp mockup: `New Documents/webapp-mockup.html` — **single source of truth for UI design** (adapted to light mode)
 
+## Integrations catalog
+
+[INTEGRATIONS.md](INTEGRATIONS.md) is the living catalog of every third-party integration (Mailchimp, Google Calendar, Meta Ads, etc.). Each entry covers what it does today, the surfaces it powers, and what it *could* power but doesn't yet.
+
+**Update rule:** any commit that adds, expands, or removes an integration — OR wires a new app surface to an existing one — must update `INTEGRATIONS.md` in the same commit. The provider registry at [`backend/app/services/integrations_registry.py`](backend/app/services/integrations_registry.py) is the source of truth for what shows up in the UI; `INTEGRATIONS.md` is the source of truth for *why*.
+
 ## graphify
 
 This project has a graphify knowledge graph at graphify-out/.
