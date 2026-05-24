@@ -433,6 +433,11 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
 
   const { call, insights, content_ideas } = detail;
 
+  // First-pass analyzer hasn't completed yet — no processed_date stamped.
+  // Drives the "Analyzing…" placeholders below. Distinct from isReanalyzing
+  // (manual re-run on an already-processed call).
+  const isProcessing = !call.processed_date;
+
   return (
     <>
       <Header title="Call detail" />
@@ -528,7 +533,10 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
           </div>
         )}
 
-        {/* Analysis sections — dimmed while re-analyzing */}
+        {/* Analysis sections — dimmed while re-analyzing.
+            isProcessing = first-pass analyzer hasn't written processed_date
+            yet. Distinct from isReanalyzing (manual re-run on an already-
+            processed call). Drives the "Analyzing…" placeholder below. */}
         <div className={`space-y-6 transition-opacity ${isReanalyzing ? "opacity-60 pointer-events-none" : ""}`}>
           {/* Summary — editable */}
           <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
@@ -538,9 +546,25 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
               rows={6}
               className="text-[15px] text-gray-700"
               emptyMessage={
-                <p className="text-[13px] text-gray-400 italic">
-                  No summary yet. Click to write one, or run Re-analyze if the analyzer hasn&apos;t run.
-                </p>
+                isProcessing ? (
+                  <div className="flex items-center gap-2 text-[13px] text-amber-700">
+                    <svg
+                      className="animate-spin w-3.5 h-3.5 text-amber-600 shrink-0"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span>Analyzing the transcript… summary will appear here once the run finishes.</span>
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-gray-400 italic">
+                    No summary yet. Click to write one, or run Re-analyze if the analyzer hasn&apos;t run.
+                  </p>
+                )
               }
               onSave={(v) => saveCallField("summary", v)}
             />
@@ -553,7 +577,23 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
               <span className="text-[13px] text-gray-400">{insights.length}</span>
             </div>
             {insights.length === 0 ? (
-              <div className="px-5 py-6 text-[13px] text-gray-400 italic">No insights extracted yet.</div>
+              isProcessing ? (
+                <div className="px-5 py-6 flex items-center gap-2 text-[13px] text-amber-700">
+                  <svg
+                    className="animate-spin w-3.5 h-3.5 text-amber-600 shrink-0"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Analyzing the transcript… insights will appear here once the run finishes.</span>
+                </div>
+              ) : (
+                <div className="px-5 py-6 text-[13px] text-gray-400 italic">No insights extracted yet.</div>
+              )
             ) : (
               <div className="divide-y divide-gray-100">
                 {insights.map((ins) => (

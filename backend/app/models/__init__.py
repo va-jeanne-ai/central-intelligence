@@ -28,6 +28,7 @@ from app.models.operational import (  # noqa: F401
     Goal,
     Insight,
     Lead,
+    LeadNote,
     Member,
     Objection,
     PainPoint,
@@ -81,6 +82,7 @@ __all__ = [
     "Goal",
     "PainPoint",
     "Win",
+    "LeadNote",
     "Objection",
     # marketing
     "SocialStats",

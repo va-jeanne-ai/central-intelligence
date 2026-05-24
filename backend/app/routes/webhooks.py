@@ -40,6 +40,7 @@ from app.database import get_session
 from app.models.integration import Integration
 from app.models.operational import Lead
 from app.services import secrets as app_secrets
+from app.services.audit import record_event
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,22 @@ async def _upsert_ghl_lead(
             notes=notes_json,
         )
         session.add(row)
+        # Flush so row.id is populated before we reference it in the
+        # audit event. The outer transaction still owns the commit.
+        await session.flush()
+        await record_event(
+            session,
+            user_id=None,  # Webhook is unauthenticated; no acting user.
+            action="lead.created",
+            table_name="leads",
+            record_id=str(row.id),
+            after={
+                "name": name,
+                "email": email,
+                "source": "ghl",
+                "external_id": external_id,
+            },
+        )
         logger.info(
             "ghl_lead_webhook: INSERT email=%s external_id=%s",
             email, external_id,

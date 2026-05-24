@@ -57,6 +57,16 @@ class Lead(Base, TimestampMixin, SoftDeleteMixin):
     objections: Mapped[list["Objection"]] = relationship(
         "Objection", back_populates="lead", lazy="select"
     )
+    # Append-only staff-side journal entries. Distinct from `notes` (which
+    # carries the immutable upstream provider payload, e.g. the raw GHL
+    # webhook body). Newest first.
+    staff_notes: Mapped[list["LeadNote"]] = relationship(
+        "LeadNote",
+        back_populates="lead",
+        cascade="all, delete-orphan",
+        order_by="LeadNote.created_at.desc()",
+        lazy="select",
+    )
 
 
 class Member(Base, TimestampMixin, SoftDeleteMixin):
@@ -419,3 +429,42 @@ class ICP(Base, SoftDeleteMixin):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class LeadNote(Base):
+    """Append-only staff journal entry attached to a Lead.
+
+    Distinct from ``lead.notes`` (which carries the immutable provider
+    payload, e.g. the raw GHL webhook body). Each row is one staff-side
+    observation/reminder, displayed as a timeline on the lead detail
+    page. Most recent first.
+    """
+
+    __tablename__ = "lead_notes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("leads.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Nullable: covers system-generated notes, mock-mode posts, and rows
+    # whose author was later deleted (FK is SET NULL).
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    lead: Mapped["Lead"] = relationship("Lead", back_populates="staff_notes")

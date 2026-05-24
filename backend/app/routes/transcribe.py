@@ -11,12 +11,13 @@ Sprint 2 / CI-CORE-01 / T01-2, T01-5
 import hashlib
 import logging
 import tempfile
+import uuid
 from pathlib import Path
 from uuid import uuid4
 
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser, get_current_user
@@ -28,6 +29,7 @@ from app.schemas.transcribe import (
     TranscribeRequest,
     TranscribeResponse,
 )
+from app.services.audit import record_event
 from app.storage.transcripts import save_transcript
 from app.tasks.transcriber import transcribe_video
 
@@ -216,17 +218,56 @@ async def transcribe_upload(
         for p in cleanup_paths:
             p.unlink(missing_ok=True)
 
+    # Validate the optional leadId form field. If the caller is logging
+    # this call against a specific lead, the FK must resolve — otherwise
+    # we'd silently orphan the call. Bad UUID or unknown lead → 422
+    # (caller's input), not 500.
+    lead_uuid: uuid.UUID | None = None
+    if leadId:
+        try:
+            lead_uuid = uuid.UUID(leadId)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"Invalid leadId: {leadId!r}") from exc
+        exists = (await db.execute(
+            text("SELECT 1 FROM leads WHERE id = :id AND deleted_at IS NULL"),
+            {"id": str(lead_uuid)},
+        )).scalar_one_or_none()
+        if exists is None:
+            raise HTTPException(status_code=404, detail="Lead not found")
+
     call_id = f"CALL_{uuid4().hex[:8].upper()}"
     call = Call(
         id=call_id,
         call_type=callType or "sales_call",
+        # Default the call owner to the uploading user — they're the one
+        # who had the call. Overridable later via the inline-edit on the
+        # call detail page if it actually belonged to a teammate.
+        call_owner=current_user.email,
         video_url_hash=content_hash,
         transcript_text=transcript_text,
         transcript_source="whisper_upload",
         call_duration_minutes=(duration_seconds / 60.0) if duration_seconds else None,
+        lead_id=lead_uuid,
     )
     db.add(call)
     await db.flush()
+
+    # Audit emit on the new-call path only (the dedup branch above returns
+    # early). Lands in the same transaction as the Call INSERT — if the
+    # commit rolls back, the audit row goes with it.
+    if lead_uuid is not None:
+        try:
+            actor_uuid = uuid.UUID(str(current_user.id))
+        except ValueError:
+            actor_uuid = None  # mock-mode safety; record_event tolerates None
+        await record_event(
+            db,
+            user_id=actor_uuid,
+            action="lead.call_logged",
+            table_name="leads",
+            record_id=str(lead_uuid),
+            after={"call_id": call_id, "call_type": callType or "sales_call"},
+        )
 
     try:
         save_transcript(call_id, transcript_text)

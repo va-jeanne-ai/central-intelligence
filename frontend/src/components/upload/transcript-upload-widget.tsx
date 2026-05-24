@@ -15,7 +15,11 @@ import type {
 export interface TranscriptUploadResult {
   callId?: string;
   jobId?: string;
-  status: "processing" | "queued" | "completed";
+  /** ``duplicate`` means the backend matched this file's SHA-256 to an
+   *  existing call and returned that call's id without re-running whisper
+   *  or the analyzer. The caller should NOT treat this as a fresh log —
+   *  no new row was created, no audit event fired. */
+  status: "processing" | "queued" | "completed" | "duplicate";
 }
 
 export interface TranscriptUploadWidgetProps {
@@ -23,6 +27,10 @@ export interface TranscriptUploadWidgetProps {
   leadId?: string;
   callOwner?: string;
   onSuccess?: (result: TranscriptUploadResult) => void;
+  /** Fired the moment a file is accepted (passes validation) — useful for
+   *  parents that want to show a pending row labelled with the filename
+   *  while the upload + analyzer are still running. */
+  onFileSelected?: (name: string) => void;
   className?: string;
 }
 
@@ -189,6 +197,7 @@ export function TranscriptUploadWidget({
   leadId,
   callOwner,
   onSuccess,
+  onFileSelected,
   className = "",
 }: TranscriptUploadWidgetProps) {
   const [status, setStatus] = useState<UploadStatus>("idle");
@@ -279,6 +288,7 @@ export function TranscriptUploadWidget({
         name: file.name,
         sizeLabel: formatBytes(file.size),
       });
+      onFileSelected?.(file.name);
 
       setStatus("uploading");
       setProgress(0);
@@ -328,7 +338,10 @@ export function TranscriptUploadWidget({
           const result: TranscriptUploadResult = {
             callId: data.call_id,
             jobId: data.job_id,
-            status: data.status === "completed" ? "processing" : "processing",
+            // Pass duplicate through unchanged; everything else collapses
+            // to "processing" since the analyzer is enqueued in both the
+            // sync-completed and queued cases on the backend.
+            status: data.status === "duplicate" ? "duplicate" : "processing",
           };
 
           onSuccess?.(result);
@@ -392,7 +405,7 @@ export function TranscriptUploadWidget({
         }
       }
     },
-    [callType, leadId, callOwner, onSuccess],
+    [callType, leadId, callOwner, onSuccess, onFileSelected],
   );
 
   // ─── Drag-and-drop events ───────────────────────────────────────────────────

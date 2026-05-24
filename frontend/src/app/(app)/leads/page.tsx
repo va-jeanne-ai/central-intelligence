@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Lead, LeadStatus, LeadSource } from "@/types";
@@ -604,8 +605,29 @@ function LeadTableRow({ lead }: { lead: Lead }) {
     day: "numeric",
   });
 
+  const router = useRouter();
+
+  // Whole-row click navigates to detail. Wrapping <tr> in a Next.js
+  // <Link> produces invalid HTML (tr can't be inside a). Instead we
+  // attach role="link" + Enter/Space keyboard handlers for a11y.
+  function openDetail() {
+    router.push(`/leads/${lead.id}`);
+  }
+
   return (
-    <tr className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+    <tr
+      onClick={openDetail}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openDetail();
+        }
+      }}
+      role="link"
+      tabIndex={0}
+      aria-label={`Open lead ${lead.name ?? "unnamed"}`}
+      className="border-b border-gray-50 hover:bg-gray-50/60 focus:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-300 cursor-pointer transition-colors"
+    >
       {/* Name + Email */}
       <td className="px-5 py-3.5">
         <div className="flex flex-col">
@@ -644,16 +666,6 @@ function LeadTableRow({ lead }: { lead: Lead }) {
       {/* Score */}
       <td className="px-5 py-3.5">
         <ScoreBar score={lead.score ?? 50} />
-      </td>
-
-      {/* Actions */}
-      <td className="px-5 py-3.5">
-        <button
-          type="button"
-          className="text-xs font-medium text-gray-500 border border-gray-200 rounded-md px-2.5 py-1 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-        >
-          Edit
-        </button>
       </td>
     </tr>
   );
@@ -1144,16 +1156,13 @@ export default function LeadsPage() {
                   <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     Score
                   </th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    Actions
-                  </th>
                 </tr>
               </thead>
               <tbody>
                 {leadsData.leads.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={5}
                       className="px-5 py-12 text-center text-sm text-gray-400"
                     >
                       No leads match your filters.
