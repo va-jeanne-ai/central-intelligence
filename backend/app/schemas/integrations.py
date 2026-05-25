@@ -37,6 +37,10 @@ class ProviderSummary(BaseModel):
     # row holds a server-generated webhook token, and the UI shows the
     # webhook URL + Copy + Rotate Secret instead of a credentials form.
     webhook_only: bool = False
+    # True for providers that use per-user OAuth (Google Workspace today).
+    # The frontend renders a "Connect Gmail" button instead of the
+    # credentials form; the OAuth dance lives in routes/oauth.py.
+    oauth_per_user: bool = False
 
 
 class IntegrationDetail(ProviderSummary):

@@ -42,6 +42,10 @@ from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.schemas.leads import (
     CreateNoteRequest,
+    EmailAttachmentMeta,
+    EmailMessageRow,
+    EmailThreadRow,
+    EmailThreadsResponse,
     FunnelStage,
     LeadCallSummary,
     LeadDetailResponse,
@@ -742,6 +746,138 @@ async def get_lead_history(
         )
 
     return LeadHistoryResponse(events=events)
+
+
+# ===========================================================================
+# Lead email threads — GET /api/v1/leads/{id}/emails
+# ===========================================================================
+
+
+@router.get("/leads/{lead_id}/emails", response_model=EmailThreadsResponse)
+async def get_lead_emails(
+    lead_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EmailThreadsResponse:
+    """Return Gmail threads linked to this lead, with messages nested.
+
+    The thread/message rows are populated by the Gmail sync task (see
+    ``tasks/gmail_sync.py``). Threads are ordered newest-first by
+    ``last_message_at`` so the lead detail page renders them in the
+    order staff expect. Messages inside each thread are ordered oldest-
+    first so reading top-to-bottom matches conversation flow.
+    """
+    uid = _parse_lead_uuid(lead_id)
+
+    # Confirm the lead exists (helps surface 404 vs empty thread list).
+    exists = (await session.execute(
+        text("SELECT 1 FROM leads WHERE id = :id AND deleted_at IS NULL"),
+        {"id": str(uid)},
+    )).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    thread_rows = (await session.execute(
+        text("""
+            SELECT id::text AS id, subject, last_message_at, message_count
+            FROM email_threads
+            WHERE lead_id = :id
+            ORDER BY last_message_at DESC NULLS LAST
+        """),
+        {"id": str(uid)},
+    )).mappings().all()
+
+    if not thread_rows:
+        return EmailThreadsResponse(threads=[])
+
+    thread_ids = [r["id"] for r in thread_rows]
+    message_rows = (await session.execute(
+        text("""
+            SELECT
+                id::text AS id,
+                thread_id::text AS thread_id,
+                from_address,
+                to_addresses,
+                cc_addresses,
+                subject,
+                body_text,
+                sent_at,
+                has_attachments,
+                attachments_meta
+            FROM email_messages
+            WHERE thread_id = ANY(:ids)
+            ORDER BY sent_at NULLS FIRST
+        """),
+        {"ids": thread_ids},
+    )).mappings().all()
+
+    # Group messages by thread_id for fast lookup.
+    by_thread: dict[str, list[EmailMessageRow]] = {tid: [] for tid in thread_ids}
+    for m in message_rows:
+        by_thread[m["thread_id"]].append(EmailMessageRow(
+            id=m["id"],
+            from_address=m["from_address"],
+            to_addresses=m["to_addresses"] or [],
+            cc_addresses=m["cc_addresses"] or [],
+            subject=m["subject"],
+            body_text=m["body_text"],
+            sent_at=m["sent_at"].isoformat() if m["sent_at"] else None,
+            has_attachments=bool(m["has_attachments"]),
+            attachments_meta=[
+                EmailAttachmentMeta(
+                    filename=a.get("filename", ""),
+                    size=int(a.get("size") or 0),
+                    mime_type=a.get("mime_type"),
+                )
+                for a in (m["attachments_meta"] or [])
+            ],
+        ))
+
+    threads = [
+        EmailThreadRow(
+            id=t["id"],
+            subject=t["subject"],
+            last_message_at=t["last_message_at"].isoformat() if t["last_message_at"] else None,
+            message_count=int(t["message_count"] or 0),
+            messages=by_thread.get(t["id"]) or [],
+        )
+        for t in thread_rows
+    ]
+
+    return EmailThreadsResponse(threads=threads)
+
+
+@router.post("/leads/{lead_id}/sync-emails", status_code=202)
+async def sync_lead_emails(
+    lead_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),  # noqa: ARG001
+) -> dict:
+    """Enqueue a per-lead Gmail sync.
+
+    Used by the "Sync emails now" button on the lead detail page.
+    Validates the lead exists, then fires the Celery task with the
+    lead_id. Returns immediately — the UI polls the emails endpoint
+    after a short delay.
+    """
+    uid = _parse_lead_uuid(lead_id)
+
+    exists = (await session.execute(
+        text("SELECT 1 FROM leads WHERE id = :id AND deleted_at IS NULL"),
+        {"id": str(uid)},
+    )).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    try:
+        from app.tasks.gmail_sync import sync_gmail_threads_for_lead
+        task = sync_gmail_threads_for_lead.delay(str(uid))
+        return {"task_id": task.id, "lead_id": str(uid)}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sync_lead_emails: enqueue failed — %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to enqueue sync. Try again in a minute.",
+        ) from exc
 
 
 # ===========================================================================

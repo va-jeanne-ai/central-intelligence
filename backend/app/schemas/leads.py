@@ -238,3 +238,50 @@ class LeadHistoryResponse(BaseModel):
     """
 
     events: list[LeadHistoryEvent] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Lead email threads — GET /api/v1/leads/{id}/emails
+# ---------------------------------------------------------------------------
+
+
+class EmailAttachmentMeta(BaseModel):
+    """Filename + size + mime for one attachment. No bytes."""
+
+    filename: str
+    size: int = 0
+    mime_type: str | None = None
+
+
+class EmailMessageRow(BaseModel):
+    """One message in a thread. Body is plain-text only."""
+
+    id: str
+    from_address: str | None = None
+    to_addresses: list[str] = Field(default_factory=list)
+    cc_addresses: list[str] = Field(default_factory=list)
+    subject: str | None = None
+    body_text: str | None = None
+    sent_at: str | None = None
+    has_attachments: bool = False
+    attachments_meta: list[EmailAttachmentMeta] = Field(default_factory=list)
+
+
+class EmailThreadRow(BaseModel):
+    """One Gmail thread linked to a lead, with its messages nested."""
+
+    id: str
+    subject: str | None = None
+    last_message_at: str | None = None
+    message_count: int = 0
+    messages: list[EmailMessageRow] = Field(default_factory=list)
+
+
+class EmailThreadsResponse(BaseModel):
+    """Full payload for ``GET /api/v1/leads/{id}/emails``.
+
+    Threads are ordered newest-first by ``last_message_at`` so the lead
+    detail page can render them in the order staff expect.
+    """
+
+    threads: list[EmailThreadRow] = Field(default_factory=list)

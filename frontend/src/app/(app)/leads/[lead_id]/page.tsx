@@ -85,6 +85,36 @@ interface LeadHistoryResponse {
   events: LeadHistoryEvent[];
 }
 
+interface EmailAttachmentMeta {
+  filename: string;
+  size: number;
+  mime_type: string | null;
+}
+
+interface EmailMessageRow {
+  id: string;
+  from_address: string | null;
+  to_addresses: string[];
+  cc_addresses: string[];
+  subject: string | null;
+  body_text: string | null;
+  sent_at: string | null;
+  has_attachments: boolean;
+  attachments_meta: EmailAttachmentMeta[];
+}
+
+interface EmailThreadRow {
+  id: string;
+  subject: string | null;
+  last_message_at: string | null;
+  message_count: number;
+  messages: EmailMessageRow[];
+}
+
+interface EmailThreadsResponse {
+  threads: EmailThreadRow[];
+}
+
 // ─── Status / Source display config ──────────────────────────────────────────
 // TODO(v2): hoist to @/lib/lead-display.ts — duplicated from
 // /leads/page.tsx for now since the detail page is the second consumer.
@@ -541,6 +571,11 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
 
   const [history, setHistory] = useState<LeadHistoryEvent[]>([]);
 
+  // Gmail thread sync state — Emails card.
+  const [emailThreads, setEmailThreads] = useState<EmailThreadRow[]>([]);
+  const [expandedThreadIds, setExpandedThreadIds] = useState<Set<string>>(new Set());
+  const [isSyncingEmails, setIsSyncingEmails] = useState(false);
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -570,11 +605,25 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
     }
   }, [leadId]);
 
+  const loadEmails = useCallback(async () => {
+    // Same pattern as loadHistory — best-effort, silent on error.
+    try {
+      const data = await apiClient.get<EmailThreadsResponse>(
+        `/leads/${leadId}/emails`,
+        { silent: true },
+      );
+      setEmailThreads(data.threads);
+    } catch {
+      // Gmail sync may not even be connected yet; degrade silently.
+    }
+  }, [leadId]);
+
   useEffect(() => {
     if (authLoading) return;
     void load();
     void loadHistory();
-  }, [authLoading, load, loadHistory]);
+    void loadEmails();
+  }, [authLoading, load, loadHistory, loadEmails]);
 
   // Poll the lead detail every 10s while at least one call is still being
   // analyzed. Once every call has processed_date set, the interval is
@@ -724,6 +773,33 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
     lastDroppedFilenameRef.current = null;
     void load();
     void loadHistory();
+  }
+
+  async function syncEmails() {
+    if (isSyncingEmails) return;
+    setIsSyncingEmails(true);
+    try {
+      await apiClient.post(`/leads/${leadId}/sync-emails`, {}, { silent: true });
+      showSuccess("Email sync queued. Refreshing in a few seconds…");
+      // Give Celery a chance to drain a quick mailbox, then refetch.
+      // For larger mailboxes the user can refresh manually.
+      setTimeout(() => {
+        void loadEmails();
+        setIsSyncingEmails(false);
+      }, 5000);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Failed to start email sync.");
+      setIsSyncingEmails(false);
+    }
+  }
+
+  function toggleThread(threadId: string) {
+    setExpandedThreadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(threadId)) next.delete(threadId);
+      else next.add(threadId);
+      return next;
+    });
   }
 
   return (
@@ -969,6 +1045,148 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
             )}
           </CardBody>
         </Card>
+
+        {/* Emails — Gmail threads where this lead's email appears.
+            Threads collapsed by default; click to expand the message list.
+            Plain-text bodies only; attachments rendered as metadata chips.
+            Only rendered when the lead has an email AND we've synced
+            something — empty state is shown when the lead has an email
+            but no threads have been found yet. */}
+        {detail.email && (
+          <Card>
+            <CardHeader
+              title="Emails"
+              action={
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-gray-400">
+                    {emailThreads.length} thread{emailThreads.length === 1 ? "" : "s"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void syncEmails()}
+                    disabled={isSyncingEmails}
+                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
+                  >
+                    {isSyncingEmails ? "Syncing…" : "Sync emails now"}
+                  </button>
+                </div>
+              }
+            />
+            <CardBody noPadding>
+              {emailThreads.length === 0 ? (
+                <p className="px-5 py-4 text-[13px] text-gray-400 italic">
+                  No email threads on file. Click <b>Sync emails now</b> if Google Workspace is connected and this lead has been in correspondence.
+                </p>
+              ) : (
+                <HistoryList className="py-1">
+                  {emailThreads.map((thread) => {
+                    const isExpanded = expandedThreadIds.has(thread.id);
+                    const firstMsg = thread.messages[0];
+                    const latestParticipants = firstMsg
+                      ? [firstMsg.from_address, ...firstMsg.to_addresses]
+                          .filter((s): s is string => Boolean(s))
+                          .slice(0, 2)
+                          .join(", ")
+                      : "";
+                    return (
+                      <div key={thread.id}>
+                        <HistoryItem
+                          dotColor={isExpanded ? "#6366F1" : "#9CA3AF"}
+                          trailing={
+                            <span
+                              className="text-[11px] text-gray-400"
+                              title={thread.last_message_at ? formatDate(thread.last_message_at) : undefined}
+                            >
+                              {thread.last_message_at ? relativeTime(thread.last_message_at) : "—"}
+                            </span>
+                          }
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleThread(thread.id)}
+                            className="block w-full text-left"
+                            aria-expanded={isExpanded}
+                          >
+                            <div className="flex items-center gap-2 text-[13px]">
+                              <span className="text-gray-500 inline-block w-3">{isExpanded ? "▾" : "▸"}</span>
+                              <span className="font-semibold text-gray-700 truncate">
+                                {thread.subject || "(no subject)"}
+                              </span>
+                              <span className="text-[11px] text-gray-400 ml-auto">
+                                {thread.message_count} msg{thread.message_count === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                            {latestParticipants && (
+                              <div className="text-[11px] text-gray-500 mt-0.5 ml-5 truncate">
+                                {latestParticipants}
+                              </div>
+                            )}
+                          </button>
+                        </HistoryItem>
+                        {isExpanded && (
+                          <div className="bg-gray-50 border-t border-gray-100 px-5 py-3 space-y-3">
+                            {thread.messages.length === 0 ? (
+                              <p className="text-[12px] text-gray-400 italic">No messages on this thread yet.</p>
+                            ) : (
+                              thread.messages.map((m) => (
+                                <div
+                                  key={m.id}
+                                  className="bg-white rounded-lg border border-gray-200 px-3 py-2.5 text-[13px]"
+                                >
+                                  <div className="flex items-baseline gap-2 text-[11px] text-gray-500">
+                                    <span className="font-semibold text-gray-700">
+                                      {m.from_address || "—"}
+                                    </span>
+                                    {m.to_addresses.length > 0 && (
+                                      <span>→ {m.to_addresses.join(", ")}</span>
+                                    )}
+                                    <span
+                                      className="ml-auto"
+                                      title={m.sent_at ? formatDate(m.sent_at) : undefined}
+                                    >
+                                      {m.sent_at ? relativeTime(m.sent_at) : "—"}
+                                    </span>
+                                  </div>
+                                  {m.body_text ? (
+                                    <pre className="mt-1.5 text-[12px] text-gray-700 whitespace-pre-wrap font-sans leading-relaxed max-h-64 overflow-y-auto">
+                                      {m.body_text}
+                                    </pre>
+                                  ) : (
+                                    <p className="mt-1.5 text-[11px] text-gray-400 italic">
+                                      (no plain-text body — HTML emails aren&apos;t rendered)
+                                    </p>
+                                  )}
+                                  {m.attachments_meta.length > 0 && (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {m.attachments_meta.map((a, i) => (
+                                        <span
+                                          key={i}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-600 border border-gray-200"
+                                          title={a.mime_type || undefined}
+                                        >
+                                          📎 {a.filename}
+                                          {a.size > 0 && (
+                                            <span className="text-gray-400">
+                                              · {Math.round(a.size / 1024)} KB
+                                            </span>
+                                          )}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </HistoryList>
+              )}
+            </CardBody>
+          </Card>
+        )}
 
         {/* Activity timeline — always rendered so the Log call button has a
             home, even on brand-new leads with no FK rows yet. When

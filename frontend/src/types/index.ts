@@ -304,6 +304,10 @@ export interface IntegrationSummary {
   // the integration row holds a server-generated webhook token and the
   // detail page renders a Copy-URL + Rotate Secret UI instead.
   webhook_only: boolean;
+  // True for providers that use per-user OAuth (Google Workspace today).
+  // The detail page renders a "Connect Gmail" button instead of the
+  // credentials form.
+  oauth_per_user: boolean;
 }
 
 export interface IntegrationDetail extends IntegrationSummary {

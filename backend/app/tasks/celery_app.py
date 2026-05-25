@@ -30,6 +30,7 @@ celery_app = Celery(
         "app.tasks.offer_generator",
         "app.tasks.ghl_sync",
         "app.tasks.ghl_push",
+        "app.tasks.gmail_sync",
     ],
 )
 
@@ -70,5 +71,11 @@ celery_app.conf.beat_schedule = {
         # 02:30 UTC — off-peak, away from the :05-:25 stat updaters above.
         # Daily cadence catches out-of-band GHL edits the webhook doesn't fire on.
         "schedule": crontab(minute=30, hour=2),
+    },
+    "gmail-thread-sync-nightly": {
+        "task": "app.tasks.gmail_sync.sync_gmail_threads",
+        # 02:45 UTC — runs after the GHL sync so newly-discovered leads
+        # get their email threads on the same nightly cycle.
+        "schedule": crontab(minute=45, hour=2),
     },
 }

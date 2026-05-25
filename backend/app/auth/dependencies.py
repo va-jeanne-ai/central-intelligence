@@ -16,13 +16,16 @@ fully functional during local development.
 """
 
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import Header, HTTPException, status
+from sqlalchemy import text
 
 from app.auth.supabase_client import get_supabase_client
 from app.config import settings
+from app.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +77,54 @@ def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
     if len(parts) != 2 or parts[0].lower() != "bearer":
         return None
     return parts[1].strip() or None
+
+
+async def _ensure_local_user_row(
+    *,
+    user_id: str,
+    email: str,
+    name: str | None,
+    role: str,
+) -> None:
+    """Insert a `users` row for the calling Supabase user if missing.
+
+    Best-effort: any failure (bad UUID, DB hiccup, race with a parallel
+    request) is logged at warning and swallowed — most endpoints don't
+    actually need a users row to function. The endpoints that do (the
+    ones with FKs into users.id) get a valid row on this user's first
+    authenticated request.
+    """
+    if not user_id:
+        return
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        # Mock-mode sub like "mock-user-id" — nothing to mirror.
+        return
+
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                text("""
+                    INSERT INTO users (id, email, name, role, is_active)
+                    VALUES (:id, :email, :name, :role, TRUE)
+                    ON CONFLICT (id) DO NOTHING
+                """),
+                {
+                    "id": str(user_uuid),
+                    # `email` is NOT NULL + UNIQUE on users; supply a
+                    # synthetic when Supabase omitted it so the INSERT
+                    # doesn't bounce on a NULL violation.
+                    "email": email or f"user-{user_uuid}@unknown.local",
+                    "name": name,
+                    "role": role,
+                },
+            )
+            await session.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "auth: ensure_local_user_row failed for %s — %s", user_id, exc,
+        )
 
 
 async def get_current_user(
@@ -128,6 +179,19 @@ async def get_current_user(
         # Supabase stores application metadata in user_metadata; fall
         # back to "member" when the role key has not been set.
         role = (user.user_metadata or {}).get("role", "member")
+
+        # Auto-mirror the Supabase user into our local `users` table so
+        # any FK pointing at users.id (lead_notes.author_id,
+        # audit_log.user_id, user_integration_credentials.user_id, …)
+        # resolves on the first authenticated request. Best-effort:
+        # failures here log and proceed — the request itself doesn't
+        # need a users row for most endpoints.
+        await _ensure_local_user_row(
+            user_id=str(user.id),
+            email=user.email or "",
+            name=(user.user_metadata or {}).get("full_name"),
+            role=role,
+        )
 
         return CurrentUser(id=str(user.id), email=user.email or "", role=role)
 

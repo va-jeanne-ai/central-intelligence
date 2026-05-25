@@ -46,6 +46,20 @@ class Settings(BaseSettings):
     # uvicorn binding so curl-based verification works out of the box.
     public_api_base_url: str = "http://localhost:8000"
 
+    # ------------------------------------------------------------------
+    # Google OAuth (per-user). Each staff member runs through Google's
+    # consent flow once; CI stores their encrypted refresh token in
+    # `user_integration_credentials` and uses it to read Gmail on their
+    # behalf. Set up the OAuth 2.0 Client (Web application type) in
+    # Google Cloud Console → APIs & Services → Credentials, then add
+    # the authorized redirect URI matching the value below.
+    # ------------------------------------------------------------------
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    google_oauth_redirect_uri: str = (
+        "http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback"
+    )
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

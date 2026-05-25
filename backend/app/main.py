@@ -98,6 +98,7 @@ def create_app() -> FastAPI:
     from app.routes.offers import router as offers_router, generate_router as offer_generate_router
     from app.routes.promo_calendar import router as promo_calendar_router
     from app.routes.integrations import router as integrations_router
+    from app.routes.oauth import router as oauth_router
     from app.routes.webhooks import router as webhooks_router
 
     # Health check under /api/v1 (prefix applied here).
@@ -167,6 +168,16 @@ def create_app() -> FastAPI:
     #               POST   /api/v1/integrations/{slug}/test
     #               DELETE /api/v1/integrations/{slug}
     app.include_router(integrations_router, prefix="/api/v1")
+
+    # Google OAuth flow — per-user. /start is auth'd (frontend calls it
+    # with the user's JWT); /callback is exempt (Google hits it
+    # directly, state token encodes the user_id). See app/routes/oauth.py.
+    # Resolves to:
+    #   GET    /api/v1/integrations/google_workspace/oauth/start
+    #   GET    /api/v1/integrations/google_workspace/oauth/callback
+    #   GET    /api/v1/integrations/google_workspace/oauth/connected-users
+    #   DELETE /api/v1/integrations/google_workspace/oauth/disconnect
+    app.include_router(oauth_router, prefix="/api/v1")
 
     # Inbound webhook receivers — UNAUTHENTICATED (path is exempted in
     # AuthMiddleware via _EXEMPT_PREFIXES). Per-integration tokens in the

@@ -118,6 +118,69 @@ The pull and the webhook feed the same upsert path in [`backend/app/services/ghl
 
 ---
 
+## Google Workspace (Gmail) ✅
+
+**What it does today**
+
+Pulls Gmail threads where a known lead's email address appears (From/To/Cc/Bcc) into our database, then renders them as collapsible threads on the lead detail page. Plain-text bodies only; HTML is ignored. Attachments are recorded as metadata (filename + size + mime) but bytes are not downloaded — staff click through to Gmail for the file itself.
+
+- **Auth model:** **Per-user OAuth.** Each staff member runs through Google's consent flow once on `/integrations/google_workspace`; CI stores their encrypted refresh token in `user_integration_credentials` and uses it to read their mailbox on the schedule. Multiple connected users share the same `email_threads` / `email_messages` tables; messages dedup automatically on `provider_message_id` (globally unique) so a thread visible in two mailboxes is only inserted once. Service-account + domain-wide delegation was the original plan, but most GCP orgs enforce `iam.disableServiceAccountKeyCreation`, blocking that path. Per-user OAuth has no policy guardrails and gives each user the comfort of seeing exactly what was authorized.
+- **Path:** [`backend/app/services/google_oauth.py`](backend/app/services/google_oauth.py) holds the OAuth flow primitives (authorize URL, code exchange, refresh). [`backend/app/services/google_oauth_credentials.py`](backend/app/services/google_oauth_credentials.py) loads + decrypts a user's tokens and builds a `google.oauth2.credentials.Credentials` object. [`backend/app/routes/oauth.py`](backend/app/routes/oauth.py) provides `/start` + `/callback` + `/connected-users` + `/disconnect` endpoints. [`backend/app/services/gmail_client.py`](backend/app/services/gmail_client.py) wraps `googleapiclient.discovery.build('gmail', 'v1', ...)` — auth-agnostic, takes any `Credentials`. [`backend/app/services/gmail_upsert.py`](backend/app/services/gmail_upsert.py) keeps `email_threads` + `email_messages` rows in sync. [`backend/app/tasks/gmail_sync.py`](backend/app/tasks/gmail_sync.py) holds both Celery entry points — the full nightly sweep (`sync_gmail_threads`, fan-out across every connected user) and the per-lead on-demand variant (`sync_gmail_threads_for_lead`).
+- **Schedule:** beat-scheduled at **02:45 UTC** daily (`gmail-thread-sync-nightly`), after the GHL pull at 02:30. On-demand: `POST /api/v1/integrations/google_workspace/sync` (button on `/integrations/google_workspace`) for the full sweep, `POST /api/v1/leads/{lead_id}/sync-emails` (button on the lead detail page) for a single lead. Both fan out across every connected user.
+- **Incremental sync:** Each per-user run filters Gmail with `after:<unix_ts_of_user_last_synced_at>` so subsequent runs only fetch newer messages. First run on a fresh user grabs everything matching.
+- **Query shape:** `(from:"<email>" OR to:"<email>" OR cc:"<email>" OR bcc:"<email>") after:<ts>`.
+- **Storage:**
+  - `email_threads(id, lead_id FK CASCADE, provider_thread_id, subject, last_message_at, message_count, created_at, updated_at)`. Composite UNIQUE on `(lead_id, provider_thread_id)`. Index on `(lead_id, last_message_at DESC)`. Migration `i9d0e1f2g3h4`.
+  - `email_messages(id, thread_id FK CASCADE, provider_message_id UNIQUE, from_address, to_addresses JSONB, cc_addresses JSONB, subject, body_text, sent_at, has_attachments, attachments_meta JSONB, created_at)`. Index on `(thread_id, sent_at)`. Migration `i9d0e1f2g3h4`.
+  - `user_integration_credentials(id, user_id FK CASCADE, provider, credentials_encrypted, scopes JSONB, connected_email, last_synced_at, last_sync_status, last_sync_error, created_at, updated_at)`. Composite UNIQUE on `(user_id, provider)`. Migration `j1a2b3c4d5e6`.
+- **Error tolerance:** the sync catches per-user and per-message exceptions and surfaces them in `sync_log.details["errors_by_user"]` (keyed by user_id, capped at 50 messages per user). A user whose refresh token has been revoked is logged + marked `last_sync_status='error'` on their `user_integration_credentials` row (the UI surfaces "Reconnect needed"); the rest of the sweep continues.
+
+**Setup (one-time, by a deployment admin)**
+
+1. Google Cloud Console → create or pick a project → enable **Gmail API**.
+2. APIs & Services → **OAuth consent screen** → configure (External or Internal depending on Workspace). Add scope `https://www.googleapis.com/auth/gmail.readonly` plus `openid` + `email` (so we can show "Connected as jane@…"). Add yourself + any tester accounts under "Test users" until the app is verified.
+3. APIs & Services → **Credentials** → Create Credentials → **OAuth 2.0 Client ID** → Web application. Add authorized redirect URI: `http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback` (for dev; replace host in prod).
+4. Add to `backend/.env`:
+   - `GOOGLE_OAUTH_CLIENT_ID=<client id from step 3>`
+   - `GOOGLE_OAUTH_CLIENT_SECRET=<client secret from step 3>`
+   - `GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback`
+5. Restart the backend so the new env vars are picked up.
+
+**Per-user connect (each staff member, once)**
+
+1. Sign into CI as that user.
+2. Navigate to `/integrations/google_workspace`.
+3. Click **Connect Gmail** → browser redirects to Google's consent screen → grant `gmail.readonly`.
+4. Google redirects back; the page shows your row in "Connected users" with your email + sync status.
+5. Threads will start showing up on lead detail pages on the next sync (nightly or manual).
+
+**Surfaces it powers today**
+
+| Surface | What it shows |
+|---|---|
+| [`/integrations/google_workspace`](frontend/src/app/(app)/integrations/[slug]/page.tsx) | "Connect Gmail" button for the current user; "Connected users" list showing every staff member who has connected, each with `connected_email` + last sync status + a Disconnect action (own-row only). |
+| [`/leads/[lead_id]`](frontend/src/app/(app)/leads/[lead_id]/page.tsx) | **Emails** card between Staff notes and Activity. Collapsed thread rows with subject + participants + relative `last_message_at` + message count; expanding shows each message with body + attachment chips. **Sync emails now** button enqueues a per-lead sweep across all connected users. |
+| `sync_log` table | Per-run history (`operation='gmail_thread_sync'`). `details` carries `users_processed`, `leads_processed`, `inserted`, `errors_by_user`, `scoped_to_lead_ids`. |
+
+**What it could power but doesn't yet**
+
+- **Send email from CI.** Read-only for v1. Sending is a separate (significant) build — needs `gmail.send` scope (which would re-trigger consent) + a compose UI.
+- **Real-time via Gmail Pub/Sub push.** Push subscriptions watch the mailbox and POST a webhook when a new message arrives. Significant ops scope (Cloud Pub/Sub topic, push subscription, watch renewal every 7 days). Add only if 24h latency becomes a complaint.
+- **HTML rendering.** Marketing-style HTML emails currently render as "(no plain-text body)". A sanitizer + `dangerouslySetInnerHTML` path could fix this.
+- **Attachment downloads.** Today we only record metadata. Downloading bytes opens a "where do we store them?" decision (S3 / local fs / Drive).
+- **Body search.** Threads are accessed via the lead — no global "find all emails mentioning competitor X" yet.
+- **Admin-side disconnect for another user.** Each user can only disconnect themselves today; an admin endpoint would handle off-boarded staff.
+
+**Operational notes**
+
+- **What's stored encrypted (per-user):** `{"refresh_token": "...", "access_token": "...", "token_uri": "...", "client_id": "...", "client_secret": "...", "expires_at": "...", "scopes": [...]}` in `user_integration_credentials.credentials_encrypted` (Fernet). The access token is auto-refreshed when it's within 60 seconds of expiry; the new access token + expiry are re-persisted.
+- **Revocation handling.** If a user revokes consent from myaccount.google.com, the next refresh attempt returns `invalid_grant`. The loader stamps `last_sync_status='error'` + `last_sync_error="Token unavailable — reconnect needed"`; the UI surfaces "Reconnect needed" and Sync runs skip that user until they reconnect.
+- **Scopes:** read-only `gmail.readonly` + `openid` + `email`. CI never gets write access; we only read the user's email for display.
+- **Quota:** Gmail API has generous quotas (1B units/day per project, 250 units/sec per user). The list+get fan-out per connected-user × per-lead is well under that for small teams.
+- **Why the state parameter is encrypted, not just signed.** The state encodes `{user_id, nonce, issued_at}` and is Fernet-encrypted with the integrations master key. Encryption gives us tamper-proofing + freshness-checking + opacity in one primitive without adding a session store. TTL is 10 min — enough for the OAuth round-trip.
+
+---
+
 ## Google Calendar 🟡
 
 **What it does today**

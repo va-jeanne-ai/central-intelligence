@@ -25,6 +25,8 @@ from app.models.intelligence import (  # noqa: F401
 from app.models.operational import (  # noqa: F401
     Call,
     ContentIdea,
+    EmailMessage,
+    EmailThread,
     Goal,
     Insight,
     Lead,
@@ -32,6 +34,7 @@ from app.models.operational import (  # noqa: F401
     Member,
     Objection,
     PainPoint,
+    UserIntegrationCredential,
     Win,
 )
 
@@ -83,6 +86,9 @@ __all__ = [
     "PainPoint",
     "Win",
     "LeadNote",
+    "EmailThread",
+    "EmailMessage",
+    "UserIntegrationCredential",
     "Objection",
     # marketing
     "SocialStats",

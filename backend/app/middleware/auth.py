@@ -80,6 +80,11 @@ _EXEMPT_PREFIXES: tuple[str, ...] = (
     # The route handler performs its own token check via secrets.compare_digest
     # against the per-integration secret stored in the integrations row.
     "/api/v1/webhooks/",
+    # OAuth callbacks — Google hits these directly with no JWT. The
+    # callback validates the `state` parameter (which encodes the
+    # initiating user_id, signed by the integrations encryption key)
+    # to know who's connecting.
+    "/api/v1/integrations/google_workspace/oauth/callback",
     "/docs",
     "/redoc",
     "/openapi.json",

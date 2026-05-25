@@ -118,6 +118,20 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "oauth_pending": True,
         "fields": [],  # OAuth — no form fields, just a Connect-with-Google button (TBD)
     },
+    "google_workspace": {
+        "slug": "google_workspace",
+        "name": "Google Workspace (Gmail)",
+        "icon": "📧",
+        "category": "communication",
+        "status": "available",
+        "description": "Pull email threads where a lead's address appears (To/From/Cc/Bcc) into the lead detail page. Each staff member connects their own Google account via OAuth.",
+        "trigger_task": "app.tasks.gmail_sync.sync_gmail_threads",
+        # Per-user OAuth provider: the frontend reads this flag and
+        # renders a "Connect Gmail" button instead of the credentials
+        # form. The actual flow lives in routes/oauth.py.
+        "oauth_per_user": True,
+        "fields": [],
+    },
     "meta_ads": {
         "slug": "meta_ads",
         "name": "Meta Ads",

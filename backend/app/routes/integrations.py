@@ -69,6 +69,7 @@ def _summary_from(provider: dict, row: Integration | None) -> ProviderSummary:
         last_sync_status=row.last_sync_status if row else None,
         oauth_pending=bool(provider.get("oauth_pending", False)),
         webhook_only=bool(provider.get("webhook_only", False)),
+        oauth_per_user=bool(provider.get("oauth_per_user", False)),
     )
 
 
@@ -176,6 +177,14 @@ def _trigger_sync(slug: str) -> str | None:
             return task.id
         except Exception as exc:
             logger.warning("Failed to enqueue sync_ghl_contacts: %s", exc)
+            return None
+    if slug == "google_workspace":
+        try:
+            from app.tasks.gmail_sync import sync_gmail_threads
+            task = sync_gmail_threads.delay()
+            return task.id
+        except Exception as exc:
+            logger.warning("Failed to enqueue sync_gmail_threads: %s", exc)
             return None
     # No-op for providers without a backing task yet (google_calendar, etc.)
     return None
