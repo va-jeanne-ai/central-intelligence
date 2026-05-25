@@ -42,6 +42,8 @@ from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.schemas.leads import (
     CreateNoteRequest,
+    DocumentRow,
+    DocumentsResponse,
     EmailAttachmentMeta,
     EmailMessageRow,
     EmailThreadRow,
@@ -844,6 +846,134 @@ async def get_lead_emails(
     ]
 
     return EmailThreadsResponse(threads=threads)
+
+
+# ===========================================================================
+# Lead documents — GET /api/v1/leads/{id}/documents
+# Lists Google Drive files where the lead's email appears in the file's
+# sharing permissions. Populated by the Drive sync task; dedupes the
+# same file appearing in multiple connected users' Drives.
+# ===========================================================================
+
+
+@router.get("/leads/{lead_id}/documents", response_model=DocumentsResponse)
+async def get_lead_documents(
+    lead_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> DocumentsResponse:
+    """Return Drive files shared with this lead's email address.
+
+    Containment query on the JSONB ``shared_with`` array (GIN-indexed).
+    The same Drive file can appear in multiple connected users'
+    mailboxes — we DISTINCT ON ``provider_file_id`` to surface one
+    row per real file.
+    """
+    uid = _parse_lead_uuid(lead_id)
+
+    row = (await session.execute(
+        text(
+            "SELECT email FROM leads "
+            "WHERE id = :id AND deleted_at IS NULL"
+        ),
+        {"id": str(uid)},
+    )).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    lead_email = (row.get("email") or "").strip().lower()
+    if not lead_email:
+        return DocumentsResponse(files=[])
+
+    file_rows = (await session.execute(
+        text("""
+            SELECT DISTINCT ON (provider_file_id)
+                id::text AS id,
+                name,
+                mime_type,
+                owner_email,
+                modified_time,
+                web_view_link,
+                parent_folder_name,
+                size_bytes
+            FROM google_drive_files
+            WHERE shared_with @> CAST(:email_json AS jsonb)
+              AND is_trashed = FALSE
+            ORDER BY provider_file_id, modified_time DESC NULLS LAST
+        """),
+        {"email_json": f'["{lead_email}"]'},
+    )).mappings().all()
+
+    # Re-sort by modified_time desc for the response — the DISTINCT ON
+    # forces an intermediate ORDER BY on provider_file_id.
+    file_rows_sorted = sorted(
+        file_rows,
+        key=lambda r: r["modified_time"] or "",
+        reverse=True,
+    )
+
+    files = [
+        DocumentRow(
+            id=r["id"],
+            name=r["name"],
+            mime_type=r["mime_type"],
+            owner_email=r["owner_email"],
+            modified_time=(
+                r["modified_time"].isoformat() if r["modified_time"] else None
+            ),
+            web_view_link=r["web_view_link"],
+            parent_folder_name=r["parent_folder_name"],
+            size_bytes=r["size_bytes"],
+        )
+        for r in file_rows_sorted
+    ]
+    return DocumentsResponse(files=files)
+
+
+@router.post("/leads/{lead_id}/sync-documents", status_code=202)
+async def sync_lead_documents(
+    lead_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),  # noqa: ARG001
+) -> dict:
+    """Enqueue a Drive sweep for every connected user.
+
+    Drive's sharing model means we can't filter by "files shared with
+    this lead" at fetch time — the relevant files might live in any
+    connected user's mailbox. We re-sweep all connected users; the
+    upsert is cheap (content_hash short-circuits unchanged files).
+    """
+    uid = _parse_lead_uuid(lead_id)
+
+    exists = (await session.execute(
+        text("SELECT 1 FROM leads WHERE id = :id AND deleted_at IS NULL"),
+        {"id": str(uid)},
+    )).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    user_ids = (await session.execute(
+        text(
+            "SELECT user_id::text FROM user_integration_credentials "
+            "WHERE provider = 'google_workspace'"
+        ),
+    )).scalars().all()
+    if not user_ids:
+        return {"task_ids": [], "reason": "no_connected_users"}
+
+    task_ids: list[str] = []
+    try:
+        from app.tasks.drive_sync import sync_drive_files_for_user
+        for u in user_ids:
+            task = sync_drive_files_for_user.delay(u)
+            task_ids.append(task.id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sync_lead_documents: enqueue failed — %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to enqueue document sync. Try again in a minute.",
+        ) from exc
+
+    return {"task_ids": task_ids, "lead_id": str(uid)}
 
 
 @router.post("/leads/{lead_id}/sync-emails", status_code=202)

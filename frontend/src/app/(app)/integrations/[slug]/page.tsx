@@ -186,7 +186,7 @@ function GoogleWorkspaceConnectCard() {
                 >
                   Google Cloud Console
                 </a>{" "}
-                → create or pick a project, then enable the{" "}
+                → create or pick a project, then enable both the{" "}
                 <a
                   href="https://console.cloud.google.com/apis/library/gmail.googleapis.com"
                   target="_blank"
@@ -194,6 +194,15 @@ function GoogleWorkspaceConnectCard() {
                   className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
                 >
                   Gmail API
+                </a>{" "}
+                and the{" "}
+                <a
+                  href="https://console.cloud.google.com/apis/library/drive.googleapis.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                >
+                  Google Drive API
                 </a>
                 .
               </li>
@@ -211,6 +220,10 @@ function GoogleWorkspaceConnectCard() {
                 Add scopes:{" "}
                 <code className="font-mono text-[11px] bg-gray-100 px-1 rounded whitespace-nowrap">
                   gmail.readonly
+                </code>
+                ,{" "}
+                <code className="font-mono text-[11px] bg-gray-100 px-1 rounded whitespace-nowrap">
+                  drive.readonly
                 </code>
                 ,{" "}
                 <code className="font-mono text-[11px] bg-gray-100 px-1 rounded">openid</code>
@@ -251,22 +264,39 @@ function GoogleWorkspaceConnectCard() {
               start={4}
             >
               <li>
-                Copy the client ID + client secret. Add them to{" "}
-                <code className="font-mono text-[11px]">backend/.env</code>:
+                Create a{" "}
+                <a
+                  href="https://www.voyageai.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                >
+                  Voyage AI
+                </a>{" "}
+                account and generate an API key. Drive file content is embedded
+                with Voyage&apos;s <code className="font-mono text-[11px] bg-gray-100 px-1 rounded">voyage-3</code> model
+                so the chat agent can search across files semantically. Costs run
+                ~$3/day at the default 50M-token cap.
+              </li>
+              <li>
+                Copy the Google client ID + client secret + the Voyage key. Add
+                them to <code className="font-mono text-[11px]">backend/.env</code>:
               </li>
             </ol>
             <pre className="ml-6 text-[11px] font-mono bg-gray-50 border border-gray-200 rounded-md px-3 py-2 overflow-x-auto text-gray-800">
 {`GOOGLE_OAUTH_CLIENT_ID=...
 GOOGLE_OAUTH_CLIENT_SECRET=...
-GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback`}
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback
+VOYAGE_API_KEY=pa-...`}
             </pre>
             <ol
               className="list-decimal list-inside space-y-2 text-[13px] text-gray-700"
-              start={5}
+              start={6}
             >
               <li>
                 <strong>Restart the backend</strong> so the new env vars are
-                loaded. Then come back here.
+                loaded, and restart Celery worker + beat so the new Drive sync
+                and embed-worker tasks register. Then come back here.
               </li>
             </ol>
           </div>
@@ -282,22 +312,34 @@ GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/v1/integrations/google_works
               </li>
               <li>
                 Google redirects to its consent screen. Grant{" "}
-                <code className="font-mono text-[11px]">gmail.readonly</code> for
+                <code className="font-mono text-[11px]">gmail.readonly</code> and{" "}
+                <code className="font-mono text-[11px]">drive.readonly</code> for
                 your account.
               </li>
               <li>
                 You&apos;ll land back here with your row in <em>Connected users</em>.
                 Email threads start appearing on lead detail pages on the next
-                sync (nightly 02:45 UTC or via the per-lead Sync button).
+                Gmail sync (nightly 02:45 UTC). Drive files appear on the lead
+                Documents card after the next Drive sync (03:00 UTC) and are
+                embedded for chat search within ~2 minutes of that.
               </li>
             </ol>
           </div>
 
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11px] text-amber-800">
+            <strong>Already connected?</strong> The Drive scope was added after
+            the original Gmail-only OAuth grant, so you need to reconnect even
+            if your row already shows in <em>Connected users</em>. Click your{" "}
+            <strong>Disconnect</strong> action in the table below, then{" "}
+            <strong>Connect Gmail</strong> again to grant Drive access.
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11px] text-amber-800">
             <strong>Read-only.</strong> We only request{" "}
-            <code className="font-mono text-[10px]">gmail.readonly</code>.
-            CI never sends mail and never touches anything else in your account.
-            You can revoke anytime at{" "}
+            <code className="font-mono text-[10px]">gmail.readonly</code> and{" "}
+            <code className="font-mono text-[10px]">drive.readonly</code>.
+            CI never sends mail, never modifies your Drive, and never touches
+            anything else in your account. Revoke anytime at{" "}
             <a
               href="https://myaccount.google.com/permissions"
               target="_blank"

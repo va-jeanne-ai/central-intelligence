@@ -285,3 +285,27 @@ class EmailThreadsResponse(BaseModel):
     """
 
     threads: list[EmailThreadRow] = Field(default_factory=list)
+
+
+class DocumentRow(BaseModel):
+    """One Drive file shared with this lead's email address."""
+
+    id: str
+    name: str | None = None
+    mime_type: str | None = None
+    owner_email: str | None = None
+    modified_time: str | None = None
+    web_view_link: str | None = None
+    parent_folder_name: str | None = None
+    size_bytes: int | None = None
+
+
+class DocumentsResponse(BaseModel):
+    """Payload for ``GET /api/v1/leads/{id}/documents``.
+
+    Files are ordered newest-first by ``modified_time``. Same Drive
+    file appearing in two users' mailboxes is dedup'd here on
+    ``provider_file_id``.
+    """
+
+    files: list[DocumentRow] = Field(default_factory=list)

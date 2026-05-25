@@ -31,9 +31,13 @@ logger = logging.getLogger(__name__)
 AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 
-# Read-only Gmail. Adding more scopes here requires the user to
-# re-consent — currently we only need messages.list + messages.get.
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+# Read-only Gmail + Drive. Adding more scopes here requires the user
+# to re-consent — `drive.readonly` was added when the RAG layer landed,
+# which forced a re-OAuth across all previously-connected accounts.
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
+]
 
 # Some Google flows return userinfo only when openid + email are
 # requested. We need the connected email address for the UI ("Connected

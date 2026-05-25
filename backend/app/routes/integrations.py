@@ -179,13 +179,23 @@ def _trigger_sync(slug: str) -> str | None:
             logger.warning("Failed to enqueue sync_ghl_contacts: %s", exc)
             return None
     if slug == "google_workspace":
+        # google_workspace covers both Gmail thread sync and Drive file
+        # sync. Kick off both — the returned task id is the Gmail one
+        # so existing UI polling stays unchanged; the Drive task runs
+        # in parallel and surfaces in sync_log on completion.
+        task_id: str | None = None
         try:
             from app.tasks.gmail_sync import sync_gmail_threads
             task = sync_gmail_threads.delay()
-            return task.id
+            task_id = task.id
         except Exception as exc:
             logger.warning("Failed to enqueue sync_gmail_threads: %s", exc)
-            return None
+        try:
+            from app.tasks.drive_sync import sync_drive_files
+            sync_drive_files.delay()
+        except Exception as exc:
+            logger.warning("Failed to enqueue sync_drive_files: %s", exc)
+        return task_id
     # No-op for providers without a backing task yet (google_calendar, etc.)
     return None
 

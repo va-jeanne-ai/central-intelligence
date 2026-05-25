@@ -321,3 +321,20 @@ export interface TestIntegrationResponse {
   message: string;
   details?: Record<string, unknown> | null;
 }
+
+// ─── Lead Documents (Google Drive) ────────────────────────────────────────
+
+export interface DocumentRow {
+  id: string;
+  name: string | null;
+  mime_type: string | null;
+  owner_email: string | null;
+  modified_time: string | null;
+  web_view_link: string | null;
+  parent_folder_name: string | null;
+  size_bytes: number | null;
+}
+
+export interface DocumentsResponse {
+  files: DocumentRow[];
+}

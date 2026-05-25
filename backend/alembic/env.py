@@ -10,9 +10,14 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+# Load backend/.env before reading DATABASE_URL — keeps `alembic upgrade head`
+# usable without exporting env vars in every shell.
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Import Base *and* all model modules so that their tables are registered

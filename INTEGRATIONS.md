@@ -118,49 +118,78 @@ The pull and the webhook feed the same upsert path in [`backend/app/services/ghl
 
 ---
 
-## Google Workspace (Gmail) ✅
+## Google Workspace (Gmail + Drive + RAG) ✅
 
 **What it does today**
 
-Pulls Gmail threads where a known lead's email address appears (From/To/Cc/Bcc) into our database, then renders them as collapsible threads on the lead detail page. Plain-text bodies only; HTML is ignored. Attachments are recorded as metadata (filename + size + mime) but bytes are not downloaded — staff click through to Gmail for the file itself.
+Two ingest pipelines on one per-user OAuth grant:
 
-- **Auth model:** **Per-user OAuth.** Each staff member runs through Google's consent flow once on `/integrations/google_workspace`; CI stores their encrypted refresh token in `user_integration_credentials` and uses it to read their mailbox on the schedule. Multiple connected users share the same `email_threads` / `email_messages` tables; messages dedup automatically on `provider_message_id` (globally unique) so a thread visible in two mailboxes is only inserted once. Service-account + domain-wide delegation was the original plan, but most GCP orgs enforce `iam.disableServiceAccountKeyCreation`, blocking that path. Per-user OAuth has no policy guardrails and gives each user the comfort of seeing exactly what was authorized.
+1. **Gmail thread sync** — pulls threads where a known lead's email address appears (From/To/Cc/Bcc) into our database, rendered as collapsible threads on the lead detail page. Plain-text bodies only; HTML is ignored. Attachments are recorded as metadata (filename + size + mime) but bytes are not downloaded — staff click through to Gmail for the file itself.
+2. **Drive file sync + RAG layer** — sweeps every connected user's Drive, indexes file metadata into `google_drive_files`, and pulls plain-text content from supported file types (Google Docs, Sheets, Slides, PDFs, DOCX, txt/markdown). Extracted text feeds the **embeddings pipeline** (Voyage `voyage-3`, 1024-d, pgvector on Supabase) that powers the chat agent's `search_knowledge_base` tool. The lead detail page renders a **Documents** card listing files shared with the lead's email address.
+
+- **Auth model:** **Per-user OAuth.** Each staff member runs through Google's consent flow once on `/integrations/google_workspace`; CI stores their encrypted refresh token in `user_integration_credentials` and uses it to read their mailbox + Drive on the schedule. Both Gmail and Drive sync share the same grant (`gmail.readonly` + `drive.readonly`). Multiple connected users share the same `email_threads` / `email_messages` / `google_drive_files` tables; Gmail messages dedup automatically on `provider_message_id` (globally unique); Drive files dedup on read (one row per `connected_via_user_id`). Service-account + domain-wide delegation was the original plan, but most GCP orgs enforce `iam.disableServiceAccountKeyCreation`, blocking that path. Per-user OAuth has no policy guardrails and gives each user the comfort of seeing exactly what was authorized.
 - **Path:** [`backend/app/services/google_oauth.py`](backend/app/services/google_oauth.py) holds the OAuth flow primitives (authorize URL, code exchange, refresh). [`backend/app/services/google_oauth_credentials.py`](backend/app/services/google_oauth_credentials.py) loads + decrypts a user's tokens and builds a `google.oauth2.credentials.Credentials` object. [`backend/app/routes/oauth.py`](backend/app/routes/oauth.py) provides `/start` + `/callback` + `/connected-users` + `/disconnect` endpoints. [`backend/app/services/gmail_client.py`](backend/app/services/gmail_client.py) wraps `googleapiclient.discovery.build('gmail', 'v1', ...)` — auth-agnostic, takes any `Credentials`. [`backend/app/services/gmail_upsert.py`](backend/app/services/gmail_upsert.py) keeps `email_threads` + `email_messages` rows in sync. [`backend/app/tasks/gmail_sync.py`](backend/app/tasks/gmail_sync.py) holds both Celery entry points — the full nightly sweep (`sync_gmail_threads`, fan-out across every connected user) and the per-lead on-demand variant (`sync_gmail_threads_for_lead`).
-- **Schedule:** beat-scheduled at **02:45 UTC** daily (`gmail-thread-sync-nightly`), after the GHL pull at 02:30. On-demand: `POST /api/v1/integrations/google_workspace/sync` (button on `/integrations/google_workspace`) for the full sweep, `POST /api/v1/leads/{lead_id}/sync-emails` (button on the lead detail page) for a single lead. Both fan out across every connected user.
-- **Incremental sync:** Each per-user run filters Gmail with `after:<unix_ts_of_user_last_synced_at>` so subsequent runs only fetch newer messages. First run on a fresh user grabs everything matching.
-- **Query shape:** `(from:"<email>" OR to:"<email>" OR cc:"<email>" OR bcc:"<email>") after:<ts>`.
+- **Schedule:** Gmail beat-scheduled at **02:45 UTC** daily (`gmail-thread-sync-nightly`); Drive at **03:00 UTC** (`google-drive-sync-nightly`); embed worker drain every **2 minutes** (`embed-queue-drain`). On-demand: `POST /api/v1/integrations/google_workspace/sync` fans out both Gmail and Drive in one click. `POST /api/v1/leads/{lead_id}/sync-emails` and `POST /api/v1/leads/{lead_id}/sync-documents` cover the per-lead variants from the lead detail page.
+- **Incremental sync:** Gmail filters with `after:<unix_ts_of_user_last_synced_at>`. Drive uses `modifiedTime > <last_sync>` plus a `content_hash` short-circuit — files whose extracted text hashes match the stored value skip re-embedding entirely.
+- **Query shape (Gmail):** `(from:"<email>" OR to:"<email>" OR cc:"<email>" OR bcc:"<email>") after:<ts>`.
 - **Storage:**
   - `email_threads(id, lead_id FK CASCADE, provider_thread_id, subject, last_message_at, message_count, created_at, updated_at)`. Composite UNIQUE on `(lead_id, provider_thread_id)`. Index on `(lead_id, last_message_at DESC)`. Migration `i9d0e1f2g3h4`.
   - `email_messages(id, thread_id FK CASCADE, provider_message_id UNIQUE, from_address, to_addresses JSONB, cc_addresses JSONB, subject, body_text, sent_at, has_attachments, attachments_meta JSONB, created_at)`. Index on `(thread_id, sent_at)`. Migration `i9d0e1f2g3h4`.
   - `user_integration_credentials(id, user_id FK CASCADE, provider, credentials_encrypted, scopes JSONB, connected_email, last_synced_at, last_sync_status, last_sync_error, created_at, updated_at)`. Composite UNIQUE on `(user_id, provider)`. Migration `j1a2b3c4d5e6`.
-- **Error tolerance:** the sync catches per-user and per-message exceptions and surfaces them in `sync_log.details["errors_by_user"]` (keyed by user_id, capped at 50 messages per user). A user whose refresh token has been revoked is logged + marked `last_sync_status='error'` on their `user_integration_credentials` row (the UI surfaces "Reconnect needed"); the rest of the sweep continues.
+  - `google_drive_files(id, connected_via_user_id FK CASCADE, provider_file_id, name, mime_type, owner_email, modified_time, web_view_link, parent_folder_id, parent_folder_name, shared_with JSONB, size_bytes, is_trashed, extracted_text, content_hash, last_extracted_at, created_at, updated_at)`. Composite UNIQUE on `(provider_file_id, connected_via_user_id)`. **GIN index on `shared_with`** for the lead documents card's JSONB containment query. Migration `k2b3c4d5e6f7`.
+  - `embed_pending(id, source_table, source_id, text_to_embed, content_hash, attempts, last_error, created_at)`. FIFO drain queue, polymorphic across all four embedded sources. Migration `k2b3c4d5e6f7`.
+  - `embeddings(id, source_table, source_id, chunk_index, text_chunk, embedding vector(1024), content_hash, embedded_at)`. **IVFFLAT index** on `embedding vector_cosine_ops` (lists=100). Composite UNIQUE on `(source_table, source_id, chunk_index)`. Migration `k2b3c4d5e6f7`.
+  - `embedding_budget(id, daily_token_cap, tokens_used_today, usage_window_started_at)`. Single-row global daily cap. Migration `k2b3c4d5e6f7`.
+- **Error tolerance:** Each sync catches per-user and per-message/file exceptions and surfaces them in `sync_log.details["errors_by_user"]` (keyed by user_id, capped at 50 entries per user). A user whose refresh token has been revoked is logged + marked `last_sync_status='error'` on their `user_integration_credentials` row (the UI surfaces "Reconnect needed"); the rest of the sweep continues. The embed worker uses per-row attempt counting (max 3) so a malformed source row can't block the queue.
+
+**AI chat retrieval (the RAG layer)**
+
+The Central Intelligence chat agent has **two retrieval tools**; the LLM picks which to call:
+
+| Tool | Use for | Source |
+|---|---|---|
+| `query_database` | Structured business data — counts, lists, status filters, lead/call/insight joins | Postgres tables (read-only SELECT) |
+| `search_knowledge_base` | Semantic / "find anything about…" questions | `embeddings` table; pgvector cosine against the Voyage-embedded chunks |
+
+Embeddings cover four sources today, all polymorphic-keyed by `(source_table, source_id)`:
+
+- `google_drive_files` — primary RAG corpus. Docs/Sheets/Slides exported via Drive API to `text/plain` or `text/csv`; PDFs via pdfplumber; DOCX via python-docx; plain text + markdown as-is. Files >15MB are indexed at metadata level only.
+- `email_messages` — subject + body_text concatenated per message.
+- `lead_notes` — staff-side journal entries.
+- `insights` — call insights (raw_quote + what_they_say + the_real_problem + emotional_driver + marketing_translation concatenated).
+
+Chunking: `tiktoken` cl100k_base, 1024 tokens per chunk with 200-token overlap. Embeddings stored on every chunk; one source row → many `embeddings` rows.
 
 **Setup (one-time, by a deployment admin)**
 
-1. Google Cloud Console → create or pick a project → enable **Gmail API**.
-2. APIs & Services → **OAuth consent screen** → configure (External or Internal depending on Workspace). Add scope `https://www.googleapis.com/auth/gmail.readonly` plus `openid` + `email` (so we can show "Connected as jane@…"). Add yourself + any tester accounts under "Test users" until the app is verified.
+1. Google Cloud Console → create or pick a project → enable **Gmail API** and **Drive API**.
+2. APIs & Services → **OAuth consent screen** → configure (External or Internal depending on Workspace). Add scopes `https://www.googleapis.com/auth/gmail.readonly` and `https://www.googleapis.com/auth/drive.readonly` plus `openid` + `email`. Add yourself + any tester accounts under "Test users" until the app is verified.
 3. APIs & Services → **Credentials** → Create Credentials → **OAuth 2.0 Client ID** → Web application. Add authorized redirect URI: `http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback` (for dev; replace host in prod).
-4. Add to `backend/.env`:
+4. Voyage AI → create an account at [voyageai.com](https://www.voyageai.com) → generate an API key.
+5. Add to `backend/.env`:
    - `GOOGLE_OAUTH_CLIENT_ID=<client id from step 3>`
    - `GOOGLE_OAUTH_CLIENT_SECRET=<client secret from step 3>`
    - `GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback`
-5. Restart the backend so the new env vars are picked up.
+   - `VOYAGE_API_KEY=<key from step 4>`
+6. Restart the backend so the new env vars are picked up.
+7. **Force re-consent for already-connected users.** The `drive.readonly` scope is additive but Google's consent layer requires re-grant: `DELETE FROM user_integration_credentials WHERE provider = 'google_workspace';`. Each staff member then reconnects to grant the expanded scopes.
 
 **Per-user connect (each staff member, once)**
 
 1. Sign into CI as that user.
 2. Navigate to `/integrations/google_workspace`.
-3. Click **Connect Gmail** → browser redirects to Google's consent screen → grant `gmail.readonly`.
+3. Click **Connect Gmail** → browser redirects to Google's consent screen → grant `gmail.readonly` + `drive.readonly`.
 4. Google redirects back; the page shows your row in "Connected users" with your email + sync status.
-5. Threads will start showing up on lead detail pages on the next sync (nightly or manual).
+5. Threads + documents will start showing up on lead detail pages on the next sync (nightly or manual). RAG embeddings begin populating within a few minutes of the first Drive sweep (embed worker drains every 2 min).
 
 **Surfaces it powers today**
 
 | Surface | What it shows |
 |---|---|
 | [`/integrations/google_workspace`](frontend/src/app/(app)/integrations/[slug]/page.tsx) | "Connect Gmail" button for the current user; "Connected users" list showing every staff member who has connected, each with `connected_email` + last sync status + a Disconnect action (own-row only). |
-| [`/leads/[lead_id]`](frontend/src/app/(app)/leads/[lead_id]/page.tsx) | **Emails** card between Staff notes and Activity. Collapsed thread rows with subject + participants + relative `last_message_at` + message count; expanding shows each message with body + attachment chips. **Sync emails now** button enqueues a per-lead sweep across all connected users. |
-| `sync_log` table | Per-run history (`operation='gmail_thread_sync'`). `details` carries `users_processed`, `leads_processed`, `inserted`, `errors_by_user`, `scoped_to_lead_ids`. |
+| [`/leads/[lead_id]`](frontend/src/app/(app)/leads/[lead_id]/page.tsx) | **Emails** card with collapsed thread rows + per-lead **Sync emails now** button. **Documents** card listing Drive files where the lead's email is in `shared_with`, with mime icon + last modified + owner + per-lead **Sync documents now** button. |
+| `/chat` (Central Intelligence agent) | `search_knowledge_base` tool. LLM picks it for unstructured questions ("find files about Q3 budgets", "what's our refund policy") and quotes the top matching chunks. Backed by pgvector cosine search against `embeddings`. |
+| `sync_log` table | Per-run history. `operation='gmail_thread_sync'` for Gmail; `operation='drive_file_sync'` for Drive. `details` carries `users_processed`, `inserted`, `content_changed`, `errors_by_user`. |
 
 **What it could power but doesn't yet**
 
@@ -175,8 +204,11 @@ Pulls Gmail threads where a known lead's email address appears (From/To/Cc/Bcc) 
 
 - **What's stored encrypted (per-user):** `{"refresh_token": "...", "access_token": "...", "token_uri": "...", "client_id": "...", "client_secret": "...", "expires_at": "...", "scopes": [...]}` in `user_integration_credentials.credentials_encrypted` (Fernet). The access token is auto-refreshed when it's within 60 seconds of expiry; the new access token + expiry are re-persisted.
 - **Revocation handling.** If a user revokes consent from myaccount.google.com, the next refresh attempt returns `invalid_grant`. The loader stamps `last_sync_status='error'` + `last_sync_error="Token unavailable — reconnect needed"`; the UI surfaces "Reconnect needed" and Sync runs skip that user until they reconnect.
-- **Scopes:** read-only `gmail.readonly` + `openid` + `email`. CI never gets write access; we only read the user's email for display.
-- **Quota:** Gmail API has generous quotas (1B units/day per project, 250 units/sec per user). The list+get fan-out per connected-user × per-lead is well under that for small teams.
+- **Scopes:** read-only `gmail.readonly` + `drive.readonly` + `openid` + `email`. CI never gets write access; we only read the user's mailbox + Drive for display + embeddings.
+- **Quota:** Gmail API and Drive API both have generous quotas (1B units/day per project on Gmail; 1k req/100s per user on Drive). The sweep stays well under these for typical team sizes.
+- **Voyage cost guardrails.** Token usage is reported by Voyage on every embed call and decremented against `embedding_budget.tokens_used_today`. Default cap is **50M tokens/day** (~$3/day at Voyage `voyage-3` pricing). The worker pauses when the cap is hit and resets on a rolling 24h window. To adjust: `UPDATE embedding_budget SET daily_token_cap = <N> WHERE id = 1`.
+- **Re-embed semantics.** Each source row's `content_hash` (sha256[:64]) is compared to the most recent `embeddings` row for `(source_table, source_id)`. If unchanged, the embed is skipped. When content changes the worker DELETEs the old chunks for that source row before inserting the new ones — no version sprawl.
+- **Backfill the other three sources.** `app.tasks.embed_backfill` provides three one-shot tasks (`backfill_email_messages_embeddings`, `backfill_lead_notes_embeddings`, `backfill_insights_embeddings`) that enqueue every row missing an embedding. Invoke from a Celery shell or via `.delay()` from a Python REPL after the migration runs.
 - **Why the state parameter is encrypted, not just signed.** The state encodes `{user_id, nonce, issued_at}` and is Fernet-encrypted with the integrations master key. Encryption gives us tamper-proofing + freshness-checking + opacity in one primitive without adding a session store. TTL is 10 min — enough for the OAuth round-trip.
 
 ---

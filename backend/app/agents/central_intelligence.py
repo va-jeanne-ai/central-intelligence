@@ -14,11 +14,19 @@ from sqlalchemy import text
 from app.agents.base import BaseAgent
 from app.database import AsyncSessionLocal
 from app.prompts.central_intelligence_v1 import CENTRAL_INTELLIGENCE_SYSTEM_PROMPT_V1
+from app.services import voyage_client
 
 logger = logging.getLogger(__name__)
 
 # Maximum rows returned per query to keep context manageable.
 _MAX_ROWS = 50
+
+# Defaults for the knowledge-base tool. Top-K of 10 is a reasonable
+# balance between recall and prompt bloat; the LLM can request more
+# if the first batch didn't include what it needed.
+_KB_DEFAULT_TOP_K = 10
+_KB_MAX_TOP_K = 25
+_KB_CHUNK_PREVIEW_CHARS = 1200
 
 # ---------------------------------------------------------------------------
 # Status translation — DB values → business-friendly labels
@@ -172,6 +180,79 @@ async def _query_database(sql: str) -> str:
         return "This information is not available right now."
 
 
+async def _search_knowledge_base(query: str, top_k: int = _KB_DEFAULT_TOP_K) -> str:
+    """Semantic search across embedded Drive files, emails, notes, insights.
+
+    Embeds the query with Voyage (input_type=query) → runs a cosine
+    similarity lookup against the ``embeddings`` table → returns the
+    top-K chunks as a flat string the LLM can quote from.
+
+    Per source row we keep at most one chunk in the result set —
+    duplicating long files would crowd out other matches.
+    """
+    if not query or not query.strip():
+        return "No query supplied."
+
+    try:
+        k = max(1, min(int(top_k), _KB_MAX_TOP_K))
+    except (TypeError, ValueError):
+        k = _KB_DEFAULT_TOP_K
+
+    try:
+        vectors, _tokens = voyage_client.embed_batch(
+            [query.strip()], input_type="query",
+        )
+    except voyage_client.VoyageError as exc:
+        logger.warning("search_knowledge_base: embed failed — %s", exc)
+        return "Knowledge base search is not available right now."
+
+    if not vectors:
+        return "Knowledge base search returned no results."
+
+    query_vec = vectors[0]
+    # pgvector cosine distance: smaller = closer. Cast to vector(1024)
+    # so the operator binds correctly with parameter substitution.
+    sql = text("""
+        SELECT DISTINCT ON (source_table, source_id)
+            source_table,
+            source_id,
+            text_chunk,
+            embedding <=> CAST(:q AS vector) AS distance
+        FROM embeddings
+        ORDER BY source_table, source_id,
+                 embedding <=> CAST(:q AS vector)
+        LIMIT :k
+    """)
+
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                sql, {"q": str(query_vec), "k": k * 3},
+            )
+            rows = result.fetchall()
+    except Exception as exc:
+        logger.warning("search_knowledge_base: query failed — %s", exc)
+        return "Knowledge base search is not available right now."
+
+    if not rows:
+        return "No matching content found in the knowledge base."
+
+    # Re-sort by distance + trim to k. DISTINCT ON inside the SQL
+    # collapsed duplicates per source row; sort the survivors here.
+    rows_sorted = sorted(rows, key=lambda r: r[3])[:k]
+
+    lines: list[str] = []
+    for row in rows_sorted:
+        source_table = row[0]
+        source_id = row[1]
+        chunk = (row[2] or "").strip()
+        if len(chunk) > _KB_CHUNK_PREVIEW_CHARS:
+            chunk = chunk[:_KB_CHUNK_PREVIEW_CHARS].rsplit(" ", 1)[0] + "…"
+        lines.append(f"[{source_table}#{source_id}]\n{chunk}")
+
+    return "\n\n---\n\n".join(lines)
+
+
 class CentralIntelligence(BaseAgent):
     """CEO agent — orchestrates all departments.
 
@@ -220,4 +301,41 @@ class CentralIntelligence(BaseAgent):
                 "required": ["sql"],
             },
             handler=_query_database,
+        )
+
+        self.register_tool(
+            name="search_knowledge_base",
+            description=(
+                "Semantic search across the org's knowledge base — Google "
+                "Drive files (Docs, Sheets, Slides, PDFs, DOCX), email "
+                "threads, lead staff-notes, and call insights. Use this "
+                "for unstructured / 'find me anything about...' questions "
+                "like \"what's our refund policy\", \"find files about Q3 "
+                "budgets\", \"what did Jane say about pricing\". For "
+                "structured business data (counts, status filters, lead "
+                "lists) use query_database instead. Returns the top "
+                "matching content chunks tagged with their source row."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Natural-language search query. Be specific — "
+                            "vector search rewards descriptive phrases over "
+                            "single keywords."
+                        ),
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": (
+                            "How many source rows to return (default 10, max 25). "
+                            "Increase if the first batch doesn't cover the answer."
+                        ),
+                    },
+                },
+                "required": ["query"],
+            },
+            handler=_search_knowledge_base,
         )

@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Float,
@@ -17,6 +18,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+# pgvector adapter — Vector(1024) is the SQLAlchemy type for the
+# Voyage voyage-3 embedding column on the embeddings table.
+from pgvector.sqlalchemy import Vector
 
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin
 
@@ -586,6 +591,169 @@ class EmailMessage(Base):
 
     thread: Mapped["EmailThread"] = relationship(
         "EmailThread", back_populates="messages",
+    )
+
+
+class GoogleDriveFile(Base):
+    """One file in a connected user's Drive.
+
+    Synced by ``tasks/drive_sync.py``. The same Drive file appearing in
+    two users' mailboxes lands as two rows (different
+    ``connected_via_user_id``); dedup happens on read in the chat
+    surface and lead documents card.
+
+    ``extracted_text`` caches the plain-text body produced by
+    ``drive_client.fetch_file_content`` — parsed once at sync time and
+    re-used by the embed worker. ``content_hash`` is the sha256 of
+    ``extracted_text or name`` and is diffed against the most-recent
+    ``embeddings`` row to decide whether to re-embed.
+    """
+
+    __tablename__ = "google_drive_files"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_file_id", "connected_via_user_id",
+            name="uq_google_drive_files_provider_user",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    connected_via_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider_file_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    owner_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    modified_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    web_view_link: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parent_folder_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True,
+    )
+    parent_folder_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSONB array of lowercase emails. GIN-indexed for containment queries
+    # in the lead documents card ("files where lead.email ∈ shared_with").
+    shared_with: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    is_trashed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false",
+    )
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_extracted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class EmbedPending(Base):
+    """FIFO queue of (source_table, source_id) waiting to be embedded.
+
+    Generic across sources — Drive files, email messages, lead notes,
+    and call insights all enqueue into the same table. The embed worker
+    drains in ``created_at`` order without caring about source type.
+    """
+
+    __tablename__ = "embed_pending"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    source_table: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    text_to_embed: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0",
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class Embedding(Base):
+    """One pgvector-1024 chunk embedding.
+
+    Polymorphic via (source_table, source_id). ``chunk_index`` lets one
+    source row produce many chunks; the UNIQUE on the triple makes the
+    INSERT idempotent.
+    """
+
+    __tablename__ = "embeddings"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_table", "source_id", "chunk_index",
+            name="uq_embeddings_source_chunk",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    source_table: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    chunk_index: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0",
+    )
+    text_chunk: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    embedded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class EmbeddingBudget(Base):
+    """Single-row global daily-token cap.
+
+    The embed worker checks ``tokens_used_today`` against
+    ``daily_token_cap`` before each batch; if at cap, it skips the tick
+    and logs. ``usage_window_started_at`` rolls over after 24h, at
+    which point the worker resets ``tokens_used_today`` to 0.
+    """
+
+    __tablename__ = "embedding_budget"
+
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, server_default="1",
+    )
+    daily_token_cap: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="50000000",
+    )
+    tokens_used_today: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="0",
+    )
+    usage_window_started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 

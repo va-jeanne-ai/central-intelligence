@@ -115,6 +115,31 @@ interface EmailThreadsResponse {
   threads: EmailThreadRow[];
 }
 
+interface DocumentRow {
+  id: string;
+  name: string | null;
+  mime_type: string | null;
+  owner_email: string | null;
+  modified_time: string | null;
+  web_view_link: string | null;
+  parent_folder_name: string | null;
+  size_bytes: number | null;
+}
+
+interface DocumentsResponse {
+  files: DocumentRow[];
+}
+
+function mimeIcon(mime: string | null): string {
+  if (!mime) return "📄";
+  if (mime.includes("spreadsheet") || mime === "text/csv") return "📊";
+  if (mime.includes("presentation")) return "🎨";
+  if (mime === "application/pdf") return "📕";
+  if (mime.includes("document") || mime.startsWith("text/")) return "📄";
+  if (mime.startsWith("image/")) return "🖼️";
+  return "📄";
+}
+
 // ─── Status / Source display config ──────────────────────────────────────────
 // TODO(v2): hoist to @/lib/lead-display.ts — duplicated from
 // /leads/page.tsx for now since the detail page is the second consumer.
@@ -576,6 +601,10 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
   const [expandedThreadIds, setExpandedThreadIds] = useState<Set<string>>(new Set());
   const [isSyncingEmails, setIsSyncingEmails] = useState(false);
 
+  // Drive documents — files where this lead's email is in shared_with.
+  const [documents, setDocuments] = useState<DocumentRow[]>([]);
+  const [isSyncingDocuments, setIsSyncingDocuments] = useState(false);
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -618,12 +647,25 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
     }
   }, [leadId]);
 
+  const loadDocuments = useCallback(async () => {
+    try {
+      const data = await apiClient.get<DocumentsResponse>(
+        `/leads/${leadId}/documents`,
+        { silent: true },
+      );
+      setDocuments(data.files);
+    } catch {
+      // Drive may not be connected yet; degrade silently.
+    }
+  }, [leadId]);
+
   useEffect(() => {
     if (authLoading) return;
     void load();
     void loadHistory();
     void loadEmails();
-  }, [authLoading, load, loadHistory, loadEmails]);
+    void loadDocuments();
+  }, [authLoading, load, loadHistory, loadEmails, loadDocuments]);
 
   // Poll the lead detail every 10s while at least one call is still being
   // analyzed. Once every call has processed_date set, the interval is
@@ -790,6 +832,23 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
     } catch (err) {
       showError(err instanceof Error ? err.message : "Failed to start email sync.");
       setIsSyncingEmails(false);
+    }
+  }
+
+  async function syncDocuments() {
+    if (isSyncingDocuments) return;
+    setIsSyncingDocuments(true);
+    try {
+      await apiClient.post(`/leads/${leadId}/sync-documents`, {}, { silent: true });
+      showSuccess("Document sync queued. Refreshing in a few seconds…");
+      // Drive sweeps can be slow; just give the worker a head start.
+      setTimeout(() => {
+        void loadDocuments();
+        setIsSyncingDocuments(false);
+      }, 5000);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Failed to start document sync.");
+      setIsSyncingDocuments(false);
     }
   }
 
@@ -1182,6 +1241,77 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                       </div>
                     );
                   })}
+                </HistoryList>
+              )}
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Documents — Drive files where this lead's email is in the file's
+            sharing permissions. Populated by the Drive sync task; sweeps
+            every connected user's Drive and dedupes by provider_file_id.
+            Only rendered when the lead has an email — without one we have
+            no key to match against shared_with. */}
+        {detail.email && (
+          <Card>
+            <CardHeader
+              title="Documents"
+              action={
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-gray-400">
+                    {documents.length} file{documents.length === 1 ? "" : "s"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void syncDocuments()}
+                    disabled={isSyncingDocuments}
+                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
+                  >
+                    {isSyncingDocuments ? "Syncing…" : "Sync documents now"}
+                  </button>
+                </div>
+              }
+            />
+            <CardBody noPadding>
+              {documents.length === 0 ? (
+                <p className="px-5 py-4 text-[13px] text-gray-400 italic">
+                  No documents shared with this lead. Click <b>Sync documents now</b> if Google Workspace is connected.
+                </p>
+              ) : (
+                <HistoryList className="py-1">
+                  {documents.map((doc) => (
+                    <HistoryItem
+                      key={doc.id}
+                      dotColor="#0EA5E9"
+                      trailing={
+                        <span
+                          className="text-[11px] text-gray-400"
+                          title={doc.modified_time ? formatDate(doc.modified_time) : undefined}
+                        >
+                          {doc.modified_time ? relativeTime(doc.modified_time) : "—"}
+                        </span>
+                      }
+                    >
+                      <a
+                        href={doc.web_view_link || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-left hover:underline"
+                      >
+                        <div className="flex items-center gap-2 text-[13px]">
+                          <span aria-hidden>{mimeIcon(doc.mime_type)}</span>
+                          <span className="font-semibold text-gray-700 truncate">
+                            {doc.name || "(untitled)"}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-0.5 ml-5 truncate">
+                          {doc.parent_folder_name ? `${doc.parent_folder_name} · ` : ""}
+                          {doc.owner_email || "—"}
+                          {doc.size_bytes ? ` · ${Math.round(doc.size_bytes / 1024)} KB` : ""}
+                        </div>
+                      </a>
+                    </HistoryItem>
+                  ))}
                 </HistoryList>
               )}
             </CardBody>

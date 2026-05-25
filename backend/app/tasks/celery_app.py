@@ -31,6 +31,9 @@ celery_app = Celery(
         "app.tasks.ghl_sync",
         "app.tasks.ghl_push",
         "app.tasks.gmail_sync",
+        "app.tasks.drive_sync",
+        "app.tasks.embed_worker",
+        "app.tasks.embed_backfill",
     ],
 )
 
@@ -77,5 +80,18 @@ celery_app.conf.beat_schedule = {
         # 02:45 UTC — runs after the GHL sync so newly-discovered leads
         # get their email threads on the same nightly cycle.
         "schedule": crontab(minute=45, hour=2),
+    },
+    "google-drive-sync-nightly": {
+        "task": "app.tasks.drive_sync.sync_drive_files",
+        # 03:00 UTC — runs after Gmail. Drive sweeps every connected
+        # user's files and enqueues embed_pending rows for changed
+        # content; the embed_worker (below) picks them up shortly after.
+        "schedule": crontab(minute=0, hour=3),
+    },
+    "embed-queue-drain": {
+        "task": "app.tasks.embed_worker.drain_embed_queue",
+        # Every 2 minutes — keeps the RAG corpus close to real-time
+        # without long-running tasks. Drains a batch each tick.
+        "schedule": crontab(minute="*/2"),
     },
 }

@@ -60,6 +60,16 @@ class Settings(BaseSettings):
         "http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback"
     )
 
+    # ------------------------------------------------------------------
+    # Voyage AI embeddings (RAG layer). voyage-3 is 1024-d; the embed
+    # worker batches up to ``embed_worker_batch_size`` chunks per API
+    # call (Voyage's API limit is 128). Each chunk is sized to at most
+    # ``embed_worker_max_tokens_per_chunk`` cl100k tokens.
+    # ------------------------------------------------------------------
+    voyage_api_key: str = ""
+    embed_worker_batch_size: int = 32
+    embed_worker_max_tokens_per_chunk: int = 1024
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
