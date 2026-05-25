@@ -38,9 +38,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.models.integration import Integration
-from app.models.operational import Lead
 from app.services import secrets as app_secrets
-from app.services.audit import record_event
+from app.services.ghl_upsert import upsert_ghl_lead
 
 logger = logging.getLogger(__name__)
 
@@ -48,50 +47,10 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
 # ---------------------------------------------------------------------------
-# GHL — payload field-name variants
-# ---------------------------------------------------------------------------
-# GHL's workflow Custom Webhook action sends whatever the user mapped, and
-# field names vary across triggers (Form Submitted vs Contact Created vs
-# Tag Added). The values here are tried in order; first hit wins.
-
-GHL_FIELD_VARIANTS: dict[str, tuple[str, ...]] = {
-    "email": ("email", "contact_email", "Email"),
-    "external_id": ("contact_id", "contactId", "id", "Contact Id"),
-    "first_name": ("first_name", "firstName", "First Name"),
-    "last_name": ("last_name", "lastName", "Last Name"),
-    "full_name": ("full_name", "fullName", "name", "contact_name", "Full Name"),
-    "phone": ("phone", "contact_phone", "phoneNumber", "Phone"),
-    "status": ("status", "lead_status", "Status"),
-    "source": ("source", "contact_source", "Source"),
-}
-
-
-def _pick(payload: dict[str, Any], key: str) -> str | None:
-    """Return the first non-empty value from GHL_FIELD_VARIANTS[key] in payload."""
-    for variant in GHL_FIELD_VARIANTS.get(key, ()):
-        value = payload.get(variant)
-        if value is None:
-            continue
-        text = str(value).strip()
-        if text:
-            return text
-    return None
-
-
-def _derive_name(payload: dict[str, Any]) -> str | None:
-    """Build a single name string from common GHL shapes."""
-    full = _pick(payload, "full_name")
-    if full:
-        return full
-    first = _pick(payload, "first_name") or ""
-    last = _pick(payload, "last_name") or ""
-    combined = f"{first} {last}".strip()
-    return combined or None
-
-
-# ---------------------------------------------------------------------------
 # GHL lead webhook
 # ---------------------------------------------------------------------------
+# Field-name normalization + the dedup-and-upsert logic itself live in
+# ``app/services/ghl_upsert.py`` so the nightly sync task can reuse them.
 
 
 @router.post("/ghl/{webhook_token}/leads")
@@ -146,7 +105,7 @@ async def ghl_lead_webhook(
     # 2. Upsert the lead, swallow errors so GHL doesn't retry-storm.
     now = datetime.now(timezone.utc)
     try:
-        await _upsert_ghl_lead(session, payload)
+        await upsert_ghl_lead(session, payload)
         row.last_synced_at = now
         row.last_sync_status = "ok"
         row.last_sync_error = None
@@ -158,107 +117,3 @@ async def ghl_lead_webhook(
     session.add(row)
     await session.commit()
     return {"ok": True}
-
-
-async def _upsert_ghl_lead(
-    session: AsyncSession, payload: dict[str, Any]
-) -> Lead:
-    """Insert-or-update a Lead from a normalised GHL payload.
-
-    Dedup order:
-      1. ``(source='ghl', external_id=<contact_id>)`` — survives email
-         changes and rename storms upstream.
-      2. ``email`` (lowercased + stripped) — catches contacts the user
-         imported without a stable contact_id mapping.
-
-    Either branch updates the existing row in place. New contacts insert.
-    The full raw payload is JSON-stringified into ``lead.notes`` so
-    downstream queries can still recover anything we didn't normalise.
-    """
-    email = _pick(payload, "email")
-    if email:
-        email = email.lower().strip()
-    external_id = _pick(payload, "external_id")
-    name = _derive_name(payload)
-    phone = _pick(payload, "phone")
-    upstream_source = _pick(payload, "source")
-    upstream_status = _pick(payload, "status")
-
-    # --- Lookup ----------------------------------------------------------
-    row: Lead | None = None
-    if external_id:
-        result = await session.execute(
-            select(Lead).where(
-                Lead.source == "ghl",
-                Lead.external_id == external_id,
-                Lead.deleted_at.is_(None),
-            )
-        )
-        row = result.scalar_one_or_none()
-    if row is None and email:
-        result = await session.execute(
-            select(Lead).where(
-                Lead.email == email,
-                Lead.deleted_at.is_(None),
-            )
-        )
-        row = result.scalar_one_or_none()
-
-    notes_json = json.dumps(payload, default=str)
-
-    if row is None:
-        # Insert.
-        row = Lead(
-            name=name,
-            email=email,
-            phone=phone,
-            status=upstream_status or "new",
-            source="ghl",
-            external_id=external_id,
-            notes=notes_json,
-        )
-        session.add(row)
-        # Flush so row.id is populated before we reference it in the
-        # audit event. The outer transaction still owns the commit.
-        await session.flush()
-        await record_event(
-            session,
-            user_id=None,  # Webhook is unauthenticated; no acting user.
-            action="lead.created",
-            table_name="leads",
-            record_id=str(row.id),
-            after={
-                "name": name,
-                "email": email,
-                "source": "ghl",
-                "external_id": external_id,
-            },
-        )
-        logger.info(
-            "ghl_lead_webhook: INSERT email=%s external_id=%s",
-            email, external_id,
-        )
-    else:
-        # Update — only overwrite non-empty fields so a partial GHL
-        # payload (e.g. tag-added trigger) doesn't blank our enrichment.
-        if name:
-            row.name = name
-        if phone:
-            row.phone = phone
-        if email and not row.email:
-            # Email is unique-indexed; only fill it if we didn't have one.
-            # Mid-life email changes are rare and dangerous to auto-apply.
-            row.email = email
-        if upstream_status:
-            row.status = upstream_status
-        # Always set source + external_id so future dedups land on path 1.
-        row.source = "ghl"
-        if external_id:
-            row.external_id = external_id
-        row.notes = notes_json
-        logger.info(
-            "ghl_lead_webhook: UPDATE id=%s email=%s external_id=%s",
-            row.id, email, external_id,
-        )
-
-    return row

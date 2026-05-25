@@ -169,6 +169,14 @@ def _trigger_sync(slug: str) -> str | None:
         except Exception as exc:
             logger.warning("Failed to enqueue update_email_stats: %s", exc)
             return None
+    if slug == "ghl":
+        try:
+            from app.tasks.ghl_sync import sync_ghl_contacts
+            task = sync_ghl_contacts.delay()
+            return task.id
+        except Exception as exc:
+            logger.warning("Failed to enqueue sync_ghl_contacts: %s", exc)
+            return None
     # No-op for providers without a backing task yet (google_calendar, etc.)
     return None
 
@@ -216,17 +224,17 @@ async def get_integration(
             else:
                 values[key] = plain  # belt-and-braces — shouldn't happen
 
-    # Webhook-only providers (GHL today, Stripe/Calendly later) surface a
-    # full webhook URL the user copies into the upstream tool. The token is
-    # NOT masked — the URL itself IS the secret, and the user needs the
-    # actual value to paste. (Anyone with access to this auth'd endpoint
-    # already controls the integration.) Rotate Secret regenerates it.
-    if provider.get("webhook_only") and row is not None:
+    # Providers that issue server-generated webhook tokens (GHL today,
+    # Stripe/Calendly later) surface a full webhook URL the user copies
+    # into the upstream tool. The token is NOT masked — the URL itself
+    # IS the secret, and the user needs the actual value to paste.
+    # (Anyone with access to this auth'd endpoint already controls the
+    # integration.) Rotate Secret regenerates it.
+    if (provider.get("webhook_only") or slug == "ghl") and row is not None:
         blob = _decrypt_blob(row.credentials_encrypted)
         tok = blob.get("webhook_token")
-        if tok:
-            if slug == "ghl":
-                values["webhook_url"] = _ghl_webhook_url(tok)
+        if tok and slug == "ghl":
+            values["webhook_url"] = _ghl_webhook_url(tok)
 
     summary = _summary_from(provider, row)
     return IntegrationDetail(
@@ -288,6 +296,15 @@ async def upsert_integration(
         provided = (incoming.get(key) or "").strip()
         if provided:
             new_secrets[key] = provided
+
+    # GHL is hybrid — inbound webhook + outbound API. Mint the webhook
+    # token on first save (or if it was somehow cleared); persist it
+    # alongside the user-supplied API creds. Subsequent saves preserve
+    # the existing token so the webhook URL stays stable while the
+    # user edits their API access token.
+    if slug == "ghl" and not new_secrets.get("webhook_token"):
+        import secrets as _stdlib_secrets
+        new_secrets["webhook_token"] = _stdlib_secrets.token_urlsafe(32)
 
     new_config: dict[str, str] = {}
     for key in config_field_keys:
@@ -398,6 +415,43 @@ async def test_integration(
         )
 
     return TestIntegrationResponse(ok=False, message=f"No test handler for {slug}.")
+
+
+@router.post("/{slug}/sync", response_model=TestIntegrationResponse)
+async def sync_integration(
+    slug: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),  # noqa: ARG001
+):
+    """Enqueue the provider's sync task on demand.
+
+    Distinct from the implicit sync that ``POST /integrations/{slug}``
+    fires after a credential save. This endpoint is what the "Sync now"
+    button on the integration detail page calls. Returns 404 when the
+    provider has no backing task.
+    """
+    provider = get_provider(slug)
+    if provider is None:
+        raise HTTPException(status_code=404, detail=f"Unknown provider: {slug}")
+
+    row = await _get_row(session, slug)
+    if row is None or row.status != "connected" or not row.credentials_encrypted:
+        return TestIntegrationResponse(
+            ok=False,
+            message=f"{slug} is not connected. Save credentials first.",
+        )
+
+    task_id = _trigger_sync(slug)
+    if task_id is None:
+        return TestIntegrationResponse(
+            ok=False,
+            message=f"No sync task wired for {slug}.",
+        )
+
+    return TestIntegrationResponse(
+        ok=True,
+        message=f"Sync queued (task {task_id[:8]}…). Refresh in a minute.",
+    )
 
 
 @router.delete("/{slug}", status_code=204)

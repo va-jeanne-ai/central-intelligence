@@ -81,14 +81,31 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "icon": "🎯",
         "category": "crm",
         "status": "available",
-        "description": "Receive leads pushed from GHL workflows via Custom Webhook action. New contacts land on /leads tagged source='ghl'.",
-        "trigger_task": None,  # GHL pushes to us — no scheduled pull
-        # Marker the frontend reads to render the "generated URL + Copy +
-        # Rotate Secret" UI instead of a form. The integrations POST route
-        # also branches on this to generate a token instead of validating
-        # user input.
-        "webhook_only": True,
-        "fields": [],  # All credentials are server-generated; nothing for the user to type.
+        "description": "Two-way GHL link: receive contacts pushed via Custom Webhook action, plus a nightly pull that backfills + catches out-of-band edits.",
+        "trigger_task": "app.tasks.ghl_sync.sync_ghl_contacts",
+        # Hybrid: both a server-generated webhook token (for inbound) AND
+        # user-supplied API credentials (for the pull sync). The upsert
+        # route mints the webhook_token on first save if missing, then
+        # keeps it on subsequent saves so users can edit API creds without
+        # rotating the webhook URL.
+        "fields": [
+            {
+                "key": "api_access_token",
+                "label": "API access token",
+                "type": "password",
+                "secret": True,
+                "required": True,
+                "help": "Private Integration Token from GHL settings. Used for the nightly contact pull.",
+            },
+            {
+                "key": "location_id",
+                "label": "Location ID",
+                "type": "text",
+                "secret": True,
+                "required": True,
+                "help": "The GHL sub-account (location) the API token belongs to.",
+            },
+        ],
     },
     "google_calendar": {
         "slug": "google_calendar",

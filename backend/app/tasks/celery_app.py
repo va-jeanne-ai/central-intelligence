@@ -28,6 +28,7 @@ celery_app = Celery(
         "app.tasks.funnel_stats",
         "app.tasks.ads_stats",
         "app.tasks.offer_generator",
+        "app.tasks.ghl_sync",
     ],
 )
 
@@ -62,5 +63,11 @@ celery_app.conf.beat_schedule = {
     "comments-collector-every-4h": {
         "task": "app.tasks.comments_collector.collect_social_comments",
         "schedule": crontab(minute=25, hour="*/4"),  # 00:25, 04:25, ... 20:25 UTC
+    },
+    "ghl-contacts-sync-nightly": {
+        "task": "app.tasks.ghl_sync.sync_ghl_contacts",
+        # 02:30 UTC — off-peak, away from the :05-:25 stat updaters above.
+        # Daily cadence catches out-of-band GHL edits the webhook doesn't fire on.
+        "schedule": crontab(minute=30, hour=2),
     },
 }

@@ -44,6 +44,7 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
   const [form, setForm] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [testResult, setTestResult] = useState<TestIntegrationResponse | null>(null);
@@ -135,6 +136,30 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
       });
     } finally {
       setIsTesting(false);
+    }
+  }
+
+  async function handleSync() {
+    setIsSyncing(true);
+    setTestResult(null);
+    try {
+      const result = await apiClient.post<TestIntegrationResponse>(
+        `/integrations/${slug}/sync`,
+        {},
+        { silent: true },
+      );
+      setTestResult(result);
+      if (result.ok) {
+        showSuccess(result.message);
+      } else {
+        showError(result.message);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Sync failed to start.";
+      setTestResult({ ok: false, message: msg });
+      showError(msg);
+    } finally {
+      setIsSyncing(false);
     }
   }
 
@@ -310,6 +335,31 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
           </Card>
         ) : (
           // Credentials form
+          <>
+          {slug === "ghl" && detail.values.webhook_url && (
+            <Card>
+              <CardHeader title="Webhook URL" />
+              <CardBody className="space-y-3">
+                <p className="text-[13px] text-gray-700">
+                  Paste this URL into a GHL Custom Webhook workflow action to
+                  receive contact pushes (form-fill, tag-added, etc.). The
+                  nightly contact sync below handles everything else.
+                </p>
+                <div className="flex items-center gap-2">
+                  <code
+                    className="flex-1 min-w-0 text-[12px] font-mono bg-gray-50 border border-gray-200 rounded-md px-3 py-2 overflow-x-auto whitespace-nowrap text-gray-800"
+                    aria-label="Webhook URL"
+                  >
+                    {detail.values.webhook_url}
+                  </code>
+                  <CopyButton text={detail.values.webhook_url} label="Copy" />
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11px] text-amber-800">
+                  The URL contains a secret token — treat like a password.
+                </div>
+              </CardBody>
+            </Card>
+          )}
           <Card>
             <CardHeader title="Credentials" />
             <CardBody className="space-y-4">
@@ -360,6 +410,11 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
                     {isTesting ? "Testing…" : "Test"}
                   </Button>
                 )}
+                {detail.connected && slug === "ghl" && (
+                  <Button variant="ghost" onClick={handleSync} disabled={isSyncing}>
+                    {isSyncing ? "Queueing…" : "Sync contacts now"}
+                  </Button>
+                )}
                 {detail.connected && (
                   <Button variant="danger" onClick={handleDisconnect} disabled={isDisconnecting} className="ml-auto">
                     {isDisconnecting ? "Disconnecting…" : "Disconnect"}
@@ -368,6 +423,7 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
               </div>
             </CardBody>
           </Card>
+          </>
         )}
       </main>
 
