@@ -344,6 +344,7 @@ function pickString(obj: Record<string, unknown> | null, key: string): string | 
 function describeHistoryEvent(e: LeadHistoryEvent): {
   headline: React.ReactNode;
   detail: React.ReactNode | null;
+  dotColor?: string;
 } {
   const author = e.author_email ?? "system";
   switch (e.action) {
@@ -438,6 +439,65 @@ function describeHistoryEvent(e: LeadHistoryEvent): {
         detail: callType
           ? <span className="text-gray-500">{callType} call</span>
           : null,
+      };
+    }
+    case "lead.pushed_to_ghl": {
+      // Outcome lives in after.status — color + headline depend on it.
+      // status="ok" → green; "conflict_refused" → amber; "error" → red;
+      // any "skipped_*" → grey (silent informational row).
+      const pushStatus = pickString(e.after, "status") ?? "unknown";
+      if (pushStatus === "ok") {
+        const fieldsRaw = e.after?.fields;
+        const fields = Array.isArray(fieldsRaw) ? fieldsRaw : [];
+        return {
+          headline: (
+            <>
+              <span className="font-semibold text-gray-700">Pushed to GHL</span>
+              <span className="text-gray-500"> · {author}</span>
+            </>
+          ),
+          detail: fields.length > 0
+            ? <span className="text-gray-500">{fields.length} field{fields.length === 1 ? "" : "s"}</span>
+            : null,
+          dotColor: "#10B981", // green
+        };
+      }
+      if (pushStatus === "conflict_refused") {
+        return {
+          headline: (
+            <>
+              <span className="font-semibold text-gray-700">GHL update refused</span>
+              <span className="text-gray-500"> · {author}</span>
+            </>
+          ),
+          detail: <span className="text-amber-700">GHL has newer data — sync first</span>,
+          dotColor: "#F59E0B", // amber
+        };
+      }
+      if (pushStatus === "error") {
+        const reason = pickString(e.after, "reason");
+        return {
+          headline: (
+            <>
+              <span className="font-semibold text-gray-700">GHL push failed</span>
+              <span className="text-gray-500"> · {author}</span>
+            </>
+          ),
+          detail: reason ? <span className="text-red-700">{reason}</span> : null,
+          dotColor: "#EF4444", // red
+        };
+      }
+      // skipped_* statuses — render quietly so the user can see "no push because…"
+      const skipReason = pushStatus.replace(/^skipped_/, "").replace(/_/g, " ");
+      return {
+        headline: (
+          <>
+            <span className="font-semibold text-gray-700">GHL push skipped</span>
+            <span className="text-gray-500"> · {author}</span>
+          </>
+        ),
+        detail: <span className="text-gray-400 italic">{skipReason}</span>,
+        dotColor: "#9CA3AF", // grey
       };
     }
     default:
@@ -1081,11 +1141,11 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
             <CardBody noPadding>
               <HistoryList className="py-1">
                 {history.map((e) => {
-                  const { headline, detail: detailNode } = describeHistoryEvent(e);
+                  const { headline, detail: detailNode, dotColor: dotOverride } = describeHistoryEvent(e);
                   return (
                     <HistoryItem
                       key={e.id}
-                      dotColor={HISTORY_DOT_COLORS[e.action] ?? "#9CA3AF"}
+                      dotColor={dotOverride ?? HISTORY_DOT_COLORS[e.action] ?? "#9CA3AF"}
                       trailing={
                         <span
                           className="text-[11px] text-gray-400"

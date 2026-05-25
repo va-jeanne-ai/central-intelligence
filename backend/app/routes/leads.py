@@ -872,6 +872,50 @@ async def update_lead(
     await session.commit()
 
     api_status = _map_status(row["status"])
+    score = _score_for_status(api_status)
+
+    # CI → GHL reverse-sync push. Fire-and-forget from the staff user's
+    # perspective: their PATCH already committed. Push runs inline so the
+    # happy path lands in GHL within a couple seconds; on failure we
+    # enqueue a Celery retry task and continue. Never let push outcomes
+    # block or rollback the staff-facing response.
+    push_status: str = "skipped_not_attempted"
+    push_details: dict[str, object] = {}
+    try:
+        from app.services.ghl_push import push_lead_update
+        push_status, push_details = await push_lead_update(
+            session,
+            str(uid),
+            api_status=api_status,
+            score=score,
+        )
+    except Exception as exc:  # noqa: BLE001 — never let push crash the route
+        logger.exception("update_lead: ghl push raised — lead_id=%s", uid)
+        push_status = "error"
+        push_details = {"reason": "helper_raised", "detail": str(exc)[:300]}
+
+    # On transient errors, schedule a Celery retry. Skipped statuses are
+    # terminal (lead isn't ghl-linked, kill switch on, etc.).
+    if push_status == "error":
+        try:
+            from app.tasks.ghl_push import push_lead_to_ghl_async
+            push_lead_to_ghl_async.delay(str(uid))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("update_lead: enqueue retry failed — %s", exc)
+
+    # Audit-log the push outcome. One row per PATCH (not per-field) so
+    # the history card stays scannable. Skipped statuses still emit so
+    # the user can see "no push because not GHL-linked" rather than
+    # silence.
+    await record_event(
+        session,
+        user_id=actor_id,
+        action="lead.pushed_to_ghl",
+        table_name="leads",
+        record_id=str(uid),
+        after={"status": push_status, **push_details},
+    )
+
     return LeadRecord(
         id=row["id"],
         name=row["name"],
@@ -879,7 +923,7 @@ async def update_lead(
         phone=row["phone"],
         status=api_status or "new",
         source=row["source"] or "other",
-        score=_score_for_status(api_status),
+        score=score,
         createdAt=row["created_at"].isoformat() if row["created_at"] else "",
         notes=None,
     )

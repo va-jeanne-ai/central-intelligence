@@ -29,6 +29,7 @@ celery_app = Celery(
         "app.tasks.ads_stats",
         "app.tasks.offer_generator",
         "app.tasks.ghl_sync",
+        "app.tasks.ghl_push",
     ],
 )
 

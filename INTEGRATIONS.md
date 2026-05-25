@@ -68,14 +68,15 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 
 **What it does today**
 
-Two-way GHL link, both directions GHL → CI:
+Genuinely two-way GHL link:
 
-1. **Inbound push** — Custom Webhook workflow action delivers contacts within seconds (form-fill, tag-added, etc.).
-2. **Outbound pull** — nightly Celery job (02:30 UTC) + on-demand "Sync contacts now" button paginates GHL's `GET /contacts/` to backfill existing contacts and catch out-of-band edits the webhook doesn't fire on.
+1. **Inbound push** — GHL Custom Webhook workflow action delivers contacts within seconds (form-fill, tag-added, etc.).
+2. **Outbound pull** — nightly Celery job (02:30 UTC) + on-demand "Sync contacts now" button paginates GHL's `GET /contacts/` to backfill existing contacts and catch out-of-band edits.
+3. **Inbound writes (CI → GHL)** — when staff PATCH a lead in CI (status, score, etc.), we push selected fields back to the matching GHL contact via a `PUT /contacts/{id}` call fired inline from the PATCH route. Failures fall through to a Celery retry task. See "Reverse-sync push" below.
 
-Both feed the same upsert path in [`backend/app/services/ghl_upsert.py`](backend/app/services/ghl_upsert.py); dedup keys are identical so handling the same contact twice is a no-op.
+The pull and the webhook feed the same upsert path in [`backend/app/services/ghl_upsert.py`](backend/app/services/ghl_upsert.py); dedup keys are identical so handling the same contact twice is a no-op.
 
-- **Direction:** GHL → CI only (read-only). Reverse sync (CI → GHL) is on the roadmap.
+- **Direction:** Two-way. GHL still wins for raw contact fields (name/email/phone) — those flow GHL → CI only. CI-side enrichments (status, score, latest note, last call date) flow CI → GHL.
 - **Auth model:** token-in-URL. The integration page generates a URL-safe token (`secrets.token_urlsafe(32)`), stores it Fernet-encrypted in the integrations row, and shows the user the full URL to paste into GHL: `https://<your-api>/api/v1/webhooks/ghl/<token>/leads`. Token comparison uses `secrets.compare_digest` (constant-time). Mismatched tokens return **404** — never 401 — so the URL never confirms its own shape to a probing attacker.
 - **Path:** [`backend/app/routes/webhooks.py`](backend/app/routes/webhooks.py).
 - **Payload tolerance:** GHL's workflow Custom Webhook sends whatever the user mapped, and field names vary across triggers (Form Submitted vs Contact Created vs Tag Added). The endpoint accepts a raw dict and reads from a `GHL_FIELD_VARIANTS` table (`email`/`Email`/`contact_email`, `contact_id`/`contactId`/`id`, etc.) — first hit wins. The full raw payload is JSON-stringified into `lead.notes` so nothing's lost downstream.
@@ -85,6 +86,9 @@ Both feed the same upsert path in [`backend/app/services/ghl_upsert.py`](backend
 - **Last-sync stamp:** every successful webhook hit updates `integration.last_synced_at + last_sync_status='ok'`. Parse failures stamp `'error'` + the message but still return 200 — GHL retries aggressively on non-2xx and we don't want a single malformed payload to retry-storm.
 - **Pull sync (nightly + on-demand):** [`backend/app/tasks/ghl_sync.py`](backend/app/tasks/ghl_sync.py) loads the integration row, decrypts the `api_access_token` + `location_id` from the credentials blob, paginates [`backend/app/services/ghl_client.py`](backend/app/services/ghl_client.py)'s `fetch_contacts()` against GHL's v2 `/contacts/` endpoint, and upserts each contact via [`upsert_ghl_lead_sync`](backend/app/services/ghl_upsert.py). Per-contact errors are counted and recorded in `sync_log.details["errors"]` (capped at 50) but never abort the run. **GHL wins** for contact fields; `staff_notes` is in a separate table and is never touched. Beat schedule entry: `ghl-contacts-sync-nightly` at 02:30 UTC. On-demand trigger: `POST /api/v1/integrations/ghl/sync`.
 - **Rate-limit handling:** the HTTP client sleeps on 429 per the `Retry-After` header (default 5s when absent) and retries up to 3 times per page before letting the task fail.
+- **Reverse-sync push (CI → GHL):** [`backend/app/services/ghl_push.py`](backend/app/services/ghl_push.py) — runs inline from `PATCH /leads/{id}` after our local commit. Pushes a `customFields` payload containing `ci_status`, `ci_score`, `ci_last_note_preview` (200-char), and `ci_last_call_date`. Eligible only when the lead has `source='ghl'` AND `external_id IS NOT NULL` (CI-native leads are silently skipped). **Conflict policy:** before writing, GETs the GHL contact, compares `dateUpdated` vs our `integration.last_synced_at` — if GHL is newer, refuses to push and surfaces the warning in the lead's history feed. **Retry:** transient failures (network, 5xx) enqueue [`tasks/ghl_push.py:push_lead_to_ghl_async`](backend/app/tasks/ghl_push.py) which retries 3× with 120s base delay before giving up. Every push emits a `lead.pushed_to_ghl` audit event with `after = {status, fields, reason}` — visible on the lead detail page's History card.
+- **Kill switch:** set `integrations.config->>'push_enabled' = 'false'` in psql to silently skip all pushes without disconnecting the integration. Use this when GHL custom fields aren't set up yet or when debugging. No UI toggle for v1 — flip via DB and the push helper picks it up immediately.
+- **GHL custom-field key overrides:** if your GHL deployment uses different custom-field keys than `ci_status` / `ci_score` / `ci_last_note_preview` / `ci_last_call_date`, set `integrations.config->'ghl_custom_field_keys'` to a JSON dict like `{"status": "my_status_key", "score": "my_score_key", ...}`. Defaults baked into `services/ghl_push.py:DEFAULT_CUSTOM_FIELD_KEYS`.
 - **Auth-middleware bypass:** `/api/v1/webhooks/` is in `_EXEMPT_PREFIXES` ([`backend/app/middleware/auth.py`](backend/app/middleware/auth.py)). Third parties don't have JWTs; the path-token comparison inside the route is the auth check.
 
 **Surfaces it powers today**
@@ -100,7 +104,7 @@ Both feed the same upsert path in [`backend/app/services/ghl_upsert.py`](backend
 - **Appointments webhook** — a second endpoint `POST /webhooks/ghl/appointments` to feed the `appointments` table. GHL has appointment-booked / -rescheduled / -cancelled triggers. Would populate the Sales Calls "next 7 days" surface.
 - **Tags as a real `lead_tags` table** — today GHL tags land inside `notes` JSON. A dedicated `lead_tags` table would unlock "all leads tagged 'hot-lead'" queries from the Marketing Director chat.
 - **Custom-field mapping UI** — let the user map their GHL custom fields (LTV, lead score, etc.) into specific Lead columns instead of stuffing them into `notes`. Mailchimp-style "field schema" approach.
-- **Reverse sync (CI → GHL)** — push CI-side enrichments back into GHL. Examples: lead score from the call analyzer, "best contact time" from the calendar integration. Today's outbound API is read-only; reverse sync would need write scopes + conflict resolution on the GHL side.
+- **Reverse-sync write-back for raw contact fields** — today we push CI-side enrichments (status, score, custom fields) but never name/email/phone (GHL still wins on those). A "force CI as source of truth" mode would push those too; needs conflict resolution UX.
 - **OAuth callback flow** — today's setup is manual API access token paste. A proper OAuth dance would handle refresh tokens automatically.
 - **Multi-location support** — GHL has `location_id` for agencies running sub-accounts. Today we ignore it (single integration row per provider). A multi-location version would add `location_id` to the leads table and route incoming contacts accordingly.
 

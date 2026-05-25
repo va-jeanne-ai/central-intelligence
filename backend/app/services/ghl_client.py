@@ -61,22 +61,27 @@ def _client() -> httpx.Client:
 # ---------------------------------------------------------------------------
 
 
-def _fetch_page_with_retry(
+def _request_with_retry(
     client: httpx.Client,
+    method: str,
     url: str,
     *,
     headers: dict[str, str],
     params: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """GET ``url`` with up to 3 retries on 429. Returns parsed JSON.
+    """Generic HTTP call with up to 3 retries on 429. Returns parsed JSON.
 
-    Other 4xx/5xx errors raise via ``response.raise_for_status()`` —
-    the caller (the Celery task) decides whether to retry the whole
-    sync job or surface the error.
+    Used for GETs (paginated contact list, single-contact fetch) and PUTs
+    (contact update). Other 4xx/5xx errors raise via ``raise_for_status()``
+    — the caller decides whether to retry the whole job or surface the
+    error.
     """
     attempts = 0
     while True:
-        response = client.get(url, headers=headers, params=params)
+        response = client.request(
+            method, url, headers=headers, params=params, json=json_body,
+        )
         if response.status_code == 429:
             attempts += 1
             if attempts > _MAX_429_RETRIES:
@@ -86,11 +91,25 @@ def _fetch_page_with_retry(
                 wait = float(retry_after) if retry_after else _RATE_LIMIT_DEFAULT_BACKOFF
             except ValueError:
                 wait = _RATE_LIMIT_DEFAULT_BACKOFF
-            logger.info("ghl 429 on %s — sleeping %.1fs (attempt %d)", url, wait, attempts)
+            logger.info("ghl 429 on %s %s — sleeping %.1fs (attempt %d)", method, url, wait, attempts)
             time.sleep(wait)
             continue
         response.raise_for_status()
+        # Some PUTs return 204 No Content; tolerate that.
+        if response.status_code == 204 or not response.content:
+            return {}
         return response.json()
+
+
+def _fetch_page_with_retry(
+    client: httpx.Client,
+    url: str,
+    *,
+    headers: dict[str, str],
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Backwards-compatible GET wrapper around :func:`_request_with_retry`."""
+    return _request_with_retry(client, "GET", url, headers=headers, params=params)
 
 
 def fetch_contacts(
@@ -148,3 +167,37 @@ def fetch_contacts(
             )
 
     logger.info("ghl fetch_contacts: drained %d pages from location=%s", page_count, location_id)
+
+
+# ---------------------------------------------------------------------------
+# Single-contact GET + PUT (used by the CI → GHL reverse-sync push)
+# ---------------------------------------------------------------------------
+
+
+def get_contact(access_token: str, contact_id: str) -> dict[str, Any]:
+    """Fetch a single contact by GHL contact_id.
+
+    Used by the push helper to compare ``dateUpdated`` for the conflict
+    check before writing. Raises on non-2xx (the caller treats this as
+    "GHL unavailable" and falls back to the Celery retry path).
+    """
+    url = f"{_base_url()}/contacts/{contact_id}"
+    with _client() as client:
+        return _request_with_retry(client, "GET", url, headers=_headers(access_token))
+
+
+def update_contact(
+    access_token: str, contact_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """PUT an update to a single GHL contact.
+
+    ``payload`` should follow GHL's v2 contact update schema — typically
+    ``{"customFields": [{"key": "...", "value": "..."}, ...]}`` for our
+    use case. GHL responds with the updated contact (or 204 on some
+    paths — we coerce to {} in that case).
+    """
+    url = f"{_base_url()}/contacts/{contact_id}"
+    with _client() as client:
+        return _request_with_retry(
+            client, "PUT", url, headers=_headers(access_token), json_body=payload,
+        )

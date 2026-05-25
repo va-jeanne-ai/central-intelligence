@@ -17,7 +17,6 @@ The integration row's ``last_synced_at`` / ``last_sync_status`` /
 surfaces the last run.
 """
 
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -27,8 +26,8 @@ from sqlalchemy import select
 
 from app.models.audit import SyncLog
 from app.models.integration import Integration
-from app.services import secrets as app_secrets
 from app.services import ghl_client
+from app.services.ghl_credentials import load_ghl_credentials
 from app.services.ghl_upsert import upsert_ghl_lead_sync
 from app.tasks.celery_app import celery_app
 from app.tasks.db import make_sync_session
@@ -37,26 +36,6 @@ logger = logging.getLogger(__name__)
 
 
 _MAX_ERRORS_RECORDED = 50  # cap the per-run error list to keep details JSONB small
-
-
-def _load_credentials(integration: Integration) -> tuple[str, str] | None:
-    """Decrypt + extract (api_access_token, location_id) from the blob.
-
-    Returns None when credentials are missing — caller stamps the
-    integration as misconfigured rather than crashing.
-    """
-    if not integration.credentials_encrypted:
-        return None
-    try:
-        blob = json.loads(app_secrets.decrypt(integration.credentials_encrypted))
-    except (ValueError, json.JSONDecodeError) as exc:
-        logger.warning("ghl_sync: credential decrypt failed — %s", exc)
-        return None
-    access_token = blob.get("api_access_token")
-    location_id = blob.get("location_id")
-    if not access_token or not location_id:
-        return None
-    return str(access_token), str(location_id)
 
 
 @celery_app.task(bind=True, name="app.tasks.ghl_sync.sync_ghl_contacts")
@@ -85,7 +64,7 @@ def sync_ghl_contacts(self) -> dict[str, Any]:
             logger.warning("ghl_sync: no connected GHL integration row")
             return {"status": "skipped", "reason": "no_connected_integration"}
 
-        creds = _load_credentials(integration)
+        creds = load_ghl_credentials(integration)
         if creds is None:
             logger.warning("ghl_sync: GHL integration missing api_access_token/location_id")
             integration.last_synced_at = started_at
