@@ -100,6 +100,7 @@ def create_app() -> FastAPI:
     from app.routes.integrations import router as integrations_router
     from app.routes.oauth import router as oauth_router
     from app.routes.webhooks import router as webhooks_router
+    from app.routes.chat_sessions import router as chat_sessions_router
 
     # Health check under /api/v1 (prefix applied here).
     app.include_router(health_router, prefix="/api/v1")
@@ -207,6 +208,13 @@ def create_app() -> FastAPI:
     #   WS   /ws/v1/central-intelligence/{session_id}
     # Mount at root so the decorator paths are used verbatim.
     app.include_router(central_intelligence_router)
+
+    # Chat session CRUD owns its own full paths:
+    #   GET    /api/v1/chat/sessions
+    #   GET    /api/v1/chat/sessions/{id}
+    #   PATCH  /api/v1/chat/sessions/{id}
+    #   DELETE /api/v1/chat/sessions/{id}
+    app.include_router(chat_sessions_router)
 
     # Director routers own their own WebSocket paths:
     #   WS /ws/v1/{director_slug}/{session_id}

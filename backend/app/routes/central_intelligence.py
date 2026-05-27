@@ -52,16 +52,19 @@ Server sends (pong):
 import json
 import logging
 import uuid
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
-from jose import JWTError, jwt
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.central_intelligence import CentralIntelligence
 from app.agents.mock_central_intelligence import MockCentralIntelligence
+from app.auth.dependencies import CurrentUser, get_current_user
 from app.config import settings
+from app.database import AsyncSessionLocal, get_session
 from app.schemas.chat import ChatChunk, ChatRequest
+from app.services import chat_persistence
 
 logger = logging.getLogger(__name__)
 
@@ -70,26 +73,167 @@ router = APIRouter(tags=["central-intelligence"])
 # ---------------------------------------------------------------------------
 # In-memory session store
 # session_id (str) -> CentralIntelligence | MockCentralIntelligence instance
+#
+# This is now a cache, not the source of truth. The authoritative chat
+# history lives in chat_sessions + chat_messages. On a cache miss for
+# an existing session_id we load the prior turns from DB and seed the
+# agent's conversation_history before returning.
 # ---------------------------------------------------------------------------
 _sessions: dict[str, CentralIntelligence | MockCentralIntelligence] = {}
 
 
-def _get_or_create_session(session_id: str | None) -> tuple[str, CentralIntelligence | MockCentralIntelligence]:
-    """Return (session_id, agent).  Creates a new session when needed."""
+def _build_agent() -> CentralIntelligence | MockCentralIntelligence:
+    """Construct a fresh agent based on whether an Anthropic key is set."""
+    if settings.anthropic_api_key:
+        return CentralIntelligence()
+    return MockCentralIntelligence()
+
+
+async def _get_or_create_session(
+    session_id: str | None,
+    *,
+    db: AsyncSession | None = None,
+) -> tuple[str, CentralIntelligence | MockCentralIntelligence]:
+    """Return (session_id, agent), hydrating prior history from DB if needed.
+
+    Three cases:
+      1. session_id is in the in-memory cache → reuse.
+      2. session_id is provided but missing from the cache → mint a
+         fresh agent and replay any persisted turns into it.
+      3. session_id is None → mint a fresh agent + a fresh UUID. No
+         DB row exists yet; ``ensure_session`` will create it on the
+         first ``append_message`` call.
+    """
     if session_id and session_id in _sessions:
-        logger.debug("Resuming session %s", session_id)
+        logger.debug("Resuming session %s from cache", session_id)
         return session_id, _sessions[session_id]
 
     new_id = session_id or str(uuid.uuid4())
-    use_real_ai = bool(settings.anthropic_api_key)
-    if use_real_ai:
-        agent: CentralIntelligence | MockCentralIntelligence = CentralIntelligence()
-        logger.info("Created new CentralIntelligence session %s", new_id)
-    else:
-        agent = MockCentralIntelligence()
-        logger.info("Created new MockCentralIntelligence session %s (no API key)", new_id)
+    agent = _build_agent()
+
+    if session_id and db is not None:
+        # Re-hydrate the agent from persisted messages so follow-up turns
+        # see prior context. New chats (no row in chat_sessions yet) just
+        # return an empty list — agent starts cold, which is correct.
+        try:
+            history = await chat_persistence.load_history_for_agent(
+                db, session_id=session_id,
+            )
+            if history:
+                agent.set_conversation_history(history)
+                logger.info(
+                    "Re-hydrated session %s with %d persisted turn(s)",
+                    session_id, len(history),
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to load persisted history for session %s — %s",
+                session_id, exc,
+            )
+
     _sessions[new_id] = agent
+    logger.info("Created session %s (type=%s)", new_id, type(agent).__name__)
     return new_id, agent
+
+
+def _last_assistant_blocks(
+    agent: CentralIntelligence | MockCentralIntelligence,
+) -> list[dict[str, Any]] | None:
+    """Pull the most recently appended assistant turn's content_blocks.
+
+    The agent appends every assistant turn to ``conversation_history``
+    after the stream finishes (see ``BaseAgent.stream_response``). We
+    grab the last assistant entry for persistence — preserving the
+    tool_use / text block list so a reloaded session can replay the
+    full agent state, not just the visible text.
+    """
+    history = getattr(agent, "conversation_history", None) or []
+    for entry in reversed(history):
+        if entry.get("role") == "assistant":
+            content = entry.get("content")
+            if isinstance(content, list):
+                return content
+            # Plain text turn — return None so the caller stores the
+            # response string in `content` only and leaves
+            # content_blocks NULL.
+            return None
+    return None
+
+
+async def _persist_user_turn(
+    *,
+    session_id: str,
+    user_id: str,
+    message: str,
+) -> None:
+    """Persist the user's message + session row in its own transaction.
+
+    Each call opens a short-lived AsyncSession so the persistence work
+    is independent of the streaming response lifetime. Errors are
+    logged but never abort the chat — we'd rather lose history than
+    refuse to talk to the user.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            await chat_persistence.ensure_session(
+                db,
+                session_id=session_id,
+                user_id=user_id,
+                first_user_message=message,
+            )
+            await chat_persistence.append_message(
+                db,
+                session_id=session_id,
+                role="user",
+                content=message,
+            )
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "persist_user_turn failed (session=%s): %s", session_id, exc,
+        )
+
+
+async def _persist_assistant_turn(
+    *,
+    session_id: str,
+    content: str,
+    content_blocks: list[dict[str, Any]] | None,
+) -> None:
+    """Persist the assistant's full response after the stream finishes."""
+    try:
+        async with AsyncSessionLocal() as db:
+            await chat_persistence.append_message(
+                db,
+                session_id=session_id,
+                role="assistant",
+                content=content,
+                content_blocks=content_blocks,
+            )
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "persist_assistant_turn failed (session=%s): %s", session_id, exc,
+        )
+
+
+def _user_id_from_token(token: str | None) -> str | None:
+    """Extract ``sub`` from a Supabase JWT for the WebSocket route.
+
+    Returns the user id on success; ``None`` for missing/invalid tokens
+    (the caller can fall back to mock-mode behaviour).
+    """
+    if not token:
+        return None
+    try:
+        from app.middleware.auth import verify_supabase_jwt
+        claims = verify_supabase_jwt(token)
+        if claims is None:
+            return None
+        return str(claims.get("sub") or "") or None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("WebSocket: failed to extract sub from token — %s", exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -103,9 +247,24 @@ def _sse_frame(chunk: ChatChunk) -> str:
 
 
 async def _sse_generator(
-    message: str, session_id: str, agent: CentralIntelligence | MockCentralIntelligence
+    message: str,
+    session_id: str,
+    agent: CentralIntelligence | MockCentralIntelligence,
+    user_id: str | None,
 ) -> AsyncIterator[str]:
-    """Drive the CentralIntelligence stream and yield SSE-encoded frames."""
+    """Drive the CentralIntelligence stream and yield SSE-encoded frames.
+
+    Persists the user message *before* streaming so a mid-stream
+    disconnect still leaves the user's turn in the transcript. The
+    assistant's response is persisted once the stream completes
+    successfully — partial assistant turns are dropped (the user will
+    re-prompt anyway).
+    """
+    if user_id:
+        await _persist_user_turn(
+            session_id=session_id, user_id=user_id, message=message,
+        )
+
     accumulated: list[str] = []
 
     try:
@@ -130,6 +289,13 @@ async def _sse_generator(
             session_id,
             len(full_response),
         )
+
+        if user_id:
+            await _persist_assistant_turn(
+                session_id=session_id,
+                content=full_response,
+                content_blocks=_last_assistant_blocks(agent),
+            )
 
     except Exception as exc:
         logger.exception("SSE stream error for session %s: %s", session_id, exc)
@@ -164,17 +330,22 @@ async def _sse_generator(
         }
     },
 )
-async def central_intelligence_chat(request: ChatRequest) -> StreamingResponse:
-    session_id, agent = _get_or_create_session(request.session_id)
+async def central_intelligence_chat(
+    request: ChatRequest,
+    db: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    session_id, agent = await _get_or_create_session(request.session_id, db=db)
 
     logger.info(
-        "SSE chat request: session=%s message_len=%d",
+        "SSE chat request: session=%s user=%s message_len=%d",
         session_id,
+        current_user.id,
         len(request.message),
     )
 
     return StreamingResponse(
-        _sse_generator(request.message, session_id, agent),
+        _sse_generator(request.message, session_id, agent, current_user.id),
         media_type="text/event-stream",
         headers={
             # Prevent proxies and browsers from buffering the stream.
@@ -219,22 +390,43 @@ async def central_intelligence_websocket(
     # ------------------------------------------------------------------
     mock_mode = (not settings.supabase_url) or settings.mock_mode
 
-    if not mock_mode and token:
+    user_id: str | None = None
+    if mock_mode:
+        # Mock-mode: same synthetic user id as the SSE/HTTP path uses.
+        # Lets chat persistence work in dev without Supabase configured.
+        # Also ensure the row exists in `users` for the FK to succeed
+        # (chat_sessions.user_id has ON DELETE CASCADE).
+        from app.auth.dependencies import (
+            MOCK_USER_ID, MOCK_USER_EMAIL, MOCK_USER_ROLE,
+            _ensure_local_user_row,
+        )
+        user_id = MOCK_USER_ID
+        await _ensure_local_user_row(
+            user_id=user_id,
+            email=MOCK_USER_EMAIL,
+            name="Mock Admin",
+            role=MOCK_USER_ROLE,
+        )
+    elif token:
         # Verify via the shared helper that supports ES256/RS256/HS256 — the
         # raw `jwt.decode` path here used to hardcode HS256 and reject all
         # modern Supabase tokens (which sign with ES256 since 2024).
-        from app.middleware.auth import verify_supabase_jwt
-
-        if verify_supabase_jwt(token) is None:
+        user_id = _user_id_from_token(token)
+        if user_id is None:
             logger.warning(
                 "WebSocket: token verification failed for session %s — "
-                "allowing connection (page is auth-gated)",
+                "allowing connection (page is auth-gated), no persistence",
                 session_id,
             )
 
     await websocket.accept()
-    session_id, agent = _get_or_create_session(session_id)
-    logger.info("WebSocket connected: session=%s", session_id)
+    # Open a short-lived DB session just to hydrate the agent from any
+    # persisted history. After that the WS loop opens its own short-
+    # lived sessions per persistence call so we don't hold a connection
+    # for the lifetime of the websocket.
+    async with AsyncSessionLocal() as db:
+        session_id, agent = await _get_or_create_session(session_id, db=db)
+    logger.info("WebSocket connected: session=%s user=%s", session_id, user_id)
 
     channel = f"central-intelligence:chat-stream:{session_id}"
 
@@ -271,6 +463,14 @@ async def central_intelligence_websocket(
             logger.info(
                 "WebSocket message: session=%s len=%d", session_id, len(message)
             )
+
+            # Persist the user message + ensure the session row exists
+            # before we start streaming, so a mid-stream disconnect still
+            # leaves the user's turn in the transcript.
+            if user_id:
+                await _persist_user_turn(
+                    session_id=session_id, user_id=user_id, message=message,
+                )
 
             # ---- Stream response ----------------------------------------
             accumulated: list[str] = []
@@ -313,6 +513,13 @@ async def central_intelligence_websocket(
                     token_index,
                     len(full_response),
                 )
+
+                if user_id:
+                    await _persist_assistant_turn(
+                        session_id=session_id,
+                        content=full_response,
+                        content_blocks=_last_assistant_blocks(agent),
+                    )
 
             except WebSocketDisconnect:
                 logger.info(

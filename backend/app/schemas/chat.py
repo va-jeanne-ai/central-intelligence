@@ -58,3 +58,53 @@ class HealthResponse(BaseModel):
     auth: str = "not_configured"
     redis: str = "not_configured"
     uptime: float = 0.0
+
+
+# ─── Persistent chat history ──────────────────────────────────────────────
+
+
+class ChatSessionRow(BaseModel):
+    """One row in the user's chat-history sidebar."""
+
+    id: str
+    title: str
+    created_at: str
+    updated_at: str
+    last_message_at: Optional[str] = None
+    message_count: int = 0
+
+
+class ChatSessionListResponse(BaseModel):
+    """Payload for ``GET /api/v1/chat/sessions``.
+
+    Sessions are ordered newest-first by ``last_message_at`` so the
+    sidebar can render them in display order without re-sorting.
+    """
+
+    sessions: list[ChatSessionRow] = Field(default_factory=list)
+
+
+class ChatMessageRow(BaseModel):
+    """One persisted message inside a chat session."""
+
+    id: str
+    role: str
+    content: str
+    created_at: str
+
+
+class ChatSessionDetailResponse(BaseModel):
+    """Payload for ``GET /api/v1/chat/sessions/{id}``.
+
+    Messages are oldest-first so the frontend can render the transcript
+    top-to-bottom directly.
+    """
+
+    session: ChatSessionRow
+    messages: list[ChatMessageRow] = Field(default_factory=list)
+
+
+class UpdateChatSessionRequest(BaseModel):
+    """PATCH body for renaming a chat session."""
+
+    title: str = Field(..., min_length=1, max_length=120)

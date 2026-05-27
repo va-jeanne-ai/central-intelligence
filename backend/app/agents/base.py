@@ -262,6 +262,20 @@ class BaseAgent:
         self.conversation_history = []
         logger.debug("Conversation reset for agent %s", self.agent_id)
 
+    def set_conversation_history(self, history: list[dict]) -> None:
+        """Replace conversation history wholesale.
+
+        Used when re-hydrating an agent for a persisted chat session —
+        the route layer loads the prior turns from ``chat_messages``
+        and seeds them here so the agent has full context for the
+        next user turn.
+        """
+        self.conversation_history = list(history)
+        logger.debug(
+            "Conversation history seeded with %d turn(s) on agent %s",
+            len(history), self.agent_id,
+        )
+
     def get_conversation_length(self) -> int:
         """Return the number of messages in the current conversation."""
         return len(self.conversation_history)

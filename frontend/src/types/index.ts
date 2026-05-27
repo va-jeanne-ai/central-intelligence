@@ -322,6 +322,33 @@ export interface TestIntegrationResponse {
   details?: Record<string, unknown> | null;
 }
 
+// ─── Chat history (persisted) ─────────────────────────────────────────────
+
+export interface ChatSessionRow {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string | null;
+  message_count: number;
+}
+
+export interface ChatSessionListResponse {
+  sessions: ChatSessionRow[];
+}
+
+export interface ChatMessageRow {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
+export interface ChatSessionDetailResponse {
+  session: ChatSessionRow;
+  messages: ChatMessageRow[];
+}
+
 // ─── Lead Documents (Google Drive) ────────────────────────────────────────
 
 export interface DocumentRow {

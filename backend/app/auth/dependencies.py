@@ -31,11 +31,20 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Synthetic user returned by both dependencies when Supabase is not
-# configured.  Using a fixed ID makes it easy to seed database fixtures.
+# configured.  Using a fixed UUID means downstream tables that FK into
+# users.id (chat_sessions, user_integration_credentials, lead_notes,
+# audit_log) work without a separate "mock-mode seed" step. The row is
+# auto-mirrored into the `users` table on the first authenticated call
+# via _ensure_local_user_row, same path as real Supabase users.
 # ---------------------------------------------------------------------------
-_MOCK_USER_ID = "mock-user-id"
-_MOCK_USER_EMAIL = "admin@centralintelligence.ai"
-_MOCK_USER_ROLE = "admin"
+MOCK_USER_ID = "00000000-0000-0000-0000-000000000001"
+MOCK_USER_EMAIL = "admin@centralintelligence.ai"
+MOCK_USER_ROLE = "admin"
+
+# Back-compat aliases — older code references the private names.
+_MOCK_USER_ID = MOCK_USER_ID
+_MOCK_USER_EMAIL = MOCK_USER_EMAIL
+_MOCK_USER_ROLE = MOCK_USER_ROLE
 
 
 @dataclass
@@ -153,6 +162,14 @@ async def get_current_user(
     # ------------------------------------------------------------------
     if mock_mode:
         logger.debug("Mock auth: returning synthetic admin user")
+        # Auto-mirror so chat_sessions + other tables FK-ing into
+        # users.id work in mock mode without a manual seed step.
+        await _ensure_local_user_row(
+            user_id=_MOCK_USER_ID,
+            email=_MOCK_USER_EMAIL,
+            name="Mock Admin",
+            role=_MOCK_USER_ROLE,
+        )
         return CurrentUser(id=_MOCK_USER_ID, email=_MOCK_USER_EMAIL, role=_MOCK_USER_ROLE)
 
     # ------------------------------------------------------------------

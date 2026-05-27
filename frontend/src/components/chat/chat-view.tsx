@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useChat } from "@/hooks/use-chat";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
+import { ChatHistorySidebar } from "@/components/chat/chat-history-sidebar";
 import { ChatConnecting } from "@/components/ui/skeleton";
 
 // ─── Static welcome message ───────────────────────────────────────────────────
@@ -110,21 +111,64 @@ function ChatTopbar({ isConnected, onClear }: ChatTopbarProps) {
 // ─── ChatView ─────────────────────────────────────────────────────────────────
 
 export function ChatView() {
-  const { messages, sendMessage, clearChat, isStreaming, isConnected } =
-    useChat();
+  const {
+    messages,
+    sendMessage,
+    clearChat,
+    isStreaming,
+    isConnected,
+    sessionId,
+    loadSession,
+    startNewChat,
+  } = useChat();
 
   // Scroll anchor — sits at the bottom of the messages list.
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
+
+  // Bump this to tell the sidebar "refetch the session list" — used
+  // after a new chat sends its first message (sidebar row didn't
+  // exist yet) and after a delete-followed-by-redirect.
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
 
   // Auto-scroll whenever the messages list grows.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // First user message of a fresh chat creates a new DB row backend-
+  // side. Once the assistant's response lands (streaming completes,
+  // isStreaming flips false with ≥1 user+assistant pair persisted)
+  // we refresh the sidebar so the new session appears.
+  const lastStreaming = useRef(false);
+  useEffect(() => {
+    if (lastStreaming.current && !isStreaming && messages.length > 0) {
+      setSidebarRefreshKey((k) => k + 1);
+    }
+    lastStreaming.current = isStreaming;
+  }, [isStreaming, messages.length]);
+
   const handleClear = useCallback(() => {
     clearChat();
   }, [clearChat]);
+
+  const handleSelectSession = useCallback(
+    (id: string) => {
+      void loadSession(id);
+    },
+    [loadSession],
+  );
+
+  const handleDeletedSession = useCallback(
+    (id: string) => {
+      // If the user deleted the chat they were viewing, drop them
+      // into a fresh "New chat" state so we're not silently broken.
+      if (id === sessionId) {
+        startNewChat();
+      }
+    },
+    [sessionId, startNewChat],
+  );
 
   // Derive the effective message list: prepend the static welcome bubble.
   const welcomeBubble = {
@@ -143,15 +187,35 @@ export function ChatView() {
   // Show connecting screen until WebSocket is ready
   if (!isConnected) {
     return (
-      <div className="flex flex-col flex-1 overflow-hidden bg-white">
-        <ChatTopbar isConnected={false} onClear={handleClear} />
-        <ChatConnecting />
+      <div className="flex flex-1 overflow-hidden bg-white">
+        <ChatHistorySidebar
+          activeSessionId={sessionId}
+          refreshKey={sidebarRefreshKey}
+          onSelectSession={handleSelectSession}
+          onNewChat={startNewChat}
+          onDeleted={handleDeletedSession}
+        />
+        <div className="flex flex-col flex-1 overflow-hidden bg-white">
+          <ChatTopbar isConnected={false} onClear={handleClear} />
+          <ChatConnecting />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden bg-white">
+    <div className="flex flex-1 overflow-hidden bg-white">
+      {/* History sidebar */}
+      <ChatHistorySidebar
+        activeSessionId={sessionId}
+        refreshKey={sidebarRefreshKey}
+        onSelectSession={handleSelectSession}
+        onNewChat={startNewChat}
+        onDeleted={handleDeletedSession}
+      />
+
+      {/* Main chat column */}
+      <div className="flex flex-col flex-1 overflow-hidden bg-white">
       {/* Chat topbar */}
       <ChatTopbar isConnected={isConnected} onClear={handleClear} />
 
@@ -197,6 +261,7 @@ export function ChatView() {
 
       {/* Input bar */}
       <ChatInput onSend={sendMessage} isDisabled={isStreaming} />
+      </div>
     </div>
   );
 }

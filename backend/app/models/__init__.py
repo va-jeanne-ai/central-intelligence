@@ -65,6 +65,9 @@ from app.models.audit import (  # noqa: F401
 # integrations — no FK dependencies (tenant_id is FK-less for now)
 from app.models.integration import Integration  # noqa: F401
 
+# chat — depends on User (user_id FK)
+from app.models.chat import ChatMessage, ChatSession  # noqa: F401
+
 __all__ = [
     # base
     "Base",
@@ -114,4 +117,7 @@ __all__ = [
     "IdempotencyKey",
     # integrations
     "Integration",
+    # chat
+    "ChatSession",
+    "ChatMessage",
 ]
