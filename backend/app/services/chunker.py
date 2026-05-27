@@ -25,6 +25,34 @@ _ENCODER = tiktoken.get_encoding("cl100k_base")
 # Google Doc exports.
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n{2,}")
 
+# Characters Python's str.strip() leaves alone but that carry no semantic
+# value (BOM, zero-width space, zero-width non-joiner, zero-width joiner).
+# Drive's plain-text export often starts every doc with a BOM; left in
+# place, a BOM-only "chunk" gets embedded into a noise vector that
+# pollutes cosine search.
+_INVISIBLE_CHARS = "﻿​‌‍ "
+
+# Below this character count, a chunk is treated as semantically empty
+# and dropped before embedding. Tunable; 10 captures "blank page", a
+# stray BOM, or "ok" / "n/a" rows without throwing away short headings.
+_MIN_CHUNK_CHARS = 10
+
+
+def _normalise(text: str) -> str:
+    """Strip invisible characters that defeat ``str.strip()``."""
+    if not text:
+        return ""
+    return text.strip(_INVISIBLE_CHARS).strip()
+
+
+def _is_meaningful(chunk: str) -> bool:
+    """A chunk is keepable iff it has at least _MIN_CHUNK_CHARS of
+    non-invisible content."""
+    cleaned = _normalise(chunk)
+    for ch in _INVISIBLE_CHARS:
+        cleaned = cleaned.replace(ch, "")
+    return len(cleaned) >= _MIN_CHUNK_CHARS
+
 
 def _tokens(text: str) -> list[int]:
     return _ENCODER.encode(text)
@@ -42,9 +70,14 @@ def chunk_text(
 ) -> list[str]:
     """Return ``text`` split into chunks of at most ``max_tokens`` tokens.
 
-    Empty / whitespace-only inputs return ``[]`` (no embeddings to do).
+    Empty / whitespace-only / invisible-char-only inputs return ``[]``
+    (no embeddings to do). Chunks shorter than ``_MIN_CHUNK_CHARS`` of
+    real content are also dropped — they were causing noise vectors to
+    pollute cosine search (BOM-only "chunks" rank too close to every
+    query).
     """
-    if not text or not text.strip():
+    text = _normalise(text)
+    if not text:
         return []
     if max_tokens <= 0:
         return []
@@ -80,7 +113,7 @@ def chunk_text(
     if current_tokens:
         chunks.append(_detokens(current_tokens).strip())
 
-    return [c for c in chunks if c]
+    return [c for c in chunks if _is_meaningful(c)]
 
 
 def _split_into_sentences(text: str) -> list[str]:
@@ -105,4 +138,4 @@ def _hard_window_chunks(
         out.append(_detokens(window).strip())
         if start + max_tokens >= len(tokens):
             break
-    return [c for c in out if c]
+    return [c for c in out if _is_meaningful(c)]

@@ -35,5 +35,10 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Celery beat scheduler state — generated at runtime; never check in
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
 # WAT framework
 .tmp/

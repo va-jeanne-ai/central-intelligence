@@ -222,3 +222,154 @@ def backfill_insights_embeddings(self, batch_size: int = _BATCH_SIZE) -> dict[st
         enqueued, len(rows),
     )
     return {"enqueued": enqueued, "candidates": len(rows)}
+
+
+@celery_app.task(
+    bind=True, name="app.tasks.embed_backfill.reembed_drive_files",
+)
+def reembed_drive_files(self) -> dict[str, Any]:
+    """Force a full re-embed of every Drive file with extracted text.
+
+    Use after changing the embedding-payload shape (e.g. when we added
+    the filename + folder header to each chunk). Steps:
+
+      1. DELETE all existing google_drive_files rows from `embeddings`.
+      2. Bump every file's content_hash so the next regular sync sees
+         it as "changed" even if the underlying body bytes are identical.
+      3. INSERT one embed_pending row per Drive file with extracted text,
+         using build_embedding_text() to assemble the new payload.
+
+    Idempotent — re-running after a partial drain just adds the
+    still-missing rows. Run manually:
+
+        >>> from app.tasks.embed_backfill import reembed_drive_files
+        >>> reembed_drive_files.delay()
+    """
+    # Lazy import — avoids a circular import at module-load time and
+    # keeps the dependency edge explicit ("backfill needs upsert's
+    # text-builder").
+    from app.services.drive_upsert import build_embedding_text
+
+    # 1. Wipe the existing Drive embeddings in chunks so each DELETE
+    #    fits inside Supabase's 2-minute statement timeout. A single
+    #    "DELETE FROM embeddings WHERE source_table=..." on a ~5k row
+    #    IVFFLAT-indexed table can take longer than 2min because each
+    #    row triggers index-page rewrites; batching keeps each statement
+    #    short and lets the IVFFLAT index settle between rounds.
+    deleted_embeddings = 0
+    batch_size = 500
+    while True:
+        with make_sync_session() as session:
+            result = session.execute(
+                text("""
+                    DELETE FROM embeddings
+                    WHERE id IN (
+                        SELECT id FROM embeddings
+                        WHERE source_table = 'google_drive_files'
+                        LIMIT :n
+                    )
+                """),
+                {"n": batch_size},
+            )
+            row_count = result.rowcount or 0
+            session.commit()
+        deleted_embeddings += row_count
+        logger.info(
+            "reembed_drive_files: deleted %d embeddings so far",
+            deleted_embeddings,
+        )
+        if row_count < batch_size:
+            break
+
+    # 2. Drain any half-flight pending rows for Drive — we're about
+    #    to re-enqueue the whole corpus and don't want collisions
+    #    with the older payload format.
+    with make_sync_session() as session:
+        result = session.execute(
+            text("DELETE FROM embed_pending WHERE source_table = 'google_drive_files'")
+        )
+        cleared_pending = result.rowcount or 0
+        session.commit()
+
+    # 3. Pull every Drive file id (lightweight — no body text yet) so we
+    #    can iterate them in small batches. Pulling 1265 rows × multi-KB
+    #    text in one shot blows Supabase's statement timeout.
+    with make_sync_session() as session:
+        ids = [
+            row["id"] for row in session.execute(
+                text("""
+                    SELECT id::text AS id
+                    FROM google_drive_files
+                    WHERE extracted_text IS NOT NULL
+                      AND length(extracted_text) > 0
+                    ORDER BY id
+                """)
+            ).mappings().all()
+        ]
+
+    # 4. For each batch of IDs, fetch the body + parent + mime, build
+    #    the prefixed payload, enqueue. Commit per batch so a stalled
+    #    transaction can't time out, and each fetch stays small enough
+    #    to round-trip well under Supabase's statement timeout.
+    _PAYLOAD_BATCH = 50
+    enqueued = 0
+    for chunk_start in range(0, len(ids), _PAYLOAD_BATCH):
+        batch_ids = ids[chunk_start:chunk_start + _PAYLOAD_BATCH]
+        with make_sync_session() as session:
+            rows = session.execute(
+                text("""
+                    SELECT id::text AS id, name, parent_folder_name,
+                           mime_type, extracted_text
+                    FROM google_drive_files
+                    WHERE id::text = ANY(:ids)
+                """),
+                {"ids": batch_ids},
+            ).mappings().all()
+
+            for f in rows:
+                payload = build_embedding_text(
+                    name=f["name"],
+                    parent_folder_name=f["parent_folder_name"],
+                    mime_type=f["mime_type"],
+                    body=f["extracted_text"],
+                )
+                new_hash = _hash(payload)
+                session.execute(
+                    text("""
+                        INSERT INTO embed_pending
+                            (id, source_table, source_id, text_to_embed, content_hash)
+                        VALUES
+                            (:id, 'google_drive_files', :sid, :body, :h)
+                    """),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "sid": f["id"],
+                        "body": payload,
+                        "h": new_hash,
+                    },
+                )
+                session.execute(
+                    text("UPDATE google_drive_files SET content_hash = :h WHERE id = :id"),
+                    {"h": new_hash, "id": f["id"]},
+                )
+                enqueued += 1
+            session.commit()
+        logger.info(
+            "reembed_drive_files: enqueued %d / %d files",
+            enqueued, len(ids),
+        )
+
+    # Keep the older variable name for the log line below.
+    files = ids
+
+    logger.info(
+        "reembed_drive_files: deleted_embeddings=%d cleared_pending=%d "
+        "enqueued=%d (of %d files with text)",
+        deleted_embeddings, cleared_pending, enqueued, len(files),
+    )
+    return {
+        "deleted_embeddings": deleted_embeddings,
+        "cleared_pending": cleared_pending,
+        "enqueued": enqueued,
+        "files_with_text": len(files),
+    }

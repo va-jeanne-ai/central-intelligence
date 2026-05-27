@@ -35,6 +35,73 @@ def compute_content_hash(text: str | None, fallback: str | None = None) -> str:
     return hashlib.sha256(src.encode("utf-8", errors="replace")).hexdigest()[:64]
 
 
+def _humanize_filename(name: str) -> str:
+    """Turn ``Central_Intelligence_Developer_Handoff.docx`` into
+    ``Central Intelligence Developer Handoff``.
+
+    Strips the extension and converts underscores/hyphens to spaces so
+    natural-language queries (which use spaces, not underscores) embed
+    closer to the filename's semantic content.
+    """
+    import os
+    stem, _ = os.path.splitext(name)
+    return " ".join(stem.replace("_", " ").replace("-", " ").split())
+
+
+def build_embedding_text(
+    *,
+    name: str | None,
+    parent_folder_name: str | None,
+    mime_type: str | None,
+    body: str,
+) -> str:
+    """Prepend filename + folder + mime context to a Drive file's text.
+
+    Vector search compares the chunk vector to the query vector, so
+    filename / folder keywords end up in retrieval *only* when they
+    appear inside the embedded text. Otherwise a query like "find the
+    Q3 budget" can't hit a file literally named "Q3_Budget.xlsx" if
+    the file's body doesn't repeat the phrase.
+
+    The filename gets repeated in three forms to carry enough semantic
+    weight to outrank generic-template bodies that score artificially
+    well on filename queries:
+
+      * ``[File: Foo_Bar.docx]`` — the literal filename
+      * ``Document: Foo Bar`` — natural-language title (echoes common
+        phrasings the LLM has seen during training)
+      * Inline title sentence — gets tokenized as actual prose, not
+        a bracket-noun-stack
+
+    The header is plain text so the agent can strip it back out when
+    surfacing chunks to the LLM (it's hint metadata, not content the
+    user should see verbatim).
+    """
+    header_lines: list[str] = []
+    title: str | None = None
+    if name:
+        header_lines.append(f"[File: {name}]")
+        title = _humanize_filename(name)
+    if parent_folder_name:
+        header_lines.append(f"[Folder: {parent_folder_name}]")
+    if mime_type:
+        header_lines.append(f"[Type: {mime_type}]")
+    if not header_lines:
+        return body
+
+    # Title sentence repeats the spaced-out filename twice — once as a
+    # "Document:" label, once as the inline opening line. Both are
+    # tokenized as natural prose, not bracketed metadata, so they
+    # contribute real semantic mass to filename-keyword queries.
+    title_block = ""
+    if title:
+        title_block = (
+            f"Document: {title}\n"
+            f"This document is titled \"{title}\".\n\n"
+        )
+    return "\n".join(header_lines) + "\n\n" + title_block + body
+
+
 def upsert_drive_file_sync(
     session: Session,
     user_id: uuid.UUID,
@@ -128,11 +195,17 @@ def upsert_drive_file_sync(
     # enqueue. Pure-metadata files (extracted_text=None) get stored but
     # not embedded — there's nothing semantic to embed for an .xlsx.
     if content_changed and extracted_text and extracted_text.strip():
+        embedding_text = build_embedding_text(
+            name=row.name,
+            parent_folder_name=row.parent_folder_name,
+            mime_type=row.mime_type,
+            body=extracted_text,
+        )
         session.add(EmbedPending(
             id=uuid.uuid4(),
             source_table=SOURCE_TABLE,
             source_id=str(row.id),
-            text_to_embed=extracted_text,
+            text_to_embed=embedding_text,
             content_hash=new_hash,
         ))
 
