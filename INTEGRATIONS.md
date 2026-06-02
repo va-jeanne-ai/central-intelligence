@@ -118,25 +118,27 @@ The pull and the webhook feed the same upsert path in [`backend/app/services/ghl
 
 ---
 
-## Google Workspace (Gmail + Drive + RAG) ✅
+## Google Workspace (Gmail + Drive + Calendar + RAG) ✅
 
 **What it does today**
 
-Two ingest pipelines on one per-user OAuth grant:
+Three ingest pipelines on one per-user OAuth grant:
 
 1. **Gmail thread sync** — pulls threads where a known lead's email address appears (From/To/Cc/Bcc) into our database, rendered as collapsible threads on the lead detail page. Plain-text bodies only; HTML is ignored. Attachments are recorded as metadata (filename + size + mime) but bytes are not downloaded — staff click through to Gmail for the file itself.
 2. **Drive file sync + RAG layer** — sweeps every connected user's Drive, indexes file metadata into `google_drive_files`, and pulls plain-text content from supported file types (Google Docs, Sheets, Slides, PDFs, DOCX, txt/markdown). Extracted text feeds the **embeddings pipeline** (Voyage `voyage-3`, 1024-d, pgvector on Supabase) that powers the chat agent's `search_knowledge_base` tool. The lead detail page renders a **Documents** card listing files shared with the lead's email address.
+3. **Calendar event sync** — sweeps every calendar a connected user can see (primary + secondary + shared), expands recurring events into individual instances via `singleEvents=true`, and stores them in `google_calendar_events`. First-class surface: dedicated **`/calendar`** page lists upcoming + past events with an attendee-email search. The lead detail page also renders an **Events** card listing meetings where the lead is an attendee. Calendar events flow into the same embeddings pipeline, plus the chat gets a structured **`query_calendar`** tool for time-window questions ("what's on Friday", "anything with @lazaderm.com next week") that vector search can't answer.
 
-- **Auth model:** **Per-user OAuth.** Each staff member runs through Google's consent flow once on `/integrations/google_workspace`; CI stores their encrypted refresh token in `user_integration_credentials` and uses it to read their mailbox + Drive on the schedule. Both Gmail and Drive sync share the same grant (`gmail.readonly` + `drive.readonly`). Multiple connected users share the same `email_threads` / `email_messages` / `google_drive_files` tables; Gmail messages dedup automatically on `provider_message_id` (globally unique); Drive files dedup on read (one row per `connected_via_user_id`). Service-account + domain-wide delegation was the original plan, but most GCP orgs enforce `iam.disableServiceAccountKeyCreation`, blocking that path. Per-user OAuth has no policy guardrails and gives each user the comfort of seeing exactly what was authorized.
+- **Auth model:** **Per-user OAuth.** Each staff member runs through Google's consent flow once on `/integrations/google_workspace`; CI stores their encrypted refresh token in `user_integration_credentials` and uses it to read their mailbox + Drive + Calendar on the schedule. All three sync tasks share the same grant (`gmail.readonly` + `drive.readonly` + `calendar.readonly`). Multiple connected users share the same `email_threads` / `email_messages` / `google_drive_files` / `google_calendar_events` tables; Gmail messages dedup automatically on `provider_message_id`; Drive files and Calendar events dedup on read (one row per `connected_via_user_id`). Service-account + domain-wide delegation was the original plan, but most GCP orgs enforce `iam.disableServiceAccountKeyCreation`, blocking that path. Per-user OAuth has no policy guardrails and gives each user the comfort of seeing exactly what was authorized.
 - **Path:** [`backend/app/services/google_oauth.py`](backend/app/services/google_oauth.py) holds the OAuth flow primitives (authorize URL, code exchange, refresh). [`backend/app/services/google_oauth_credentials.py`](backend/app/services/google_oauth_credentials.py) loads + decrypts a user's tokens and builds a `google.oauth2.credentials.Credentials` object. [`backend/app/routes/oauth.py`](backend/app/routes/oauth.py) provides `/start` + `/callback` + `/connected-users` + `/disconnect` endpoints. [`backend/app/services/gmail_client.py`](backend/app/services/gmail_client.py) wraps `googleapiclient.discovery.build('gmail', 'v1', ...)` — auth-agnostic, takes any `Credentials`. [`backend/app/services/gmail_upsert.py`](backend/app/services/gmail_upsert.py) keeps `email_threads` + `email_messages` rows in sync. [`backend/app/tasks/gmail_sync.py`](backend/app/tasks/gmail_sync.py) holds both Celery entry points — the full nightly sweep (`sync_gmail_threads`, fan-out across every connected user) and the per-lead on-demand variant (`sync_gmail_threads_for_lead`).
-- **Schedule:** Gmail beat-scheduled at **02:45 UTC** daily (`gmail-thread-sync-nightly`); Drive at **03:00 UTC** (`google-drive-sync-nightly`); embed worker drain every **2 minutes** (`embed-queue-drain`). On-demand: `POST /api/v1/integrations/google_workspace/sync` fans out both Gmail and Drive in one click. `POST /api/v1/leads/{lead_id}/sync-emails` and `POST /api/v1/leads/{lead_id}/sync-documents` cover the per-lead variants from the lead detail page.
-- **Incremental sync:** Gmail filters with `after:<unix_ts_of_user_last_synced_at>`. Drive uses `modifiedTime > <last_sync>` plus a `content_hash` short-circuit — files whose extracted text hashes match the stored value skip re-embedding entirely.
+- **Schedule:** Gmail beat-scheduled at **02:45 UTC** daily (`gmail-thread-sync-nightly`); Drive at **03:00 UTC** (`google-drive-sync-nightly`); Calendar at **03:15 UTC** (`google-calendar-sync-nightly`); embed worker drain every **2 minutes** (`embed-queue-drain`). On-demand: `POST /api/v1/integrations/google_workspace/sync` fans out all three in one click. `POST /api/v1/leads/{lead_id}/sync-emails`, `POST /api/v1/leads/{lead_id}/sync-documents`, and `POST /api/v1/leads/{lead_id}/sync-events` cover the per-lead variants. `POST /api/v1/calendar/sync` is the single-user button on the `/calendar` page.
+- **Incremental sync:** Gmail filters with `after:<unix_ts_of_user_last_synced_at>`. Drive uses `modifiedTime > <last_sync>` plus a `content_hash` short-circuit. Calendar uses `updatedMin = last_synced_at` on subsequent runs and the full history window (10 years back + 1 year forward) on the first run for each user. All three short-circuit re-embedding when the content hash matches.
 - **Query shape (Gmail):** `(from:"<email>" OR to:"<email>" OR cc:"<email>" OR bcc:"<email>") after:<ts>`.
 - **Storage:**
   - `email_threads(id, lead_id FK CASCADE, provider_thread_id, subject, last_message_at, message_count, created_at, updated_at)`. Composite UNIQUE on `(lead_id, provider_thread_id)`. Index on `(lead_id, last_message_at DESC)`. Migration `i9d0e1f2g3h4`.
   - `email_messages(id, thread_id FK CASCADE, provider_message_id UNIQUE, from_address, to_addresses JSONB, cc_addresses JSONB, subject, body_text, sent_at, has_attachments, attachments_meta JSONB, created_at)`. Index on `(thread_id, sent_at)`. Migration `i9d0e1f2g3h4`.
   - `user_integration_credentials(id, user_id FK CASCADE, provider, credentials_encrypted, scopes JSONB, connected_email, last_synced_at, last_sync_status, last_sync_error, created_at, updated_at)`. Composite UNIQUE on `(user_id, provider)`. Migration `j1a2b3c4d5e6`.
   - `google_drive_files(id, connected_via_user_id FK CASCADE, provider_file_id, name, mime_type, owner_email, modified_time, web_view_link, parent_folder_id, parent_folder_name, shared_with JSONB, size_bytes, is_trashed, extracted_text, content_hash, last_extracted_at, created_at, updated_at)`. Composite UNIQUE on `(provider_file_id, connected_via_user_id)`. **GIN index on `shared_with`** for the lead documents card's JSONB containment query. Migration `k2b3c4d5e6f7`.
+  - `google_calendar_events(id, connected_via_user_id FK CASCADE, provider_event_id, calendar_id, calendar_name, title, description, location, organizer_email, attendees JSONB, start_time, end_time, is_all_day, event_link, status, recurring_event_id, extracted_text, content_hash, last_extracted_at, created_at, updated_at)`. Composite UNIQUE on `(provider_event_id, connected_via_user_id)`. Index on `(connected_via_user_id, start_time DESC)`. **GIN index on `attendees`** for lead-by-email containment and the chat agent's `query_calendar(attendee_email_contains=...)` filter. Migration `m4d5e6f7a8b9`.
   - `embed_pending(id, source_table, source_id, text_to_embed, content_hash, attempts, last_error, created_at)`. FIFO drain queue, polymorphic across all four embedded sources. Migration `k2b3c4d5e6f7`.
   - `embeddings(id, source_table, source_id, chunk_index, text_chunk, embedding vector(1024), content_hash, embedded_at)`. **IVFFLAT index** on `embedding vector_cosine_ops` (lists=100). Composite UNIQUE on `(source_table, source_id, chunk_index)`. Migration `k2b3c4d5e6f7`.
   - `embedding_budget(id, daily_token_cap, tokens_used_today, usage_window_started_at)`. Single-row global daily cap. Migration `k2b3c4d5e6f7`.
@@ -144,17 +146,19 @@ Two ingest pipelines on one per-user OAuth grant:
 
 **AI chat retrieval (the RAG layer)**
 
-The Central Intelligence chat agent has **two retrieval tools**; the LLM picks which to call:
+The Central Intelligence chat agent has **three retrieval tools**; the LLM picks which to call:
 
 | Tool | Use for | Source |
 |---|---|---|
 | `query_database` | Structured business data — counts, lists, status filters, lead/call/insight joins | Postgres tables (read-only SELECT) |
+| `query_calendar` | Time-window calendar questions ("Friday", "next week", attendee filter) | `google_calendar_events` table (structured range query, not vector) |
 | `search_knowledge_base` | Semantic / "find anything about…" questions | `embeddings` table; pgvector cosine against the Voyage-embedded chunks |
 
-Embeddings cover four sources today, all polymorphic-keyed by `(source_table, source_id)`:
+Embeddings cover five sources today, all polymorphic-keyed by `(source_table, source_id)`:
 
 - `google_drive_files` — primary RAG corpus. Docs/Sheets/Slides exported via Drive API to `text/plain` or `text/csv`; PDFs via pdfplumber; DOCX via python-docx; plain text + markdown as-is. Files >15MB are indexed at metadata level only.
 - `email_messages` — subject + body_text concatenated per message.
+- `google_calendar_events` — title + description + attendees + when concatenated (so semantic queries like "find the budget review meeting" hit on the right event).
 - `lead_notes` — staff-side journal entries.
 - `insights` — call insights (raw_quote + what_they_say + the_real_problem + emotional_driver + marketing_translation concatenated).
 
@@ -162,8 +166,8 @@ Chunking: `tiktoken` cl100k_base, 1024 tokens per chunk with 200-token overlap. 
 
 **Setup (one-time, by a deployment admin)**
 
-1. Google Cloud Console → create or pick a project → enable **Gmail API** and **Drive API**.
-2. APIs & Services → **OAuth consent screen** → configure (External or Internal depending on Workspace). Add scopes `https://www.googleapis.com/auth/gmail.readonly` and `https://www.googleapis.com/auth/drive.readonly` plus `openid` + `email`. Add yourself + any tester accounts under "Test users" until the app is verified.
+1. Google Cloud Console → create or pick a project → enable **Gmail API**, **Drive API**, and **Calendar API**.
+2. APIs & Services → **OAuth consent screen** → configure (External or Internal depending on Workspace). Add scopes `gmail.readonly`, `drive.readonly`, `calendar.readonly` plus `openid` + `email`. Add yourself + any tester accounts under "Test users" until the app is verified.
 3. APIs & Services → **Credentials** → Create Credentials → **OAuth 2.0 Client ID** → Web application. Add authorized redirect URI: `http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback` (for dev; replace host in prod).
 4. Voyage AI → create an account at [voyageai.com](https://www.voyageai.com) → generate an API key.
 5. Add to `backend/.env`:
@@ -171,25 +175,26 @@ Chunking: `tiktoken` cl100k_base, 1024 tokens per chunk with 200-token overlap. 
    - `GOOGLE_OAUTH_CLIENT_SECRET=<client secret from step 3>`
    - `GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback`
    - `VOYAGE_API_KEY=<key from step 4>`
-6. Restart the backend so the new env vars are picked up.
-7. **Force re-consent for already-connected users.** The `drive.readonly` scope is additive but Google's consent layer requires re-grant: `DELETE FROM user_integration_credentials WHERE provider = 'google_workspace';`. Each staff member then reconnects to grant the expanded scopes.
+6. Restart the backend + Celery worker + beat so the new sync tasks register.
+7. **Force re-consent for already-connected users** every time a scope is added. Calendar scope is additive but Google's consent layer requires re-grant: `DELETE FROM user_integration_credentials WHERE provider = 'google_workspace';`. Each staff member then reconnects to grant the expanded scopes.
 
 **Per-user connect (each staff member, once)**
 
 1. Sign into CI as that user.
 2. Navigate to `/integrations/google_workspace`.
-3. Click **Connect Gmail** → browser redirects to Google's consent screen → grant `gmail.readonly` + `drive.readonly`.
+3. Click **Connect Gmail** → browser redirects to Google's consent screen → grant `gmail.readonly` + `drive.readonly` + `calendar.readonly`.
 4. Google redirects back; the page shows your row in "Connected users" with your email + sync status.
-5. Threads + documents will start showing up on lead detail pages on the next sync (nightly or manual). RAG embeddings begin populating within a few minutes of the first Drive sweep (embed worker drains every 2 min).
+5. Threads + documents + events start showing up after the next sync (nightly or manual). RAG embeddings begin populating within a few minutes of each sweep (embed worker drains every 2 min).
 
 **Surfaces it powers today**
 
 | Surface | What it shows |
 |---|---|
 | [`/integrations/google_workspace`](frontend/src/app/(app)/integrations/[slug]/page.tsx) | "Connect Gmail" button for the current user; "Connected users" list showing every staff member who has connected, each with `connected_email` + last sync status + a Disconnect action (own-row only). |
-| [`/leads/[lead_id]`](frontend/src/app/(app)/leads/[lead_id]/page.tsx) | **Emails** card with collapsed thread rows + per-lead **Sync emails now** button. **Documents** card listing Drive files where the lead's email is in `shared_with`, with mime icon + last modified + owner + per-lead **Sync documents now** button. |
-| `/chat` (Central Intelligence agent) | `search_knowledge_base` tool. LLM picks it for unstructured questions ("find files about Q3 budgets", "what's our refund policy") and quotes the top matching chunks. Backed by pgvector cosine search against `embeddings`. |
-| `sync_log` table | Per-run history. `operation='gmail_thread_sync'` for Gmail; `operation='drive_file_sync'` for Drive. `details` carries `users_processed`, `inserted`, `content_changed`, `errors_by_user`. |
+| [`/calendar`](frontend/src/app/(app)/calendar/page.tsx) | Dedicated calendar page. Day-grouped list of events with **Upcoming (14d)** / **Recent (30d)** / **Past 30d + Next 60d** toggles + an attendee-email search filter + a per-user **Sync now** button. |
+| [`/leads/[lead_id]`](frontend/src/app/(app)/leads/[lead_id]/page.tsx) | **Emails** card with collapsed thread rows + per-lead **Sync emails now** button. **Events** card listing Calendar events where the lead's email is in `attendees`, with per-lead **Sync events now** button. **Documents** card listing Drive files where the lead's email is in `shared_with`, with mime icon + last modified + owner + per-lead **Sync documents now** button. |
+| `/chat` (Central Intelligence agent) | Three retrieval tools. `query_database` for structured business data, `query_calendar` for time-window event lookups, `search_knowledge_base` for unstructured semantic search across everything. |
+| `sync_log` table | Per-run history. `operation='gmail_thread_sync'` for Gmail; `operation='drive_file_sync'` for Drive; `operation='calendar_event_sync'` for Calendar. `details` carries `users_processed`, `inserted`, `content_changed`, `errors_by_user`. |
 
 **What it could power but doesn't yet**
 

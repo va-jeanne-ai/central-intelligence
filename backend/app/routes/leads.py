@@ -32,6 +32,7 @@ Column reference — leads table
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -64,6 +65,11 @@ from app.schemas.leads import (
     NoteRow,
     SourceBreakdownItem,
     UpdateLeadRequest,
+)
+from app.schemas.calendar import (
+    CalendarAttendee,
+    CalendarEventRow,
+    CalendarEventsResponse,
 )
 from app.services.audit import record_event
 
@@ -971,6 +977,149 @@ async def sync_lead_documents(
         raise HTTPException(
             status_code=503,
             detail="Failed to enqueue document sync. Try again in a minute.",
+        ) from exc
+
+    return {"task_ids": task_ids, "lead_id": str(uid)}
+
+
+# ===========================================================================
+# Lead calendar events — GET /api/v1/leads/{id}/events
+# JSONB containment on google_calendar_events.attendees — any event
+# where this lead's email appears in the attendees array shows here.
+# ===========================================================================
+
+
+@router.get("/leads/{lead_id}/events", response_model=CalendarEventsResponse)
+async def get_lead_events(
+    lead_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> CalendarEventsResponse:
+    """Return calendar events the lead is invited to.
+
+    Sorted with future events first (start_time DESC NULLS LAST), so
+    the lead-detail card opens to upcoming meetings. The lead's email
+    is matched case-insensitively against every attendee's email.
+    """
+    uid = _parse_lead_uuid(lead_id)
+
+    row = (await session.execute(
+        text(
+            "SELECT email FROM leads "
+            "WHERE id = :id AND deleted_at IS NULL"
+        ),
+        {"id": str(uid)},
+    )).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    lead_email = (row.get("email") or "").strip().lower()
+    if not lead_email:
+        return CalendarEventsResponse(events=[], total=0)
+
+    event_rows = (await session.execute(
+        text("""
+            SELECT DISTINCT ON (provider_event_id)
+                id::text                          AS id,
+                title,
+                description,
+                calendar_name,
+                start_time,
+                end_time,
+                is_all_day,
+                organizer_email,
+                attendees,
+                event_link,
+                location,
+                status,
+                provider_event_id
+            FROM google_calendar_events
+            WHERE EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(coalesce(attendees, '[]'::jsonb)) a
+                WHERE lower(a->>'email') = :email
+            )
+            ORDER BY provider_event_id, start_time DESC NULLS LAST
+        """),
+        {"email": lead_email},
+    )).mappings().all()
+
+    # Re-sort by start_time DESC for the response — DISTINCT ON forces
+    # an intermediate ORDER BY on provider_event_id.
+    rows_sorted = sorted(
+        event_rows,
+        key=lambda r: r["start_time"] or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+
+    events = [
+        CalendarEventRow(
+            id=r["id"],
+            title=r["title"],
+            description=r["description"],
+            calendar_name=r["calendar_name"],
+            start_time=r["start_time"].isoformat() if r["start_time"] else None,
+            end_time=r["end_time"].isoformat() if r["end_time"] else None,
+            is_all_day=bool(r["is_all_day"]),
+            organizer_email=r["organizer_email"],
+            attendees=[
+                CalendarAttendee(
+                    email=a.get("email", ""),
+                    displayName=a.get("displayName"),
+                    responseStatus=a.get("responseStatus"),
+                )
+                for a in (r["attendees"] or [])
+                if a.get("email")
+            ],
+            event_link=r["event_link"],
+            location=r["location"],
+            status=r["status"],
+        )
+        for r in rows_sorted
+    ]
+    return CalendarEventsResponse(events=events, total=len(events))
+
+
+@router.post("/leads/{lead_id}/sync-events", status_code=202)
+async def sync_lead_events(
+    lead_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),  # noqa: ARG001
+) -> dict:
+    """Enqueue a Calendar sweep for every connected user.
+
+    Same model as ``sync_lead_documents`` — the relevant event might
+    live in any connected user's calendar, so we re-sweep all of them.
+    The upsert is cheap (content_hash short-circuits unchanged events).
+    """
+    uid = _parse_lead_uuid(lead_id)
+
+    exists = (await session.execute(
+        text("SELECT 1 FROM leads WHERE id = :id AND deleted_at IS NULL"),
+        {"id": str(uid)},
+    )).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    user_ids = (await session.execute(
+        text(
+            "SELECT user_id::text FROM user_integration_credentials "
+            "WHERE provider = 'google_workspace'"
+        ),
+    )).scalars().all()
+    if not user_ids:
+        return {"task_ids": [], "reason": "no_connected_users"}
+
+    task_ids: list[str] = []
+    try:
+        from app.tasks.calendar_sync import sync_calendar_events_for_user
+        for u in user_ids:
+            task = sync_calendar_events_for_user.delay(u)
+            task_ids.append(task.id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sync_lead_events: enqueue failed — %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to enqueue event sync. Try again in a minute.",
         ) from exc
 
     return {"task_ids": task_ids, "lead_id": str(uid)}

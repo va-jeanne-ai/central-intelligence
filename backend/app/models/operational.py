@@ -664,6 +664,85 @@ class GoogleDriveFile(Base):
     )
 
 
+class GoogleCalendarEvent(Base):
+    """One calendar event from a connected user's Google Workspace.
+
+    Synced by ``tasks/calendar_sync.py``. The same event in two users'
+    calendars (e.g. a shared meeting) lands as two rows (different
+    ``connected_via_user_id``). Dedup happens on read.
+
+    Recurring events are stored as **expanded instances** —
+    ``events.list?singleEvents=true`` on the Google API returns one
+    row per occurrence, each with its own ``provider_event_id``
+    (parent id + RFC5545 timestamp suffix). That way the chat can
+    answer "what's on Tuesday at 9am" with a concrete row, not by
+    computing recurrence client-side.
+
+    ``extracted_text`` caches the title + description + attendees
+    concatenation used by the embed worker. ``content_hash`` is the
+    sha256 of that text and gates re-embedding.
+    """
+
+    __tablename__ = "google_calendar_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_event_id", "connected_via_user_id",
+            name="uq_google_calendar_events_provider_user",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    connected_via_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider_event_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    calendar_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    calendar_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location: Mapped[str | None] = mapped_column(Text, nullable=True)
+    organizer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # JSONB array of {email, displayName, responseStatus} dicts.
+    # GIN-indexed; lead-detail card and chat tool filter on it.
+    attendees: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    start_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    end_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    is_all_day: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false",
+    )
+    event_link: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    recurring_event_id: Mapped[str | None] = mapped_column(
+        String(256), nullable=True,
+    )
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_extracted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class EmbedPending(Base):
     """FIFO queue of (source_table, source_id) waiting to be embedded.
 

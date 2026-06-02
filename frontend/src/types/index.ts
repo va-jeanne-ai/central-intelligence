@@ -322,6 +322,43 @@ export interface TestIntegrationResponse {
   details?: Record<string, unknown> | null;
 }
 
+// ─── Calendar ─────────────────────────────────────────────────────────────
+
+export interface CalendarAttendee {
+  email: string;
+  displayName?: string | null;
+  responseStatus?: string | null;
+}
+
+export interface CalendarEventRow {
+  id: string;
+  title: string | null;
+  description: string | null;
+  calendar_name: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  is_all_day: boolean;
+  organizer_email: string | null;
+  attendees: CalendarAttendee[];
+  event_link: string | null;
+  location: string | null;
+  status: string | null;
+}
+
+export interface CalendarEventsResponse {
+  events: CalendarEventRow[];
+  total: number;
+}
+
+export interface CalendarSummary {
+  calendar_id: string;
+  calendar_name: string | null;
+}
+
+export interface CalendarListResponse {
+  calendars: CalendarSummary[];
+}
+
 // ─── Chat history (persisted) ─────────────────────────────────────────────
 
 export interface ChatSessionRow {

@@ -12,7 +12,7 @@ import { TranscriptUploadWidget } from "@/components/upload/transcript-upload-wi
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { showError, showSuccess, showWarning } from "@/lib/toast";
-import type { LeadStatus, LeadSource } from "@/types";
+import type { LeadStatus, LeadSource, CalendarEventRow } from "@/types";
 
 // ─── API response shapes ─────────────────────────────────────────────────────
 
@@ -605,6 +605,10 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [isSyncingDocuments, setIsSyncingDocuments] = useState(false);
 
+  // Calendar events — events where this lead's email is in attendees.
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEventRow[]>([]);
+  const [isSyncingEvents, setIsSyncingEvents] = useState(false);
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -659,13 +663,26 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
     }
   }, [leadId]);
 
+  const loadEvents = useCallback(async () => {
+    try {
+      const data = await apiClient.get<{
+        events: CalendarEventRow[];
+        total: number;
+      }>(`/leads/${leadId}/events`, { silent: true });
+      setCalendarEvents(data.events);
+    } catch {
+      // Calendar may not be connected yet; degrade silently.
+    }
+  }, [leadId]);
+
   useEffect(() => {
     if (authLoading) return;
     void load();
     void loadHistory();
     void loadEmails();
     void loadDocuments();
-  }, [authLoading, load, loadHistory, loadEmails, loadDocuments]);
+    void loadEvents();
+  }, [authLoading, load, loadHistory, loadEmails, loadDocuments, loadEvents]);
 
   // Poll the lead detail every 10s while at least one call is still being
   // analyzed. Once every call has processed_date set, the interval is
@@ -849,6 +866,22 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
     } catch (err) {
       showError(err instanceof Error ? err.message : "Failed to start document sync.");
       setIsSyncingDocuments(false);
+    }
+  }
+
+  async function syncEvents() {
+    if (isSyncingEvents) return;
+    setIsSyncingEvents(true);
+    try {
+      await apiClient.post(`/leads/${leadId}/sync-events`, {}, { silent: true });
+      showSuccess("Event sync queued. Refreshing in a few seconds…");
+      setTimeout(() => {
+        void loadEvents();
+        setIsSyncingEvents(false);
+      }, 5000);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Failed to start event sync.");
+      setIsSyncingEvents(false);
     }
   }
 
@@ -1241,6 +1274,85 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                       </div>
                     );
                   })}
+                </HistoryList>
+              )}
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Events — Google Calendar events where this lead's email is
+            in the attendees list. Populated by the Calendar sync task.
+            Only rendered when the lead has an email — without one we
+            have no key to match against attendees. */}
+        {detail.email && (
+          <Card>
+            <CardHeader
+              title="Events"
+              action={
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-gray-400">
+                    {calendarEvents.length} event{calendarEvents.length === 1 ? "" : "s"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void syncEvents()}
+                    disabled={isSyncingEvents}
+                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
+                  >
+                    {isSyncingEvents ? "Syncing…" : "Sync events now"}
+                  </button>
+                </div>
+              }
+            />
+            <CardBody noPadding>
+              {calendarEvents.length === 0 ? (
+                <p className="px-5 py-4 text-[13px] text-gray-400 italic">
+                  No calendar events for this lead. Click <b>Sync events now</b> if Google Calendar is connected.
+                </p>
+              ) : (
+                <HistoryList className="py-1">
+                  {calendarEvents.map((ev) => (
+                    <HistoryItem
+                      key={ev.id}
+                      dotColor="#8B5CF6"
+                      trailing={
+                        <span
+                          className="text-[11px] text-gray-400"
+                          title={ev.start_time ? formatDate(ev.start_time) : undefined}
+                        >
+                          {ev.start_time ? relativeTime(ev.start_time) : "—"}
+                        </span>
+                      }
+                    >
+                      <a
+                        href={ev.event_link || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-left hover:underline"
+                      >
+                        <div className="text-[13px] font-semibold text-gray-700 truncate">
+                          {ev.title || "(untitled event)"}
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-0.5 truncate">
+                          {ev.calendar_name && (
+                            <span className="mr-2">📆 {ev.calendar_name}</span>
+                          )}
+                          {ev.organizer_email && (
+                            <span className="mr-2">👤 {ev.organizer_email}</span>
+                          )}
+                          {ev.attendees.length > 0 && (
+                            <span className="mr-2">
+                              👥 {ev.attendees.length} attendee
+                              {ev.attendees.length === 1 ? "" : "s"}
+                            </span>
+                          )}
+                          {ev.location && (
+                            <span className="mr-2">📍 {ev.location}</span>
+                          )}
+                        </div>
+                      </a>
+                    </HistoryItem>
+                  ))}
                 </HistoryList>
               )}
             </CardBody>

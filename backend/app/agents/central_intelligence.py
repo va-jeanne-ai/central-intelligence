@@ -8,6 +8,7 @@ even a weaker model cannot accidentally leak schema details.
 
 import json
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import text
 
@@ -341,6 +342,155 @@ async def _search_knowledge_base(query: str, top_k: int = _KB_DEFAULT_TOP_K) -> 
     return "\n\n---\n\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Calendar tool — structured time-window lookups
+#
+# Vector search alone can't answer "what's on Friday" (it doesn't
+# understand temporal ranges). This tool gives the LLM a structured
+# path to ask the calendar table directly. Semantic questions about
+# events (e.g. "what was the budget review about") still go through
+# search_knowledge_base — calendar events are embedded alongside Drive
+# files and emails in the polymorphic embeddings table.
+# ---------------------------------------------------------------------------
+
+
+_CALENDAR_MAX_ROWS = 25
+
+
+def _format_event_for_llm(row) -> str:
+    """One human-readable line per event for the agent's response.
+
+    Includes title + start time + organizer + attendee list. The LLM
+    quotes from this without exposing the schema.
+    """
+    title = (row[0] or "(untitled event)").strip()
+    start = row[1]
+    end = row[2]
+    is_all_day = bool(row[3])
+    cal_name = row[4] or ""
+    organizer = row[5] or ""
+    attendees_json = row[6] or []
+    location = row[7] or ""
+
+    when = ""
+    if start is not None:
+        if is_all_day:
+            when = f"All-day on {start.date().isoformat()}"
+        elif end is not None:
+            when = f"{start.isoformat()} → {end.isoformat()}"
+        else:
+            when = start.isoformat()
+
+    attendee_emails = [
+        a.get("email", "") for a in attendees_json if a.get("email")
+    ]
+    attendees_line = (
+        f"attendees={', '.join(attendee_emails)}" if attendee_emails else ""
+    )
+
+    parts = [f'"{title}"']
+    if when:
+        parts.append(when)
+    if cal_name:
+        parts.append(f"on {cal_name}")
+    if organizer:
+        parts.append(f"organizer={organizer}")
+    if attendees_line:
+        parts.append(attendees_line)
+    if location:
+        parts.append(f"location={location}")
+    return " | ".join(parts)
+
+
+async def _query_calendar(
+    start: str,
+    end: str,
+    attendee_email_contains: str = "",
+) -> str:
+    """Look up calendar events within a time window.
+
+    Parameters
+    ----------
+    start, end : ISO 8601 timestamps (RFC 3339 ok). Window bounds.
+    attendee_email_contains : optional case-insensitive substring match
+        against attendee emails (e.g. "@lazaderm.com" to find every
+        meeting with that domain).
+
+    Returns a human-readable list of up to 25 events, one per line.
+    """
+    if not start or not end:
+        return "Please supply both start and end timestamps."
+
+    def _parse(s: str) -> datetime | None:
+        try:
+            v = s.replace("Z", "+00:00") if s.endswith("Z") else s
+            dt = datetime.fromisoformat(v)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except (ValueError, TypeError):
+            return None
+
+    start_dt = _parse(start)
+    end_dt = _parse(end)
+    if start_dt is None or end_dt is None:
+        return "Couldn't parse the start/end timestamps. Use ISO 8601 (e.g. '2026-05-30T00:00:00Z')."
+    if end_dt < start_dt:
+        return "End must be greater than or equal to start."
+
+    params: dict[str, object] = {
+        "start": start_dt,
+        "end": end_dt,
+        "limit": _CALENDAR_MAX_ROWS,
+    }
+    attendee_clause = ""
+    if attendee_email_contains and attendee_email_contains.strip():
+        params["addr"] = f"%{attendee_email_contains.strip().lower()}%"
+        attendee_clause = """
+            AND EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(coalesce(attendees, '[]'::jsonb)) a
+                WHERE a->>'email' ILIKE :addr
+            )
+        """
+
+    try:
+        async with AsyncSessionLocal() as session:
+            rows = (await session.execute(
+                text(f"""
+                    SELECT
+                        title,
+                        start_time,
+                        end_time,
+                        is_all_day,
+                        calendar_name,
+                        organizer_email,
+                        attendees,
+                        location
+                    FROM google_calendar_events
+                    WHERE start_time IS NOT NULL
+                      AND start_time >= :start
+                      AND start_time <= :end
+                      {attendee_clause}
+                    ORDER BY start_time ASC
+                    LIMIT :limit
+                """),
+                params,
+            )).fetchall()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("query_calendar tool error: %s", exc)
+        return "Calendar lookup is not available right now."
+
+    if not rows:
+        return "No events in that window."
+
+    lines = [_format_event_for_llm(row) for row in rows]
+    out = "\n".join(lines)
+    if len(rows) == _CALENDAR_MAX_ROWS:
+        out += f"\n(Showing first {_CALENDAR_MAX_ROWS} results — narrow the window for more.)"
+    return out
+
+
 class CentralIntelligence(BaseAgent):
     """CEO agent — orchestrates all departments.
 
@@ -426,4 +576,51 @@ class CentralIntelligence(BaseAgent):
                 "required": ["query"],
             },
             handler=_search_knowledge_base,
+        )
+
+        self.register_tool(
+            name="query_calendar",
+            description=(
+                "Look up calendar events in a specific time window. Use "
+                "this for temporal questions like \"what's on my calendar "
+                "Friday\", \"do I have anything with @lazaderm.com next "
+                "week\", \"what meetings did I have last month\". Pass "
+                "ISO 8601 timestamps for start + end. Optional "
+                "attendee_email_contains does a case-insensitive substring "
+                "match against attendee emails (e.g. \"@partner.com\" "
+                "filters to events with that domain). Returns a "
+                "human-readable list of up to 25 events. For semantic "
+                "questions about what was discussed in a specific meeting "
+                "(\"find the budget review meeting\"), use "
+                "search_knowledge_base instead — events are embedded."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "start": {
+                        "type": "string",
+                        "description": (
+                            "ISO 8601 lower bound (e.g. '2026-05-28T00:00:00Z'). "
+                            "Pass the same date for both start and end to look "
+                            "up a single day."
+                        ),
+                    },
+                    "end": {
+                        "type": "string",
+                        "description": (
+                            "ISO 8601 upper bound. Must be >= start."
+                        ),
+                    },
+                    "attendee_email_contains": {
+                        "type": "string",
+                        "description": (
+                            "Optional case-insensitive substring match on "
+                            "any attendee's email. Empty string = no "
+                            "attendee filter."
+                        ),
+                    },
+                },
+                "required": ["start", "end"],
+            },
+            handler=_query_calendar,
         )

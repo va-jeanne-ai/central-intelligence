@@ -29,6 +29,7 @@ interface NavSection {
 const TOP_NAV: NavItem[] = [
   { label: "Dashboard", icon: "📊", href: "/dashboard", department: "core" },
   { label: "Central Intelligence Chat", icon: "👑", href: "/chat", department: "core" },
+  { label: "Calendar", icon: "📅", href: "/calendar", department: "core" },
 ];
 
 const NAV_SECTIONS: NavSection[] = [

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -179,10 +180,11 @@ def _trigger_sync(slug: str) -> str | None:
             logger.warning("Failed to enqueue sync_ghl_contacts: %s", exc)
             return None
     if slug == "google_workspace":
-        # google_workspace covers both Gmail thread sync and Drive file
-        # sync. Kick off both — the returned task id is the Gmail one
-        # so existing UI polling stays unchanged; the Drive task runs
-        # in parallel and surfaces in sync_log on completion.
+        # google_workspace covers Gmail + Drive + Calendar — one consent
+        # grant, three sync tasks. Fire all three in parallel; the
+        # returned task id is the Gmail one so existing UI polling
+        # stays unchanged. The other two surface in sync_log on
+        # completion.
         task_id: str | None = None
         try:
             from app.tasks.gmail_sync import sync_gmail_threads
@@ -195,8 +197,13 @@ def _trigger_sync(slug: str) -> str | None:
             sync_drive_files.delay()
         except Exception as exc:
             logger.warning("Failed to enqueue sync_drive_files: %s", exc)
+        try:
+            from app.tasks.calendar_sync import sync_calendar_events
+            sync_calendar_events.delay()
+        except Exception as exc:
+            logger.warning("Failed to enqueue sync_calendar_events: %s", exc)
         return task_id
-    # No-op for providers without a backing task yet (google_calendar, etc.)
+    # No-op for providers without a backing task yet.
     return None
 
 
@@ -427,10 +434,101 @@ async def test_integration(
                 message=f"Mailchimp API rejected the request: {exc}",
             )
 
-    if slug == "google_calendar":
+    if slug == "google_workspace":
+        # Confirms the per-user OAuth grant is alive: count connected
+        # users, then for the calling user (if they've connected) try
+        # to load credentials + hit calendarList.list as a smoke test.
+        # We deliberately pick the lightest of the three APIs (Gmail's
+        # users.getProfile is heavier; Drive's about.get is fine but
+        # Calendar's calendarList is the one we just added so it's the
+        # most useful signal for the user clicking Test today).
+        from app.models.operational import UserIntegrationCredential
+        from sqlalchemy import select
+
+        total_connected = (
+            await session.execute(
+                select(UserIntegrationCredential).where(
+                    UserIntegrationCredential.provider == "google_workspace",
+                )
+            )
+        ).scalars().all()
+        total_count = len(total_connected)
+
+        if total_count == 0:
+            return TestIntegrationResponse(
+                ok=False,
+                message=(
+                    "No users have connected Google Workspace yet. Click "
+                    "Connect Gmail above to grant Gmail + Drive + Calendar access."
+                ),
+            )
+
+        # Check the calling user's credentials specifically.
+        try:
+            user_uuid = uuid.UUID(current_user.id)
+        except (TypeError, ValueError):
+            return TestIntegrationResponse(
+                ok=True,
+                message=(
+                    f"{total_count} user(s) connected. Couldn't probe the "
+                    "calling user's live API access in mock mode."
+                ),
+            )
+
+        # Use a sync session for the credential loader (same pattern as
+        # the Celery tasks). Lazy-import to keep this route's module
+        # load lean.
+        from app.services.google_oauth_credentials import load_user_oauth_credentials
+        from app.tasks.db import make_sync_session
+        from app.services import calendar_client
+
+        try:
+            sync_session = make_sync_session()
+            try:
+                creds = load_user_oauth_credentials(sync_session, user_uuid)
+            finally:
+                sync_session.close()
+        except Exception as exc:  # noqa: BLE001
+            return TestIntegrationResponse(
+                ok=False,
+                message=(
+                    f"{total_count} user(s) connected, but credential "
+                    f"lookup failed for you: {exc}"
+                ),
+            )
+
+        if creds is None:
+            return TestIntegrationResponse(
+                ok=True,
+                message=(
+                    f"{total_count} user(s) connected. You haven't "
+                    "connected your own account yet — click Connect Gmail above."
+                ),
+            )
+
+        try:
+            calendars = list(calendar_client.fetch_all_calendars(creds))
+        except Exception as exc:  # noqa: BLE001
+            return TestIntegrationResponse(
+                ok=False,
+                message=(
+                    "Your token loaded but Calendar API rejected the "
+                    f"request. You may need to reconnect to grant the "
+                    f"calendar.readonly scope. Details: {exc}"
+                ),
+            )
+
+        cal_count = len(calendars)
         return TestIntegrationResponse(
-            ok=False,
-            message="Google Calendar OAuth flow is not yet wired.",
+            ok=True,
+            message=(
+                f"Connected. {total_count} user(s) total; your account "
+                f"can see {cal_count} calendar(s)."
+            ),
+            details={
+                "users_connected": total_count,
+                "calendars_visible_to_you": cal_count,
+            },
         )
 
     return TestIntegrationResponse(ok=False, message=f"No test handler for {slug}.")

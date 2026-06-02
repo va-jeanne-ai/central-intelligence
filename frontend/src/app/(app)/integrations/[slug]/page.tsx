@@ -194,8 +194,8 @@ function GoogleWorkspaceConnectCard() {
                   className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
                 >
                   Gmail API
-                </a>{" "}
-                and the{" "}
+                </a>
+                , the{" "}
                 <a
                   href="https://console.cloud.google.com/apis/library/drive.googleapis.com"
                   target="_blank"
@@ -203,6 +203,15 @@ function GoogleWorkspaceConnectCard() {
                   className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
                 >
                   Google Drive API
+                </a>
+                , and the{" "}
+                <a
+                  href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                >
+                  Google Calendar API
                 </a>
                 .
               </li>
@@ -224,6 +233,10 @@ function GoogleWorkspaceConnectCard() {
                 ,{" "}
                 <code className="font-mono text-[11px] bg-gray-100 px-1 rounded whitespace-nowrap">
                   drive.readonly
+                </code>
+                ,{" "}
+                <code className="font-mono text-[11px] bg-gray-100 px-1 rounded whitespace-nowrap">
+                  calendar.readonly
                 </code>
                 ,{" "}
                 <code className="font-mono text-[11px] bg-gray-100 px-1 rounded">openid</code>
@@ -295,8 +308,8 @@ VOYAGE_API_KEY=pa-...`}
             >
               <li>
                 <strong>Restart the backend</strong> so the new env vars are
-                loaded, and restart Celery worker + beat so the new Drive sync
-                and embed-worker tasks register. Then come back here.
+                loaded, and restart Celery worker + beat so the new Drive +
+                Calendar sync and embed-worker tasks register. Then come back here.
               </li>
             </ol>
           </div>
@@ -312,33 +325,37 @@ VOYAGE_API_KEY=pa-...`}
               </li>
               <li>
                 Google redirects to its consent screen. Grant{" "}
-                <code className="font-mono text-[11px]">gmail.readonly</code> and{" "}
-                <code className="font-mono text-[11px]">drive.readonly</code> for
+                <code className="font-mono text-[11px]">gmail.readonly</code>,{" "}
+                <code className="font-mono text-[11px]">drive.readonly</code>, and{" "}
+                <code className="font-mono text-[11px]">calendar.readonly</code> for
                 your account.
               </li>
               <li>
                 You&apos;ll land back here with your row in <em>Connected users</em>.
                 Email threads start appearing on lead detail pages on the next
-                Gmail sync (nightly 02:45 UTC). Drive files appear on the lead
-                Documents card after the next Drive sync (03:00 UTC) and are
-                embedded for chat search within ~2 minutes of that.
+                Gmail sync (nightly 02:45 UTC). Drive files appear after the
+                Drive sync (03:00 UTC). Calendar events show on the dedicated{" "}
+                <strong>Calendar</strong> page + on the lead Events card after
+                the Calendar sync (03:15 UTC) and are embedded for chat search
+                within ~2 minutes of each.
               </li>
             </ol>
           </div>
 
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11px] text-amber-800">
-            <strong>Already connected?</strong> The Drive scope was added after
-            the original Gmail-only OAuth grant, so you need to reconnect even
-            if your row already shows in <em>Connected users</em>. Click your{" "}
-            <strong>Disconnect</strong> action in the table below, then{" "}
-            <strong>Connect Gmail</strong> again to grant Drive access.
+            <strong>Already connected?</strong> The Calendar scope was added
+            after the previous Gmail + Drive OAuth grant, so you need to
+            reconnect even if your row already shows in <em>Connected users</em>.
+            Click your <strong>Disconnect</strong> action in the table below,
+            then <strong>Connect Gmail</strong> again to grant Calendar access.
           </div>
 
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11px] text-amber-800">
             <strong>Read-only.</strong> We only request{" "}
-            <code className="font-mono text-[10px]">gmail.readonly</code> and{" "}
-            <code className="font-mono text-[10px]">drive.readonly</code>.
-            CI never sends mail, never modifies your Drive, and never touches
+            <code className="font-mono text-[10px]">gmail.readonly</code>,{" "}
+            <code className="font-mono text-[10px]">drive.readonly</code>, and{" "}
+            <code className="font-mono text-[10px]">calendar.readonly</code>.
+            CI never sends mail, never modifies your Drive or Calendar, and never touches
             anything else in your account. Revoke anytime at{" "}
             <a
               href="https://myaccount.google.com/permissions"

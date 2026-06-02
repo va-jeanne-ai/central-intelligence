@@ -101,6 +101,7 @@ def create_app() -> FastAPI:
     from app.routes.oauth import router as oauth_router
     from app.routes.webhooks import router as webhooks_router
     from app.routes.chat_sessions import router as chat_sessions_router
+    from app.routes.calendar import router as calendar_router
 
     # Health check under /api/v1 (prefix applied here).
     app.include_router(health_router, prefix="/api/v1")
@@ -215,6 +216,11 @@ def create_app() -> FastAPI:
     #   PATCH  /api/v1/chat/sessions/{id}
     #   DELETE /api/v1/chat/sessions/{id}
     app.include_router(chat_sessions_router)
+
+    # Calendar surface owns its own full paths:
+    #   GET  /api/v1/calendar/events
+    #   POST /api/v1/calendar/sync
+    app.include_router(calendar_router)
 
     # Director routers own their own WebSocket paths:
     #   WS /ws/v1/{director_slug}/{session_id}

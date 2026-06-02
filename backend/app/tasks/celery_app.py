@@ -32,6 +32,7 @@ celery_app = Celery(
         "app.tasks.ghl_push",
         "app.tasks.gmail_sync",
         "app.tasks.drive_sync",
+        "app.tasks.calendar_sync",
         "app.tasks.embed_worker",
         "app.tasks.embed_backfill",
     ],
@@ -87,6 +88,12 @@ celery_app.conf.beat_schedule = {
         # user's files and enqueues embed_pending rows for changed
         # content; the embed_worker (below) picks them up shortly after.
         "schedule": crontab(minute=0, hour=3),
+    },
+    "google-calendar-sync-nightly": {
+        "task": "app.tasks.calendar_sync.sync_calendar_events",
+        # 03:15 UTC — 15 minutes after Drive so we don't open two
+        # Google API + Supabase connection storms at the same instant.
+        "schedule": crontab(minute=15, hour=3),
     },
     "embed-queue-drain": {
         "task": "app.tasks.embed_worker.drain_embed_queue",
