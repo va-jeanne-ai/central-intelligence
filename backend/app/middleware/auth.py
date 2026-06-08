@@ -76,6 +76,7 @@ _EXEMPT_PREFIXES: tuple[str, ...] = (
     "/api/v1/auth/",
     "/api/v1/dashboard/",
     "/api/v1/leads",
+    "/api/v1/members",
     # Inbound webhooks (GHL, Stripe, etc.) — third parties have no JWT.
     # The route handler performs its own token check via secrets.compare_digest
     # against the per-integration secret stored in the integrations row.

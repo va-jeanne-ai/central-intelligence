@@ -6,6 +6,41 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Sprint 6a-lite: Fulfillment Department core (Fulfillment Director + Members/Coaching specialists)
+
+Adds the Fulfillment Director coordination layer (post-sale: members, goals, wins, coaching intelligence) on top of the existing Member/Goal/Win/Call data layer. Deferred to Sprint 6b: Accountability specialist, Tech SOS (greenfield model), and the CI integrations (ActiveCampaign, Fireflies, content-calendar). Lead→Member conversion also deferred.
+
+#### Backend — New model + migration
+- `app/models/operational.py` — new `MemberNote` model (`member_notes` table), mirroring `LeadNote`; added `Member.staff_notes` relationship. Registered in `app/models/__init__.py`.
+- `alembic/versions/6802177b2e45_add_member_notes_table.py` — creates `member_notes` only (hand-trimmed: autogenerate drift that would have dropped ~13 unrelated indexes was removed).
+
+#### Backend — Shared aggregation
+- `app/repositories/fulfillment_stats.py` — `compute_member_stats()` (member KPIs, 8-week enrollment volume, status breakdown, goal funnel) and `get_recent_wins()`. Reuses `get_top_pain_points`/`get_recent_insights` from `sales_stats.py`.
+
+#### Backend — Coaching analyzer (wins-first)
+- `app/prompts/coaching_analyzer_v1.py` — `COACHING_ANALYZER_SYSTEM_PROMPT_V1` (+ `build_coaching_user_prompt`, `MOCK_COACHING_ANALYZER_OUTPUT`). Same 22-field Insight schema as the sales analyzer but reframed for coaching: wins as first-class, coaching signal families, pain = blocks-to-progress.
+- `app/tasks/call_analyzer.py` — `_call_claude` now routes by call_type: `coaching` → coaching prompt, everything else → the existing sales prompt (regression-safe). Coaching calls already flow through `analyze_call` with `member_id` attached.
+
+#### Backend — Agents
+- `app/agents/specialists/members.py` — `MembersSpecialist` (`fulfillment_members`): read-only tools `get_member_stats`, `get_member_list`, `get_member_goals`.
+- `app/agents/specialists/coaching.py` — `CoachingSpecialist` (`fulfillment_coaching`): read-only tools `get_recent_coaching_calls`, `get_recent_wins`, `get_top_pain_points`. Distinct from the `coaching_analyzer_v1` Celery extractor.
+- `app/prompts/fulfillment_director_v1.py` — `FULFILLMENT_DIRECTOR_SYSTEM_PROMPT_V1` (exported in `prompts/__init__.py`).
+- `app/agents/directors/fulfillment.py` — `FulfillmentDirector` (`claude-sonnet-4-6`), registers `members_analyst` + `coaching` specialists and director tools `get_fulfillment_summary`, `get_top_pain_points`.
+
+#### Backend — Routes & wiring
+- `app/routes/members.py` + `app/schemas/members.py` — full CRUD: `GET /members` (list/filters), `GET /members/stats`, `GET /members/{id}` (detail with calls/goals/wins/pain/notes), `GET /members/{id}/history`, `PATCH /members/{id}` (per-field `member.*` audit via `record_event`, no GHL push), `POST`/`DELETE /members/{id}/notes`.
+- `app/routes/fulfillment.py` — `GET /api/v1/fulfillment/summary` (auth-gated, like `/sales/summary`).
+- `app/routes/directors.py` — registered `"fulfillment-director"` → `WS /ws/v1/fulfillment-director/{session_id}`.
+- `app/main.py` — mounted `members_router` + `fulfillment_router` under `/api/v1`.
+- `app/middleware/auth.py` — `/api/v1/members` added to exempt prefixes (matches `/leads`).
+
+#### Frontend
+- `frontend/src/components/chat/fulfillment-director-chat-view.tsx` + `(app)/fulfillment-director/page.tsx` — orange (#F97316) chat, 🏆, `useDirectorChat("fulfillment-director")`.
+- `(app)/fulfillment/page.tsx` — dashboard: 4 orange KPI cards from `/fulfillment/summary`, tools card (Members, Coaching Calls), Director CTA.
+- `(app)/members/page.tsx` + `(app)/members/[member_id]/page.tsx` — members directory (table + filters + KPIs) and detail (inline edit, goals/wins/pain, staff notes, history timeline).
+- `frontend/src/components/layout/sidebar.tsx` — added Fulfillment Overview + Fulfillment Director links.
+- `frontend/src/components/layout/header.tsx` — fulfillment-page CTA now routes to `/fulfillment-director`.
+
 ### Added — Sprint 5a: Sales Department core (Sales Director + specialists)
 
 Adds the Sales Director coordination layer on top of the already-shipped Leads (S02) and Sales Calls / Call Analyzer (S03) data layer. Leads and Sales Calls were NOT rebuilt — their routes/UI stay as-is and are wrapped as read-only specialists. Appointments (S01) is deferred to Sprint 5b (planned to use a GHL appointment sync).

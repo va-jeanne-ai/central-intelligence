@@ -114,6 +114,9 @@ class Member(Base, TimestampMixin, SoftDeleteMixin):
     pain_points: Mapped[list["PainPoint"]] = relationship(
         "PainPoint", back_populates="member", lazy="select"
     )
+    staff_notes: Mapped[list["MemberNote"]] = relationship(
+        "MemberNote", back_populates="member", lazy="select"
+    )
 
 
 class Call(Base, SoftDeleteMixin):
@@ -484,6 +487,44 @@ class LeadNote(Base):
     )
 
     lead: Mapped["Lead"] = relationship("Lead", back_populates="staff_notes")
+
+
+class MemberNote(Base):
+    """Append-only staff journal entry attached to a Member.
+
+    Mirrors ``LeadNote`` for the fulfillment side. Each row is one
+    staff-side observation/reminder, displayed as a timeline on the
+    member detail page. Most recent first.
+    """
+
+    __tablename__ = "member_notes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    member_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("members.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Nullable: covers system-generated notes, mock-mode posts, and rows
+    # whose author was later deleted (FK is SET NULL).
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    member: Mapped["Member"] = relationship("Member", back_populates="staff_notes")
 
 
 class EmailThread(Base):

@@ -55,6 +55,7 @@ from app.prompts.offer_generator_v1 import (
 )
 from app.prompts.central_intelligence_v1 import CENTRAL_INTELLIGENCE_SYSTEM_PROMPT_V1
 from app.prompts.sales_director_v1 import SALES_DIRECTOR_SYSTEM_PROMPT_V1
+from app.prompts.fulfillment_director_v1 import FULFILLMENT_DIRECTOR_SYSTEM_PROMPT_V1
 
 __all__ = [
     "AD_ANALYSIS_OUTPUT_SCHEMA",
@@ -81,6 +82,7 @@ __all__ = [
     "OFFER_GENERATOR_SYSTEM_PROMPT_V1",
     "CENTRAL_INTELLIGENCE_SYSTEM_PROMPT_V1",
     "SALES_DIRECTOR_SYSTEM_PROMPT_V1",
+    "FULFILLMENT_DIRECTOR_SYSTEM_PROMPT_V1",
     "build_ad_analysis_user_prompt",
     "build_ad_copy_generation_user_prompt",
     "build_dm_analysis_user_prompt",
