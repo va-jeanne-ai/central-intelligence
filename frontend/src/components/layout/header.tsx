@@ -39,7 +39,7 @@ function getActionButton(pathname: string): ActionButton {
     return { href: "/marketing-director", label: "Marketing Director", icon: "📣" };
   }
   if (pathname.startsWith("/leads") || pathname.startsWith("/sales") || pathname.startsWith("/appointments")) {
-    return { href: "/chat", label: "Sales Director", icon: "💼" };
+    return { href: "/sales-director", label: "Sales Director", icon: "💼" };
   }
   if (pathname.startsWith("/members") || pathname.startsWith("/coaching") || pathname.startsWith("/accountability") || pathname.startsWith("/tech-sos")) {
     return { href: "/chat", label: "Fulfillment Director", icon: "🏆" };

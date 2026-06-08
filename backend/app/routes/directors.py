@@ -35,6 +35,7 @@ router = APIRouter(tags=["directors"])
 # ---------------------------------------------------------------------------
 _DIRECTOR_REGISTRY: dict[str, str] = {
     "marketing-director": "app.agents.directors.marketing.MarketingDirector",
+    "sales-director": "app.agents.directors.sales.SalesDirector",
 }
 
 # ---------------------------------------------------------------------------

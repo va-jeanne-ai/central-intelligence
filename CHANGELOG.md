@@ -6,6 +6,35 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Sprint 5a: Sales Department core (Sales Director + specialists)
+
+Adds the Sales Director coordination layer on top of the already-shipped Leads (S02) and Sales Calls / Call Analyzer (S03) data layer. Leads and Sales Calls were NOT rebuilt — their routes/UI stay as-is and are wrapped as read-only specialists. Appointments (S01) is deferred to Sprint 5b (planned to use a GHL appointment sync).
+
+#### Backend — Shared aggregation (single source of truth)
+- `app/repositories/sales_stats.py` — new module with `compute_lead_stats()` (KPIs, 8-week lead volume, source breakdown, 4-stage funnel — SQL lifted verbatim from the leads route), `get_top_pain_points()`, and `get_recent_insights()`. Both the leads route and the Sales surfaces consume it so the funnel definition can't drift.
+- `app/routes/leads.py` — `GET /api/v1/leads/stats` now delegates to `compute_lead_stats()` and adapts the dict into `LeadsStatsResponse`. Behavior is identical (verified by before/after regression: 14 leads, same volume/funnel shape).
+
+#### Backend — Agents
+- `app/prompts/sales_director_v1.py` — `SALES_DIRECTOR_SYSTEM_PROMPT_V1`, mirroring the Marketing Director prompt structure (Role, How-to-Respond guardrails, Intelligence Pre-Flight, internal Routing, Response Structure). Exported from `app/prompts/__init__.py`.
+- `app/agents/specialists/leads.py` — `LeadsSpecialist` (`sales_leads`), read-only tools `get_leads_summary`, `get_lead_list`. No write tools — lead CRUD stays in the route.
+- `app/agents/specialists/call_analyzer.py` — `CallAnalyzerSpecialist` (`sales_calls`), read-only tools `get_recent_calls`, `get_call_insights`, `get_top_pain_points`. Distinct from the `call_analyzer_v1` Celery extractor — this only reads `insights` rows.
+- `app/agents/directors/sales.py` — `SalesDirector` (model `claude-sonnet-4-6`, matching the Marketing Director). Registers `leads_analyst` + `call_analyzer` specialists (auto-creating `delegate_to_*` tools) and director-level data tools `get_sales_summary`, `get_top_pain_points`.
+
+#### Backend — Routes & wiring
+- `app/routes/sales.py` — `GET /api/v1/sales/summary` mirroring `/marketing/summary`: KPIs, lead volume, source breakdown, funnel, top pain points, recent insights. (Auth-gated, same as `/marketing/summary`.)
+- `app/routes/directors.py` — registered `"sales-director"` in `_DIRECTOR_REGISTRY`; the WebSocket route `WS /ws/v1/sales-director/{session_id}` now resolves with no other change.
+- `app/main.py` — mounted `sales_router` under `/api/v1`.
+
+#### Frontend
+- `frontend/src/components/chat/sales-director-chat-view.tsx` + `frontend/src/app/(app)/sales-director/page.tsx` — Sales Director chat, using `useDirectorChat("sales-director")`, blue (#3B82F6) accent, 💼 avatar.
+- `frontend/src/app/(app)/sales/page.tsx` — Sales department dashboard: 4 blue KPI cards from `/sales/summary`, a Sales Tools card (Leads, Sales Calls), and a Sales Director CTA.
+- `frontend/src/components/layout/sidebar.tsx` — added "Sales Overview" (`/sales`) and "Sales Director" (`/sales-director`) to the Sales section.
+- `frontend/src/components/layout/header.tsx` — sales-page "Sales Director" CTA now routes to `/sales-director` (was `/chat`).
+
+#### Notes (deliberate decisions)
+- **CI awareness:** Central Intelligence left untouched — the Marketing Director isn't wired into CI either; matched that precedent.
+- **No `__init__` re-exports** for the new director/specialists — the verified convention is import-by-dotted-path (registry / inline), not re-export. Matches Marketing.
+
 ### Fixed — Sprint 3 Data Connectivity: Database Persistence Pipeline
 
 #### Backend — New Models & Repositories

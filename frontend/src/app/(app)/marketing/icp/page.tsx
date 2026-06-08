@@ -72,42 +72,6 @@ interface IcpProfile {
   matchScore: string;
 }
 
-const INITIAL_ICPS: IcpProfile[] = [
-  {
-    id: "icp-1",
-    name: "SMB SaaS Founder",
-    industry: "SaaS",
-    criteria: {
-      companySize: "1–50 employees",
-      titleRole: "Founder / CEO",
-      painPoints: ["Scaling sales without headcount", "Lead qualification"],
-    },
-    matchScore: "—",
-  },
-  {
-    id: "icp-2",
-    name: "Mid-Market Ops Lead",
-    industry: "Operations",
-    criteria: {
-      companySize: "50–500 employees",
-      titleRole: "VP of Operations / COO",
-      painPoints: ["Workflow automation", "Cross-team coordination"],
-    },
-    matchScore: "—",
-  },
-  {
-    id: "icp-3",
-    name: "Enterprise CTO",
-    industry: "Technology",
-    criteria: {
-      companySize: "500+ employees",
-      titleRole: "CTO / VP Engineering",
-      painPoints: ["AI adoption strategy", "Vendor consolidation"],
-    },
-    matchScore: "—",
-  },
-];
-
 // ─── Edit state ───────────────────────────────────────────────────────────────
 
 interface EditDraft {

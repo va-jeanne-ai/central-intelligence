@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -86,7 +86,7 @@ const TYPE_OPTIONS: TypeOption[] = [
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function EmailComposePage() {
+function EmailComposeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const draftIdParam = searchParams.get("draft_id");
@@ -560,5 +560,15 @@ export default function EmailComposePage() {
         )}
       </main>
     </>
+  );
+}
+
+// useSearchParams() must be read inside a Suspense boundary so the page can
+// be statically prerendered (Next.js CSR-bailout requirement).
+export default function EmailComposePage() {
+  return (
+    <Suspense fallback={<Header title="Compose Email" />}>
+      <EmailComposeInner />
+    </Suspense>
   );
 }

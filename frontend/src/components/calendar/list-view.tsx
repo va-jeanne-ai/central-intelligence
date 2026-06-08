@@ -2,7 +2,6 @@
 
 import { Card, CardBody } from "@/components/ui/card";
 import {
-  dayKey,
   formatDayHeader,
   formatTimeRange,
   groupEventsByDay,
