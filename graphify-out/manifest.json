@@ -220,8 +220,8 @@
     "semantic_hash": ""
   },
   "backend/app/main.py": {
-    "mtime": 1781072517.694641,
-    "ast_hash": "e4292359a3dec7b4b04ba220bbff78a3",
+    "mtime": 1781077441.668832,
+    "ast_hash": "c8efde0e48b6b7c3d21d0a0b7a647df7",
     "semantic_hash": ""
   },
   "backend/app/middleware/__init__.py": {
@@ -230,8 +230,8 @@
     "semantic_hash": ""
   },
   "backend/app/middleware/auth.py": {
-    "mtime": 1781072524.9943254,
-    "ast_hash": "5f2e5969c901db596cd59834fa59fdf9",
+    "mtime": 1781077449.089896,
+    "ast_hash": "dace99f38e63ed580c11199338c95807",
     "semantic_hash": ""
   },
   "backend/app/middleware/optimistic_lock.py": {
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/__init__.py": {
-    "mtime": 1780944434.9762628,
-    "ast_hash": "022952bf7ab7f774e4fa50190fd6a8bf",
+    "mtime": 1781077193.5500546,
+    "ast_hash": "3051641d4529fc40547406a3ce69f805",
     "semantic_hash": ""
   },
   "backend/app/models/audit.py": {
@@ -280,8 +280,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/operational.py": {
-    "mtime": 1781074856.0487292,
-    "ast_hash": "6d1b51bc3f06913f0c650884e65f49c6",
+    "mtime": 1781077176.1357212,
+    "ast_hash": "a6650d5b7473502b519ce67a6dbe101c",
     "semantic_hash": ""
   },
   "backend/app/prompts/__init__.py": {
@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1781075428.8957386,
-    "ast_hash": "48bbe26f664324af1967ca81ae88c1b3",
+    "mtime": 1781077876.4070122,
+    "ast_hash": "0201c861db91b996e6aed44e240b9c7f",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1660,8 +1660,8 @@
     "semantic_hash": ""
   },
   "backend/app/agents/specialists/members.py": {
-    "mtime": 1781072550.1758506,
-    "ast_hash": "3fa7774ab110fc21907bf626430be9cc",
+    "mtime": 1781077470.1708736,
+    "ast_hash": "43ad901ab1fc03b06fdb261375b6de37",
     "semantic_hash": ""
   },
   "backend/app/prompts/coaching_analyzer_v1.py": {
@@ -1680,8 +1680,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/fulfillment.py": {
-    "mtime": 1780928851.5178044,
-    "ast_hash": "74137d4ff5636305d6887cc525fdec00",
+    "mtime": 1781077495.0666103,
+    "ast_hash": "193925259f6987e6696cb3adcec35533",
     "semantic_hash": ""
   },
   "backend/app/routes/members.py": {
@@ -1705,8 +1705,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/members/[member_id]/page.tsx": {
-    "mtime": 1781072968.3206418,
-    "ast_hash": "d89c490da98b23df1944a828b7d84b10",
+    "mtime": 1781077778.2482584,
+    "ast_hash": "6b2a1e362d4aeb67798f8976dcecb049",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/members/page.tsx": {
@@ -1787,6 +1787,36 @@
   "frontend/src/components/goals/goal-board.tsx": {
     "mtime": 1781075248.5850298,
     "ast_hash": "3349db80ffa4031b866fae6aa6dec58d",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/5310f9ce275a_add_support_tickets_table.py": {
+    "mtime": 1781077234.7303762,
+    "ast_hash": "c4cfd1532754e8ef192ac08160a9ea7e",
+    "semantic_hash": ""
+  },
+  "backend/app/repositories/tech_sos_stats.py": {
+    "mtime": 1781077289.5017736,
+    "ast_hash": "b1499fdc1c681978d30e26deb76705cb",
+    "semantic_hash": ""
+  },
+  "backend/app/routes/tech_sos.py": {
+    "mtime": 1781077409.2090323,
+    "ast_hash": "2fb836ee80f34e5043ce4c4e0e0394ad",
+    "semantic_hash": ""
+  },
+  "backend/app/schemas/tech_sos.py": {
+    "mtime": 1781077334.9634178,
+    "ast_hash": "72166995e89ebbab08ae33ee4c1a0f11",
+    "semantic_hash": ""
+  },
+  "frontend/src/app/(app)/tech-sos/page.tsx": {
+    "mtime": 1781077834.5635028,
+    "ast_hash": "ea6ebca819611ead42d0d10a2fd18fe8",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/tech-sos/ticket-modal.tsx": {
+    "mtime": 1781077807.7767491,
+    "ast_hash": "7cbe91cc94b7cbc814102aaa0d980c72",
     "semantic_hash": ""
   }
 }
