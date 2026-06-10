@@ -292,23 +292,31 @@ Same shape as Meta Ads — search + display performance metrics into `ads_stats`
 
 ---
 
-## Instagram ⬜
+## Instagram ✅
 
-**What it could power**
+**What it does today**
 
-Replace `update_social_stats` ([`backend/app/tasks/social_stats.py`](backend/app/tasks/social_stats.py)) seed rows for the Instagram platform. Followers, reach, impressions, engagement, story views, profile visits.
+Pulls live organic metrics for one Instagram Business/Creator account from the Meta Graph API (v19.0) and upserts them into `social_stats`. Manual-token connector (same pattern as GHL/Mailchimp): the admin saves an **Access Token** + **Instagram Account ID** on `/integrations/instagram`; credentials are encrypted at rest in the `integrations` row.
 
-**Surfaces it would power**
+- [`backend/app/services/instagram_client.py`](backend/app/services/instagram_client.py) — Graph API wrapper. Profile (`followers_count`, `media_count`), account insights (`reach`, `impressions` over `days_28`), and recent media (`like_count`/`comments_count`) to estimate an engagement rate. Insights + media are best-effort; a failure there still records followers/posts.
+- [`backend/app/services/instagram_credentials.py`](backend/app/services/instagram_credentials.py) — decrypts `(access_token, ig_user_id)` from the integration blob (mirrors `ghl_credentials.py`).
+- [`backend/app/tasks/social_stats.py`](backend/app/tasks/social_stats.py) — `update_social_stats` now syncs Instagram live when connected; **skips** IG (no fake-data overwrite) when not connected or on error, and stamps `last_sync_status`/`last_sync_error` + a `sync_log` row. facebook/linkedin/tiktok remain on seed values until their connectors land.
+- Wired into [`backend/app/routes/integrations.py`](backend/app/routes/integrations.py): `_trigger_sync("instagram")` enqueues the task (the page's Sync button) and the **Test** button calls `instagram_client.verify()`.
+- Beat: rides the existing `social-stats-every-6h` schedule.
 
-- **`/marketing/social`** — live IG metrics.
-- **`/ci-market-signals`** — IG comments via `social_comments` table (already seeded; would feed real ones from the Graph API).
-- **Content performance ↔ content idea linkage** — when a post tagged with one of Greg's `content_ideas` is published, automatically attach reach/engagement to the idea row.
+**Surfaces it powers**
 
-**What's needed to ship**
+- **`/marketing/social`** — live IG followers, posts, reach, impressions, engagement once a sync runs.
 
-- IG Business Account (already required for Graph API access — most coaches have this).
-- Meta App with `instagram_basic`, `instagram_manage_insights`, `pages_show_list` permissions.
-- A `meta_graph_client.py` (likely shared with Facebook below — same API root).
+**Auth / setup**
+
+- IG Business or Creator account linked to a Facebook Page.
+- Meta App with `instagram_basic` + `instagram_manage_insights` + `pages_read_engagement` scopes.
+- A **long-lived access token** (~60 days; re-paste on expiry — manual-token connector, no auto-refresh) and the numeric **IG Business account ID**.
+
+**Not yet**
+
+- No OAuth (manual token only). No story/profile-visit metrics. IG comments → `social_comments` still seed-only (separate collector). Facebook shares the same Graph root and can reuse `instagram_client` when wired.
 
 ---
 

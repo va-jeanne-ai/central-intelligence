@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Instagram social integration (Meta Graph API)
+
+Makes the `/marketing/social` Instagram column **live**. Previously `update_social_stats` wrote hardcoded seed data for all platforms; now Instagram pulls real organic metrics from the Meta Graph API. Manual-token connector following the GHL/Mailchimp pattern — no migration (the `integrations` table already has every column needed).
+
+- `app/services/integrations_registry.py` — Instagram flipped `coming_soon` → `available` with two fields (`access_token` secret, `ig_user_id`) and `trigger_task: "instagram"`. This is what makes the card clickable on `/integrations` and renders the connect form at `/integrations/instagram`.
+- `app/services/instagram_client.py` (new) — Graph API v19 httpx wrapper: profile (`followers_count`, `media_count`), account insights (`reach`/`impressions`, `days_28`), recent-media engagement-rate estimate. Insights + media are best-effort; profile is required. `verify()` powers the Test button; `is_configured()`/`_resolve_creds()` read the DB.
+- `app/services/instagram_credentials.py` (new) — decrypts `(access_token, ig_user_id)` from the integration blob (mirrors `ghl_credentials.py`); returns None on any failure.
+- `app/tasks/social_stats.py` — `update_social_stats` syncs Instagram live when connected; **skips** it (no fake-data overwrite) when not connected or on error, stamping `last_sync_status`/`last_sync_error` + a `sync_log` row. facebook/linkedin/tiktok stay on seed values (clearly marked) so the dashboard stays populated.
+- `app/routes/integrations.py` — `_trigger_sync("instagram")` enqueues `update_social_stats` (Sync button); `test_integration` instagram branch calls `instagram_client.verify()`.
+- `INTEGRATIONS.md` — Instagram entry rewritten from ⬜ to ✅.
+
+No frontend change — the integrations page and `/marketing/social` render from the registry/DB and light up once credentials are saved and a sync runs. Verified structurally with zero API cost (registry/fields, creds-None-on-empty, engagement-rate math, `verify()` not-connected message, task skips IG gracefully with no row). Live Graph API test requires a user-provided Meta long-lived token + IG account ID (the user's token, not app-key spend).
+
 ### Added — Central Intelligence cross-department delegation (Sprint 8)
 
 Connects the top-level Central Intelligence chat agent to the three department Directors so it can finally answer cross-department questions ("what should we focus on this week?") with real Sales/Marketing/Fulfillment intelligence. Previously CI's only tools were `query_database`/`search_knowledge_base`/`query_calendar`, and its prompt admitted Directors weren't connected.
