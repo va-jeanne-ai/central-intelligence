@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.repositories.fulfillment_stats import compute_member_stats, get_recent_wins
 from app.repositories.sales_stats import get_recent_insights, get_top_pain_points
+from app.repositories.tech_sos_stats import compute_ticket_stats
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ async def get_fulfillment_summary(
     recent_wins = await get_recent_wins(session, limit=10)
     pain_points = await get_top_pain_points(session, limit=10)
     recent_insights = await get_recent_insights(session, limit=10)
+    tickets = await compute_ticket_stats(session)
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -53,4 +55,9 @@ async def get_fulfillment_summary(
         "recent_wins": recent_wins,
         "pain_points": pain_points,
         "recent_insights": recent_insights,
+        # Tech SOS (support tickets) — additive block; member KPIs/funnel unchanged.
+        "tech_sos": {
+            "kpis": tickets["kpis"],
+            "category_breakdown": tickets["category_breakdown"],
+        },
     }

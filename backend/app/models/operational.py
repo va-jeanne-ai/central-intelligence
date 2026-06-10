@@ -588,6 +588,51 @@ class Appointment(Base, TimestampMixin, SoftDeleteMixin):
     member: Mapped["Member | None"] = relationship("Member", lazy="select")
 
 
+class SupportTicket(Base, TimestampMixin, SoftDeleteMixin):
+    """A member tech-support ticket (Tech SOS).
+
+    Raised by staff on a member's behalf, or via the public submit endpoint
+    (a future member form). ``member_id`` is best-effort; the contact snapshot
+    lets a ticket render even when no member matches. ``category`` is staff-set
+    for now (AI categorization is a later add).
+    """
+
+    __tablename__ = "support_tickets"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    member_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("members.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # login / billing / video / portal / access / other
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # open / in_progress / resolved / closed
+    status: Mapped[str] = mapped_column(String(32), default="open", nullable=False, index=True)
+    # low / normal / high
+    priority: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(32), nullable=True)  # 'staff' | 'submit'
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Relationships
+    member: Mapped["Member | None"] = relationship("Member", lazy="select")
+
+
 class EmailThread(Base):
     """One Gmail thread linked to a lead via the email-address match.
 

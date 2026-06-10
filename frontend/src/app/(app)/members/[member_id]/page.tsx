@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GoalModal } from "@/components/goals/goal-modal";
 import type { GoalModalGoal } from "@/components/goals/goal-modal";
+import { TicketModal } from "@/components/tech-sos/ticket-modal";
+import type { TicketModalTicket } from "@/components/tech-sos/ticket-modal";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { showSuccess, showApiError } from "@/lib/toast";
@@ -49,6 +51,19 @@ interface NoteRow {
   author_email: string | null;
   created_at: string;
 }
+interface TicketRow {
+  id: string;
+  subject: string | null;
+  category: string | null;
+  status: string | null;
+  priority: string | null;
+}
+const TICKET_STATUS_BADGE: Record<string, string> = {
+  open: "bg-blue-50 text-blue-700",
+  in_progress: "bg-amber-50 text-amber-700",
+  resolved: "bg-green-50 text-green-700",
+  closed: "bg-gray-100 text-gray-500",
+};
 interface MemberDetail {
   id: string;
   name: string | null;
@@ -257,6 +272,11 @@ export default function MemberDetailPage({ params }: { params: { member_id: stri
   const [editGoal, setEditGoal] = useState<GoalModalGoal | null>(null);
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
   const [deletingGoal, setDeletingGoal] = useState(false);
+
+  // tech-sos tickets
+  const [tickets, setTickets] = useState<TicketRow[]>([]);
+  const [showAddTicket, setShowAddTicket] = useState(false);
+  const [editTicket, setEditTicket] = useState<TicketModalTicket | null>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
 
   const loadDetail = useCallback(async () => {
@@ -280,17 +300,29 @@ export default function MemberDetailPage({ params }: { params: { member_id: stri
     }
   }, [memberId]);
 
+  const loadTickets = useCallback(async () => {
+    try {
+      const data = await apiClient.get<{ tickets: TicketRow[] }>(
+        `/tech-sos?member_id=${memberId}`,
+        { silent: true },
+      );
+      setTickets(data.tickets ?? []);
+    } catch {
+      // best-effort
+    }
+  }, [memberId]);
+
   useEffect(() => {
     if (authLoading) return;
     let cancelled = false;
     void (async () => {
-      await Promise.all([loadDetail(), loadHistory()]);
+      await Promise.all([loadDetail(), loadHistory(), loadTickets()]);
       if (!cancelled) setIsLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [authLoading, loadDetail, loadHistory]);
+  }, [authLoading, loadDetail, loadHistory, loadTickets]);
 
   const patchField = useCallback(
     async (field: "name" | "email" | "status" | "coach_id", next: string) => {
@@ -569,6 +601,52 @@ export default function MemberDetailPage({ params }: { params: { member_id: stri
                 </ul>
               )}
             </SectionCard>
+
+            <SectionCard
+              title="Tech SOS"
+              count={tickets.length}
+              action={
+                <button
+                  type="button"
+                  onClick={() => setShowAddTicket(true)}
+                  className="text-[11px] font-semibold text-orange-600 hover:text-orange-700"
+                >
+                  + New
+                </button>
+              }
+            >
+              {tickets.length === 0 ? (
+                <EmptyRow text="No tickets for this member." />
+              ) : (
+                <ul className="space-y-2">
+                  {tickets.map((t) => (
+                    <li key={t.id} className="group flex items-start justify-between gap-3 text-sm">
+                      <span className="text-gray-800">{t.subject || "—"}</span>
+                      <div className="shrink-0 flex items-center gap-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${TICKET_STATUS_BADGE[(t.status ?? "").toLowerCase()] ?? "bg-gray-100 text-gray-600"}`}>
+                          {t.status ? humanise(t.status) : "—"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditTicket({
+                              id: t.id,
+                              subject: t.subject,
+                              category: t.category,
+                              status: t.status,
+                              priority: t.priority,
+                            })
+                          }
+                          className="opacity-0 group-hover:opacity-100 text-[11px] font-medium text-orange-600 hover:text-orange-700"
+                        >
+                          Manage
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SectionCard>
           </div>
 
           <div className="space-y-4">
@@ -699,6 +777,21 @@ export default function MemberDetailPage({ params }: { params: { member_id: stri
         confirmLabel="Delete"
         variant="danger"
         loading={deletingGoal}
+      />
+
+      {/* Tech SOS — member locked to this member */}
+      <TicketModal
+        open={showAddTicket}
+        memberId={memberId}
+        onClose={() => setShowAddTicket(false)}
+        onSaved={() => void loadTickets()}
+      />
+      <TicketModal
+        open={editTicket !== null}
+        ticket={editTicket}
+        memberId={memberId}
+        onClose={() => setEditTicket(null)}
+        onSaved={() => void loadTickets()}
       />
     </>
   );

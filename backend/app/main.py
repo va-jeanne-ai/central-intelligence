@@ -92,6 +92,7 @@ def create_app() -> FastAPI:
     from app.routes.members import router as members_router
     from app.routes.appointments import router as appointments_router
     from app.routes.goals import router as goals_router
+    from app.routes.tech_sos import router as tech_sos_router
     from app.routes.central_intelligence import router as central_intelligence_router
     from app.routes.directors import router as directors_router
     from app.routes.transcribe import router as transcribe_router
@@ -140,6 +141,10 @@ def create_app() -> FastAPI:
     # Goals (accountability) endpoints under /api/v1.
     # Resolves to:  GET /api/v1/goals  and  /api/v1/goals/*
     app.include_router(goals_router, prefix="/api/v1")
+
+    # Tech SOS (support tickets) endpoints under /api/v1.
+    # Resolves to:  /api/v1/tech-sos  and  /api/v1/tech-sos/*  (incl. public /submit)
+    app.include_router(tech_sos_router, prefix="/api/v1")
 
     # Transcription endpoint under /api/v1 (prefix applied here).
     # Resolves to:  POST /api/v1/transcribe

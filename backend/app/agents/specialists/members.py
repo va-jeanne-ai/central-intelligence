@@ -124,6 +124,27 @@ class MembersSpecialist(SpecialistAgent):
             handler=self._handle_get_goal_progress,
         )
 
+        self.register_tool(
+            name="get_tech_sos",
+            description=(
+                "Get tech-support (Tech SOS) ticket status: KPIs (open, in "
+                "progress, resolved, avg resolution hours), category breakdown, "
+                "and a list of open tickets. Use for 'what tech issues are open?'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max open tickets to list (default 20)",
+                        "default": 20,
+                    },
+                },
+                "required": [],
+            },
+            handler=self._handle_get_tech_sos,
+        )
+
     def _register_operator_tools(self) -> None:
         """No write tools — member CRUD lives in the members route."""
         return None
@@ -197,3 +218,18 @@ class MembersSpecialist(SpecialistAgent):
         from app.repositories.goal_stats import compute_goal_stats
 
         return json.dumps(await compute_goal_stats(self._session))
+
+    async def _handle_get_tech_sos(self, limit: int = 20) -> str:
+        if not self._session:
+            return json.dumps({"error": "No database session available"})
+        from app.repositories.tech_sos_stats import compute_ticket_stats, get_open_tickets
+
+        stats = await compute_ticket_stats(self._session)
+        open_tickets = await get_open_tickets(self._session, limit=limit)
+        return json.dumps(
+            {
+                "kpis": stats["kpis"],
+                "category_breakdown": stats["category_breakdown"],
+                "open_tickets": open_tickets,
+            }
+        )

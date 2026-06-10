@@ -6,6 +6,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Tech SOS (Fulfillment support tickets, F04)
+
+Wires the last unbuilt Fulfillment sidebar link (`/tech-sos`) to a member support-ticket tracker. Greenfield (new table). AI categorization deferred (F04-2) — category is staff-set for now.
+
+#### Backend
+- `app/models/operational.py` — new `SupportTicket` model (`support_tickets` table): nullable `member_id` (SET NULL), contact snapshot, subject/description, category (login/billing/video/portal/access/other), status (open/in_progress/resolved/closed), priority, resolution, resolved_at, source ('staff'|'submit'). Migration `5310f9ce275a` (hand-trimmed).
+- `app/repositories/tech_sos_stats.py` — `compute_ticket_stats` (KPIs incl. avg resolution hours, category + status breakdown, 8-week volume) + `get_open_tickets`.
+- `app/schemas/tech_sos.py` + `app/routes/tech_sos.py` — `GET /tech-sos` (filters status/category/member/search), `/tech-sos/stats`, detail, history, `POST /tech-sos` (staff create), **`POST /tech-sos/submit` (public, unauthenticated — best-effort member link by email)**, `PATCH` (status→resolved stamps resolved_at; reopen clears; audited), `DELETE` (soft-delete).
+- `app/main.py` mounts the router; `app/middleware/auth.py` exempts `/api/v1/tech-sos` (makes /submit public).
+- `app/agents/specialists/members.py` — `get_tech_sos` read tool; `app/routes/fulfillment.py` — additive `tech_sos` block in `/fulfillment/summary` (member KPIs unchanged).
+
+#### Frontend (Fulfillment orange #F97316)
+- `components/tech-sos/ticket-modal.tsx` — shared create/edit modal (member dropdown on create; member-locked variant; edit fetches full ticket so description/resolution aren't blanked).
+- `(app)/tech-sos/page.tsx` — admin page: KPI cards (open/in-progress/resolved/avg-resolution), patterns dashboard (category + status bars), ticket table (member link, category, status/priority badges) with Manage/Delete + filters + New Ticket.
+- `(app)/members/[member_id]/page.tsx` — Tech SOS card (member's tickets + New + Manage).
+
+#### Notes
+- The public `POST /tech-sos/submit` is open (no token) for v1 — a rate-limit / submit-token guard is a sensible follow-up before exposing it on a real member form.
+- AI categorization (auto-category + suggested resolution + pattern detection) deferred; the model has the fields for it.
+
 ### Added — Goals kanban board (Accountability)
 
 A Table / Board view toggle on `/accountability` with drag-and-drop across kanban stages.
