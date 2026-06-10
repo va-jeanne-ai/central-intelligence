@@ -93,3 +93,31 @@ class WeeklyFocusResponse(BaseModel):
     summary: str = ""
     generated_at: str
     cached: bool = False
+
+
+class ScheduleBriefItem(BaseModel):
+    """A single calendar event in the dashboard schedule brief."""
+
+    title: str
+    start: str  # ISO 8601
+    end: str | None = None
+    is_all_day: bool = False
+    location: str | None = None
+    attendees_count: int = 0
+    status: str | None = None  # confirmed | tentative | cancelled
+
+
+class ScheduleBriefResponse(BaseModel):
+    """Payload returned by GET /api/v1/dashboard/schedule-brief.
+
+    The logged-in user's calendar events for a given day window (the
+    frontend passes its local day bounds so 'today' matches the user's
+    wall clock). Deterministic — read straight from google_calendar_events,
+    no AI.
+    """
+
+    items: list[ScheduleBriefItem]
+    summary: str = ""
+    event_count: int = 0
+    calendar_connected: bool = False
+    generated_at: str

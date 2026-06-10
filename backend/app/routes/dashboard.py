@@ -30,13 +30,15 @@ Column/table reference
 import json
 import logging
 import time
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 
 import anthropic
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import CurrentUser, get_current_user
 from app.config import settings
 from app.database import AsyncSessionLocal, get_session
 from app.schemas.dashboard import (
@@ -47,6 +49,8 @@ from app.schemas.dashboard import (
     RecentLead,
     RecommendationItem,
     RecommendationsResponse,
+    ScheduleBriefItem,
+    ScheduleBriefResponse,
     StatCard,
     WeeklyFocusItem,
     WeeklyFocusResponse,
@@ -948,3 +952,162 @@ async def get_dashboard_weekly_focus() -> WeeklyFocusResponse:
     _weekly_focus_cache["timestamp"] = now
 
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Schedule Brief — the current user's calendar for a day window
+# ---------------------------------------------------------------------------
+
+_SCHEDULE_BRIEF_MAX_ROWS = 50
+
+
+def _parse_user_uuid(user_id: str) -> uuid.UUID | None:
+    """Best-effort current_user.id parse; None for non-UUID mock IDs."""
+    try:
+        return uuid.UUID(user_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_iso(s: str | None) -> datetime | None:
+    """Parse an ISO 8601 string (tolerating a trailing Z); None on failure."""
+    if not s:
+        return None
+    try:
+        v = s.replace("Z", "+00:00") if s.endswith("Z") else s
+        dt = datetime.fromisoformat(v)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, TypeError):
+        return None
+
+
+def _fmt_clock(dt: datetime) -> str:
+    """Render a UTC-stored time for the brief summary (e.g. '2:00 PM').
+
+    Note: this formats in UTC. The human-friendly per-event time shown in
+    the panel is rendered client-side in the browser's timezone; this
+    string only feeds the one-line summary, so we keep it lightweight.
+    """
+    return dt.strftime("%-I:%M %p")
+
+
+@router.get(
+    "/dashboard/schedule-brief",
+    response_model=ScheduleBriefResponse,
+    summary="The current user's calendar brief for a day window",
+    description=(
+        "Returns the logged-in user's Google Calendar events within the given "
+        "window (default: now → +24h). The frontend passes its local day "
+        "bounds via `start`/`end` so 'today' matches the user's wall clock. "
+        "Deterministic — read straight from the synced calendar, no AI. "
+        "Cancelled events are excluded; `calendar_connected` distinguishes "
+        "'no events today' from 'you haven't connected a calendar'."
+    ),
+)
+async def get_dashboard_schedule_brief(
+    db: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+    start: str | None = Query(
+        default=None, description="ISO timestamp lower bound (default: now)."
+    ),
+    end: str | None = Query(
+        default=None, description="ISO timestamp upper bound (default: now + 24h)."
+    ),
+) -> ScheduleBriefResponse:
+    """Return the calling user's calendar events for the day window."""
+
+    generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    user_uuid = _parse_user_uuid(current_user.id)
+    if user_uuid is None:
+        # Mock/non-UUID user — nothing to scope to.
+        return ScheduleBriefResponse(
+            items=[], summary="", event_count=0,
+            calendar_connected=False, generated_at=generated_at,
+        )
+
+    now = datetime.now(timezone.utc)
+    start_dt = _parse_iso(start) or now
+    end_dt = _parse_iso(end) or (now + timedelta(hours=24))
+
+    # Is this user's calendar connected at all? (Drives the empty-state copy.)
+    connected_row = (
+        await db.execute(
+            text(
+                "SELECT 1 FROM user_integration_credentials "
+                "WHERE user_id = :uid AND provider = 'google_workspace' LIMIT 1"
+            ),
+            {"uid": str(user_uuid)},
+        )
+    ).first()
+    calendar_connected = connected_row is not None
+
+    rows = (
+        await db.execute(
+            text(
+                """
+                SELECT title, start_time, end_time, is_all_day,
+                       location, attendees, status
+                FROM google_calendar_events
+                WHERE connected_via_user_id = :uid
+                  AND start_time IS NOT NULL
+                  AND start_time >= :start
+                  AND start_time <= :end
+                  AND (status IS NULL OR status != 'cancelled')
+                ORDER BY start_time ASC
+                LIMIT :limit
+                """
+            ),
+            {
+                "uid": str(user_uuid),
+                "start": start_dt,
+                "end": end_dt,
+                "limit": _SCHEDULE_BRIEF_MAX_ROWS,
+            },
+        )
+    ).mappings().all()
+
+    items: list[ScheduleBriefItem] = []
+    for r in rows:
+        attendees = r["attendees"] if isinstance(r["attendees"], list) else []
+        start_time: datetime | None = r["start_time"]
+        end_time: datetime | None = r["end_time"]
+        items.append(
+            ScheduleBriefItem(
+                title=(r["title"] or "(untitled event)"),
+                start=start_time.isoformat() if start_time else "",
+                end=end_time.isoformat() if end_time else None,
+                is_all_day=bool(r["is_all_day"]),
+                location=r["location"],
+                attendees_count=len(attendees),
+                status=r["status"],
+            )
+        )
+
+    # Deterministic one-line summary.
+    timed = [r for r in rows if not r["is_all_day"] and r["start_time"]]
+    count = len(items)
+    if not calendar_connected:
+        summary = "Connect your Google Calendar to see your schedule."
+    elif count == 0:
+        summary = "Nothing on your calendar for this window."
+    else:
+        plural = "event" if count == 1 else "events"
+        next_event = timed[0] if timed else rows[0]
+        nxt_title = next_event["title"] or "(untitled event)"
+        if next_event["is_all_day"] or not next_event["start_time"]:
+            summary = f"{count} {plural} — including \"{nxt_title}\" (all day)."
+        else:
+            summary = (
+                f"{count} {plural} — next: \"{nxt_title}\" at "
+                f"{_fmt_clock(next_event['start_time'])} UTC."
+            )
+
+    return ScheduleBriefResponse(
+        items=items,
+        summary=summary,
+        event_count=count,
+        calendar_connected=calendar_connected,
+        generated_at=generated_at,
+    )
