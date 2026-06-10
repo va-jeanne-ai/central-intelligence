@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/intelligence.py": {
-    "mtime": 1774954729.0,
-    "ast_hash": "2f5e893dd34bb9eb32b5765bfeb9eb47",
+    "mtime": 1781087652.0089977,
+    "ast_hash": "cddfb606b710f005cfac354866ea215f",
     "semantic_hash": ""
   },
   "backend/app/models/marketing.py": {
@@ -440,8 +440,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/ci.py": {
-    "mtime": 1781070442.5218549,
-    "ast_hash": "dbbf426424d3b86a20a836e5a51ac3b9",
+    "mtime": 1781087979.8400629,
+    "ast_hash": "95dd3b57b3f769c3d56e2cdaeeb18a34",
     "semantic_hash": ""
   },
   "backend/app/routes/dashboard.py": {
@@ -735,8 +735,8 @@
     "semantic_hash": ""
   },
   "backend/app/tasks/celery_app.py": {
-    "mtime": 1779955373.2157834,
-    "ast_hash": "f097ba221c8b39bfc45cb37d60802751",
+    "mtime": 1781087914.2700694,
+    "ast_hash": "9afcd71953f56c85adb6c9496be6541f",
     "semantic_hash": ""
   },
   "backend/app/tasks/comments_collector.py": {
@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1781077876.4070122,
-    "ast_hash": "0201c861db91b996e6aed44e240b9c7f",
+    "mtime": 1781088163.1475072,
+    "ast_hash": "bdff3556c06ec954a6ce4aa0a5fafc86",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1817,6 +1817,16 @@
   "frontend/src/components/tech-sos/ticket-modal.tsx": {
     "mtime": 1781077807.7767491,
     "ast_hash": "7cbe91cc94b7cbc814102aaa0d980c72",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/c4049d9dcf4c_unique_index_on_market_signals_family_.py": {
+    "mtime": 1781087709.08226,
+    "ast_hash": "2f9ec05ddcb891db3e870997804ab47f",
+    "semantic_hash": ""
+  },
+  "backend/app/tasks/market_signals.py": {
+    "mtime": 1781087898.090309,
+    "ast_hash": "2f31b1d7915a37348e8459e69f6795a2",
     "semantic_hash": ""
   }
 }

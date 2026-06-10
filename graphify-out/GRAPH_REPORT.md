@@ -1,16 +1,16 @@
 # Graph Report - central-intelligence  (2026-06-10)
 
 ## Corpus Check
-- 346 files · ~604,715 words
+- 348 files · ~605,742 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4414 nodes · 8019 edges · 322 communities (300 shown, 22 thin omitted)
-- Extraction: 80% EXTRACTED · 20% INFERRED · 0% AMBIGUOUS · INFERRED: 1611 edges (avg confidence: 0.57)
+- 4424 nodes · 8028 edges · 318 communities (297 shown, 21 thin omitted)
+- Extraction: 80% EXTRACTED · 20% INFERRED · 0% AMBIGUOUS · INFERRED: 1612 edges (avg confidence: 0.57)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8655d295`
+- Built from commit: `49505420`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -279,9 +279,7 @@
 - [[_COMMUNITY_Community 293|Community 293]]
 - [[_COMMUNITY_Community 294|Community 294]]
 - [[_COMMUNITY_Community 295|Community 295]]
-- [[_COMMUNITY_Community 296|Community 296]]
 - [[_COMMUNITY_Community 297|Community 297]]
-- [[_COMMUNITY_Community 298|Community 298]]
 - [[_COMMUNITY_Community 299|Community 299]]
 - [[_COMMUNITY_Community 300|Community 300]]
 - [[_COMMUNITY_Community 301|Community 301]]
@@ -290,16 +288,13 @@
 - [[_COMMUNITY_Community 304|Community 304]]
 - [[_COMMUNITY_Community 305|Community 305]]
 - [[_COMMUNITY_Community 306|Community 306]]
-- [[_COMMUNITY_Community 307|Community 307]]
 - [[_COMMUNITY_Community 308|Community 308]]
-- [[_COMMUNITY_Community 309|Community 309]]
 - [[_COMMUNITY_Community 310|Community 310]]
 - [[_COMMUNITY_Community 311|Community 311]]
 - [[_COMMUNITY_Community 312|Community 312]]
 - [[_COMMUNITY_Community 314|Community 314]]
 - [[_COMMUNITY_Community 315|Community 315]]
 - [[_COMMUNITY_Community 316|Community 316]]
-- [[_COMMUNITY_Community 317|Community 317]]
 - [[_COMMUNITY_Community 318|Community 318]]
 - [[_COMMUNITY_Community 321|Community 321]]
 - [[_COMMUNITY_Community 323|Community 323]]
@@ -350,15 +345,15 @@
 - 1-file cycle: `backend/app/tasks/calendar_sync.py -> backend/app/tasks/calendar_sync.py`
 - 1-file cycle: `backend/app/tasks/email_stats.py -> backend/app/tasks/email_stats.py`
 
-## Communities (322 total, 22 thin omitted)
+## Communities (318 total, 21 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.05
-Nodes (48): Any, AsyncSession, Lead, UUID, Goal, Call, ICP, Objection (+40 more)
+Cohesion: 0.12
+Nodes (68): Any, datetime, Lead, Any, AsyncSession, Session, Call, ContentIdea (+60 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.06
-Nodes (64): ButtonBlockCanvas(), ButtonBlockEditor(), darken(), DividerBlockCanvas(), DividerBlockEditor(), HeadingBlockCanvas(), HeadingBlockEditor(), LEVEL_STYLE (+56 more)
+Cohesion: 0.05
+Nodes (67): ButtonBlockCanvas(), ButtonBlockEditor(), darken(), DividerBlockCanvas(), DividerBlockEditor(), HeadingBlockCanvas(), HeadingBlockEditor(), LEVEL_STYLE (+59 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.07
@@ -369,8 +364,8 @@ Cohesion: 0.11
 Nodes (28): chunk_text(), _detokens(), _hard_window_chunks(), _is_meaningful(), _normalise(), Token-aware text chunking for the embed pipeline.  ``chunk_text`` splits a body, Split text into sentences keeping the punctuation attached., Token-boundary sliding window — used when sentence splitting fails. (+20 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.05
-Nodes (39): AsyncSession, BusinessProfile, Singleton-style business configuration record., Insight, Extracted insight from a call transcript.      Primary key uses the string forma, BusinessProfileRepository, InsightTagRepository, IntelligenceRepository (+31 more)
+Cohesion: 0.06
+Nodes (55): Any, AsyncSession, BusinessProfile, InsightTag, MarketSignal, BusinessProfile, InsightTag, MarketSignal (+47 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.10
@@ -386,35 +381,35 @@ Nodes (18): AsyncSession, CurrentUser, Operator that transcribes business call r
 
 ### Community 8 - "Community 8"
 Cohesion: 0.04
-Nodes (39): AccountabilityPage(), EMPTY_KPIS, EMPTY_LIST, EMPTY_STATS, FilterStatus, GoalRow, GoalsKpis, GoalsListResponse (+31 more)
+Nodes (51): AddAppointmentModal(), AppointmentRow, AppointmentsKpis, AppointmentsListResponse, AppointmentsPage(), AppointmentsStatsResponse, AppointmentStatus, AppointmentTableRow() (+43 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.08
 Nodes (22): ErrorHandlerAgent, Deterministic error logging agent with retry queue.  This is NOT an AI agent --, Attempt to write an entry to the DB; queue on failure., Write a single entry to the database.          Returns ``True`` on success, ``Fa, Async error logging agent with retry queue.      Singleton instance used across, Log an error to the database. On failure, queue for retry., Convenience: log with severity='warning'., Convenience: log with severity='info'. (+14 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.20
-Nodes (32): AsyncSession, CurrentUser, datetime, Response, UUID, AsyncSession, UUID, CreateGoalRequest (+24 more)
+Cohesion: 0.27
+Nodes (27): AsyncSession, CurrentUser, datetime, Response, UUID, CreateGoalRequest, GoalDetailResponse, GoalHistoryResponse (+19 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.06
-Nodes (61): CalendarEventsResponse, AsyncSession, CalendarEventsResponse, CurrentUser, Response, UUID, CreateNoteRequest, DocumentsResponse (+53 more)
+Cohesion: 0.08
+Nodes (50): HTTPException, AsyncSession, CurrentUser, UUID, LeadRecord, NoteRow, _coerce_author_uuid(), create_lead_note() (+42 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.11
-Nodes (10): AsyncSession, SalesDirector — Department coordinator for the Sales domain.  Sprint 5a / DIR-S1, Department head for the Sales domain.      Registered data tools give Claude acc, Wire up read-only sales data-access tools., SalesDirector, LeadsSpecialist, LeadsSpecialist — Domain expert for the sales pipeline.  Sprint 5a / S02 (wrappe, No write tools — lead CRUD lives in the leads route. (+2 more)
+Cohesion: 0.08
+Nodes (15): AsyncSession, SalesDirector — Department coordinator for the Sales domain.  Sprint 5a / DIR-S1, Department head for the Sales domain.      Registered data tools give Claude acc, Wire up read-only sales data-access tools., SalesDirector, CallAnalyzerSpecialist, CallAnalyzerSpecialist — Domain expert for sales-call intelligence.  Sprint 5a /, No write tools — transcription/analysis runs in Celery tasks. (+7 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.08
-Nodes (35): AsyncSession, CurrentUser, CampaignDetailResponse, CreateCampaignDraftRequest, CreateCampaignDraftResponse, EmailAnalyzeRequest, EmailAnalyzeResponse, EmailCampaign (+27 more)
+Cohesion: 0.09
+Nodes (31): AsyncSession, CurrentUser, CampaignDetailResponse, CreateCampaignDraftRequest, CreateCampaignDraftResponse, EmailCampaign, EmailDataResponse, EmailCampaignRepository (+23 more)
 
 ### Community 14 - "Community 14"
 Cohesion: 0.06
-Nodes (55): BaseModel, list_market_signals(), list_tags(), Get aggregated market signals (CI-MKT-01)., List tag dictionary (CI-MKT-01)., CallDetail, CallDetailResponse, CallListResponse (+47 more)
+Nodes (59): BaseModel, get_insight(), list_insights(), list_market_signals(), list_tags(), Query insights with filters (CI-MKT-01)., Get single insight with full detail (CI-MKT-01)., Get aggregated market signals (CI-MKT-01). (+51 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.09
-Nodes (27): AdsAnalyzeRequest, AdsAnalyzeResponse, AdsDataResponse, AsyncSession, CurrentUser, AsyncSession, CurrentUser, MarketingDirector (+19 more)
+Cohesion: 0.10
+Nodes (26): AdsAnalyzeRequest, AdsAnalyzeResponse, AdsDataResponse, AsyncSession, CurrentUser, AsyncSession, CurrentUser, AsyncSession (+18 more)
 
 ### Community 16 - "Community 16"
 Cohesion: 0.08
@@ -426,23 +421,23 @@ Nodes (42): CreateNoteRequest, DocumentRow, DocumentsResponse, EmailAttachmentMe
 
 ### Community 18 - "Community 18"
 Cohesion: 0.06
-Nodes (35): MemberStatsResponse, get_members_stats(), Aggregated member statistics (delegates to compute_member_stats)., CreateMemberNoteRequest, CreateMemberRequest, EnrollmentVolumePoint, GoalFunnelStage, MemberCallSummary (+27 more)
+Nodes (41): MemberDetailResponse, MemberNoteRow, MemberStatsResponse, get_member_detail(), get_members_stats(), Aggregated member statistics (delegates to compute_member_stats)., Return the full member record plus linked calls/goals/wins/pain/notes., CreateMemberNoteRequest (+33 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.05
 Nodes (40): Central Intelligence — Feature Verification Checklist, Cron / scheduled-task verification, 🟢 DONE — should work right now with real data, F10 — Marketing overview hub, F11 — Sales Calls list, F12 — Marketing specialist HTTP endpoints return hardcoded text, F13 — Content Ideas persistence, F14 — AI ad-copy generator (+32 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.05
-Nodes (73): Appointment, Any, AsyncSession, datetime, Lead, Session, Any, Session (+65 more)
+Cohesion: 0.07
+Nodes (39): Any, DeclarativeBase, EmbeddingBudget, Base, Provides created_at and updated_at columns with automatic server-side defaults., Shared declarative base for all SQLAlchemy models., TimestampMixin, AdsStats (+31 more)
 
 ### Community 21 - "Community 21"
 Cohesion: 0.11
 Nodes (12): BaseAgent, BaseAgent — Core agent class wrapping the Anthropic Python SDK.  Provides tool r, Stream response tokens, handling tool-use loops automatically.          Yields t, Non-streaming execution.  Collects the full response and returns it.          Re, Clear conversation history for a fresh session., Replace conversation history wholesale.          Used when re-hydrating an agent, Abstract agent with Anthropic SDK integration, tool registry, and streaming., Return the number of messages in the current conversation. (+4 more)
 
 ### Community 22 - "Community 22"
-Cohesion: 0.17
-Nodes (12): Added — Goals kanban board (Accountability), Added — Sprint 2 / CI-CORE-01 / T01-2: Transcriber Operator, Added — Sprint 2 / VIR-17: UX Components (Skeleton Loaders, Empty States, Confirm Dialog), Added — Sprint 2 / VIR-18: Optimistic Locking (updatedAt + If-Match), Added — Sprint 2 / VIR-20: Central Intelligence Webhook Endpoints + Data Sync Bridges, Added — VIR-33, VIR-34: Sprint 3a/3b — Email + Funnel Specialist Prompts, Added — VIR-35: Sprint 3a — Social Media + Email Specialist Agents + Stats Operators, Added — VIR-39, VIR-40: Sprint 4a/4b — Ads, DM, and Offer Specialist Prompts (+4 more)
+Cohesion: 0.15
+Nodes (13): Added — Goals kanban board (Accountability), Added — Market Signals aggregation job, Added — Sprint 2 / CI-CORE-01 / T01-2: Transcriber Operator, Added — Sprint 2 / VIR-17: UX Components (Skeleton Loaders, Empty States, Confirm Dialog), Added — Sprint 2 / VIR-18: Optimistic Locking (updatedAt + If-Match), Added — Sprint 2 / VIR-20: Central Intelligence Webhook Endpoints + Data Sync Bridges, Added — VIR-33, VIR-34: Sprint 3a/3b — Email + Funnel Specialist Prompts, Added — VIR-35: Sprint 3a — Social Media + Email Specialist Agents + Stats Operators (+5 more)
 
 ### Community 23 - "Community 23"
 Cohesion: 0.12
@@ -453,16 +448,16 @@ Cohesion: 0.05
 Nodes (37): 10. API Testing Guide, 1. api-contract-enhanced.md, 2. data-schema-enhanced.md, 2. Implementation Status Tracker, 3. critical-fixes-enhanced.md, 3. Testing Requirements Per Fix, 4. Post-Fix Verification Protocol, 5. Central Intelligence Supabase Schema (9 tables) (+29 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.06
-Nodes (32): Insight, InsightRepository, Repository for the Insight model., Return all insights extracted from a specific call., Return insights of a given type, e.g. 'Pain', 'Goal', 'Objection'., Return insights belonging to the given signal family., Return insights whose frequency_score meets or exceeds the threshold., Return all insights attributed to a particular speaker. (+24 more)
+Cohesion: 0.04
+Nodes (54): AsyncSession, CallRepository, InsightRepository, Return calls that have a transcript_uid but no processed_date., Return calls that occurred within the given date window., Return calls ingested from a specific transcript source.          Parameters, Find a call by its video URL SHA-256 hash for deduplication.          Parameters, Repository for the Insight model. (+46 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.15
-Nodes (33): AsyncSession, CurrentUser, Integration, Per-user OAuth refresh-token storage for third-party integrations.      Companio, UserIntegrationCredential, ProviderSummary, _decrypt_blob(), disconnect_integration() (+25 more)
+Cohesion: 0.16
+Nodes (31): AsyncSession, CurrentUser, Integration, ProviderSummary, _decrypt_blob(), disconnect_integration(), get_integration(), _get_row() (+23 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.09
-Nodes (26): BADGE_COLOR, BORDER_COLOR, DepartmentCard(), LABEL_COLOR, calendarClient, ListEventsParams, chatSessionsClient, ConnectionState (+18 more)
+Cohesion: 0.05
+Nodes (33): BADGE_COLOR, BORDER_COLOR, DepartmentCard(), LABEL_COLOR, calendarClient, ListEventsParams, CalendarAttendee, CalendarEventsResponse (+25 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.05
@@ -477,24 +472,24 @@ Cohesion: 0.07
 Nodes (30): APPT_STATUS_DOT, describeHistoryEvent(), DocumentRow, DocumentsResponse, EmailAttachmentMeta, EmailMessageRow, EmailThreadRow, EmailThreadsResponse (+22 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.06
-Nodes (26): AuthContext, AuthContextType, AuthProvider(), AuthUser, isMockConfigured(), MOCK_USER, MockUser, CIWidget() (+18 more)
+Cohesion: 0.12
+Nodes (10): ApiIcpListResponse, ApiIcpSegment, EditDraft, IcpCardEditProps, IcpCardsSection(), IcpCardViewProps, IcpProfile, KPI_TILES (+2 more)
 
 ### Community 32 - "Community 32"
-Cohesion: 0.24
-Nodes (15): AsyncSession, CurrentUser, datetime, UUID, CalendarListResponse, list_calendar_events(), list_user_calendars(), _parse_iso() (+7 more)
+Cohesion: 0.15
+Nodes (29): CurrentUser, Represents the authenticated principal attached to a request.      Attributes, AsyncSession, CalendarEventsResponse, CurrentUser, datetime, UUID, CalendarEventsResponse (+21 more)
 
 ### Community 33 - "Community 33"
-Cohesion: 0.11
-Nodes (25): Session, Any, Engine, collect_social_comments(), Comments Collector Celery task — Operator OPS-SC1.  Polling task that collects n, Polling Celery task that collects and stores social media comments.      Sprint, _get_engine(), _get_sync_db_url() (+17 more)
+Cohesion: 0.10
+Nodes (25): Session, Any, Ads Stats Celery task — Operator OPS-SA1.  Scheduled task that pulls and updates, Scheduled Celery task that pulls and updates paid ads metrics.      Sprint 4a /, update_ads_stats(), make_sync_session(), Return a synchronous SQLAlchemy session backed by the shared engine., backfill_email_messages_embeddings() (+17 more)
 
 ### Community 34 - "Community 34"
 Cohesion: 0.11
 Nodes (27): get_supabase_client(), Return the module-level Supabase client, or ``None`` in mock mode.      This fun, CurrentUser, Exception, LoginRequest, LoginResponse, PasswordResetRequest, login() (+19 more)
 
 ### Community 35 - "Community 35"
-Cohesion: 0.16
-Nodes (8): AsyncSession, SpecialistAgent — Domain expert with deep knowledge of a single area.  Specialis, Append domain-specific context to the system prompt.          Useful for injecti, Return a summary of this specialist's identity and domain., Domain expert agent.      Each specialist owns a ``domain`` label (e.g. "email_m, Register read-only database query tools for this specialist's domain.          O, Register write/action tools that mutate external state.          Override in con, SpecialistAgent
+Cohesion: 0.04
+Nodes (29): AsyncSession, AsyncSession, AdsSpecialist, AdsSpecialist — Domain expert for paid advertising performance and copy.  Sprint, Paid advertising performance analysis and copy generation specialist.      Domai, Register read-only paid ads data access tools., Register ad copy generation action tools., SpecialistAgent — Domain expert with deep knowledge of a single area.  Specialis (+21 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.07
@@ -509,8 +504,8 @@ Cohesion: 0.12
 Nodes (25): Any, Credentials, datetime, _build_service(), _download_media(), _export(), fetch_all_files(), fetch_file_content() (+17 more)
 
 ### Community 39 - "Community 39"
-Cohesion: 0.07
-Nodes (17): inter, metadata, Providers(), ACTIVE_ITEM_CLASSES, Department, getInitials(), NAV_SECTIONS, NavEntry (+9 more)
+Cohesion: 0.09
+Nodes (12): ACTIVE_ITEM_CLASSES, Department, getInitials(), NAV_SECTIONS, NavEntry, NavGroup, NavItem, NavSection (+4 more)
 
 ### Community 40 - "Community 40"
 Cohesion: 0.11
@@ -525,8 +520,8 @@ Cohesion: 0.09
 Nodes (19): AddIdeaFormProps, ApiContentIdea, ApiContentIdeaListResponse, CiContentIdeasPage(), ContentIdea, formatDate(), fromApi(), IdeaPlatform (+11 more)
 
 ### Community 43 - "Community 43"
-Cohesion: 0.18
-Nodes (5): DMSpecialist, DMSpecialist — Domain expert for direct message outreach and sequences.  Sprint, DM outreach sequence creation and analysis specialist.      Domain: dm_outreach, Register read-only DM and ICP data access tools., Register DM sequence generation action tools.
+Cohesion: 0.11
+Nodes (14): AI_SUGGESTIONS, OffersPage(), OfferStatus, STATUS_BORDER, COLOR_CLASSES, ScoreBar(), ScoreBarProps, Status (+6 more)
 
 ### Community 44 - "Community 44"
 Cohesion: 0.13
@@ -538,15 +533,15 @@ Nodes (23): Any, _auth(), _base_url(), CampaignRow, _client(), fetch_content(), 
 
 ### Community 46 - "Community 46"
 Cohesion: 0.04
-Nodes (34): EMPTY_KPIS, FulfillmentKpis, FulfillmentPage(), FulfillmentSummary, TOOL_LINKS, ToolLink, formatLastSynced(), IntegrationCard() (+26 more)
+Nodes (43): CIWidget(), RecommendationItem, RecommendationsResponse, EMPTY_KPIS, FulfillmentKpis, FulfillmentPage(), FulfillmentSummary, TOOL_LINKS (+35 more)
 
 ### Community 47 - "Community 47"
 Cohesion: 0.12
 Nodes (16): Any, AsyncSession, Update column values on an existing record.          Returns the updated instanc, Permanently remove a record from the database.          Returns ``True`` when th, Mark a record as deleted by setting ``deleted_at`` to now.          Returns ``Tr, Thread-safe, async-first generic repository.      Concrete repositories extend t, Return the number of active (non-soft-deleted) records matching filters., Return True when the model carries a ``deleted_at`` column. (+8 more)
 
 ### Community 48 - "Community 48"
-Cohesion: 0.27
-Nodes (10): Any, AsyncSession, Integration, ghl_appointment_webhook(), ghl_lead_webhook(), Inbound webhook receivers for push-based integrations.  All routes here run WITH, Receive an appointment pushed from a GHL calendar webhook trigger.      Same aut, Return the connected GHL integration row IFF the path token matches.      Consta (+2 more)
+Cohesion: 0.08
+Nodes (44): Appointment, Any, AsyncSession, Integration, Any, AsyncSession, datetime, Lead (+36 more)
 
 ### Community 49 - "Community 49"
 Cohesion: 0.15
@@ -577,8 +572,8 @@ Cohesion: 0.10
 Nodes (14): BLANK_FORM, CalendarViewProps, CONTENT_TYPE_COLORS, CONTENT_TYPES, ContentType, ListViewProps, MONTH_NAMES, PROMO_STATUSES (+6 more)
 
 ### Community 56 - "Community 56"
-Cohesion: 0.25
-Nodes (6): AdsStats, AdsStatsRepository, Repository for AdsStats — aggregated paid advertising metrics., Return totals across the latest stats row per platform+campaign.          Uses a, Find-or-create a stats row by platform+campaign_name+period_start, then update., Return the latest stats row for a given platform.
+Cohesion: 0.17
+Nodes (9): AdsStats, datetime, DmStats, AdsStatsRepository, Repository for AdsStats — aggregated paid advertising metrics., Return totals across the latest stats row per platform+campaign.          Uses a, Find-or-create a stats row by platform+campaign_name+period_start, then update., Return the latest stats row for a given platform. (+1 more)
 
 ### Community 57 - "Community 57"
 Cohesion: 0.18
@@ -601,16 +596,16 @@ Cohesion: 0.10
 Nodes (19): Appendix A: Feature Count by Department, Approval Matrix, Assumptions, Central Intelligence / Central Intelligence AI Business Automation System, Constraints, Document Control, External References, In Scope (Phase 1: Foundation + Marketing + Sales + Fulfillment) (+11 more)
 
 ### Community 62 - "Community 62"
-Cohesion: 0.19
-Nodes (15): AsyncSession, CurrentUser, Find-or-create a stats row by platform + period_start, then update., Repository for SocialStats — aggregated social media metrics., Return totals across the latest stats row per platform.          Uses a subquery, SocialStatsRepository, analyze_social(), get_social_data() (+7 more)
+Cohesion: 0.44
+Nodes (10): AsyncSession, CurrentUser, analyze_social(), get_social_data(), Social media endpoints.  POST /api/v1/social  — analyze social media performance, Return current social media data summary.      Queries the social_stats table vi, Analyze social media performance and generate a content script.      Routes thro, SocialAnalyzeRequest (+2 more)
 
 ### Community 63 - "Community 63"
 Cohesion: 0.10
 Nodes (19): ChatChunk, ChatMessageRow, ChatRequest, ChatResponse, ChatSessionDetailResponse, ChatSessionListResponse, ChatSessionRow, HealthResponse (+11 more)
 
 ### Community 64 - "Community 64"
-Cohesion: 0.26
-Nodes (12): Any, UserIntegrationCredential, UUID, Drive file sync — per-user OAuth fan-out.  Mirrors the shape of ``tasks/gmail_sy, Drive the sweep across the given user set (or all connected users)., Full Drive sweep across every connected user., Single-user Drive sweep — for the lead detail "Sync documents" button., Run the Drive sweep for one connected user.      Returns ``(inserted, content_ch (+4 more)
+Cohesion: 0.15
+Nodes (21): UserIntegrationCredential, Any, UserIntegrationCredential, UUID, Any, Record of each external data synchronization operation., SyncLog, Per-user OAuth refresh-token storage for third-party integrations.      Companio (+13 more)
 
 ### Community 65 - "Community 65"
 Cohesion: 0.11
@@ -625,8 +620,8 @@ Cohesion: 0.20
 Nodes (17): Lead, Response, Client, _cleanup_lead(), _fail(), _fetch_lead(), _get_or_create_token(), _header() (+9 more)
 
 ### Community 68 - "Community 68"
-Cohesion: 0.11
-Nodes (10): AsyncSession, FulfillmentDirector, FulfillmentDirector — Department coordinator for the Fulfillment domain.  Sprint, Department head for the Fulfillment domain.      Registered data tools give Clau, Wire up read-only fulfillment data-access tools., CoachingSpecialist, CoachingSpecialist — Domain expert for coaching-call intelligence.  Sprint 6a-li, No write tools — transcription/analysis runs in Celery tasks. (+2 more)
+Cohesion: 0.18
+Nodes (6): AsyncSession, CoachingSpecialist, CoachingSpecialist — Domain expert for coaching-call intelligence.  Sprint 6a-li, No write tools — transcription/analysis runs in Celery tasks., Coaching-call intelligence specialist.      Domain: fulfillment_coaching      DB, Register read-only coaching-intelligence tools.
 
 ### Community 69 - "Community 69"
 Cohesion: 0.26
@@ -634,11 +629,11 @@ Nodes (16): Any, _base_url(), _client(), fetch_contacts(), _fetch_page_with_retr
 
 ### Community 70 - "Community 70"
 Cohesion: 0.05
-Nodes (44): CallSummary, fmtDate(), GoalSummary, HistoryEvent, humanise(), InlineField(), InlineFieldProps, MemberDetail (+36 more)
+Nodes (44): AccountabilityPage(), EMPTY_KPIS, EMPTY_LIST, EMPTY_STATS, FilterStatus, GoalRow, GoalsKpis, GoalsListResponse (+36 more)
 
 ### Community 71 - "Community 71"
-Cohesion: 0.10
-Nodes (37): HTTPException, AsyncSession, CurrentUser, Response, UUID, CreateMemberNoteRequest, CreateMemberRequest, MemberDetailResponse (+29 more)
+Cohesion: 0.09
+Nodes (35): AsyncSession, CurrentUser, Response, UUID, AsyncSession, UUID, CreateMemberNoteRequest, CreateMemberRequest (+27 more)
 
 ### Community 72 - "Community 72"
 Cohesion: 0.12
@@ -657,8 +652,8 @@ Cohesion: 0.13
 Nodes (14): datetime, CreateOfferRequest, OfferGenerateRequest, OfferGenerateResponse, OfferListResponse, OfferResponse, OfferTaskStatusResponse, Pydantic schemas for offer CRUD and offer generation endpoints.  Sprint 4b / M06 (+6 more)
 
 ### Community 76 - "Community 76"
-Cohesion: 0.12
-Nodes (16): AsyncSession, AsyncSession, compute_lead_stats(), get_recent_insights(), get_top_pain_points(), _int(), Shared sales-pipeline aggregation helpers.  Single source of truth for the lead, Return the most frequently mentioned pain points across all subjects. (+8 more)
+Cohesion: 0.13
+Nodes (15): AsyncSession, AsyncSession, compute_lead_stats(), get_recent_insights(), get_top_pain_points(), _int(), Shared sales-pipeline aggregation helpers.  Single source of truth for the lead, Return the most frequently mentioned pain points across all subjects. (+7 more)
 
 ### Community 77 - "Community 77"
 Cohesion: 0.23
@@ -689,32 +684,32 @@ Cohesion: 0.13
 Nodes (12): buildMockMessages(), FormState, GeneratedTemplateCard(), ICP_PROFILES, IcpProfile, ResultMeta, SEQUENCE_TYPES, SequenceType (+4 more)
 
 ### Community 85 - "Community 85"
-Cohesion: 0.07
-Nodes (39): create_app(), FastAPI application factory for the Central Intelligence API.  Usage ----- Start, Construct and configure the FastAPI application.      Importing routers inside t, CurrentUser, _ensure_local_user_row(), _extract_bearer_token(), get_current_user(), get_optional_user() (+31 more)
+Cohesion: 0.17
+Nodes (14): AsyncSession, CurrentUser, CreateOfferRequest, OfferGenerateRequest, OfferGenerateResponse, OfferListResponse, OfferResponse, create_offer() (+6 more)
 
 ### Community 86 - "Community 86"
 Cohesion: 0.22
 Nodes (14): Any, Credentials, datetime, _build_service(), fetch_all_calendars(), fetch_events_for_calendar(), _parse_event(), _parse_event_datetime() (+6 more)
 
 ### Community 87 - "Community 87"
-Cohesion: 0.21
-Nodes (15): Any, datetime, UserIntegrationCredential, UUID, _iso(), Google Calendar sync — per-user OAuth fan-out.  Mirrors the shape of ``tasks/dri, Drive the sweep across every connected user (or the given subset)., Full Calendar sweep across every connected user. (+7 more)
+Cohesion: 0.23
+Nodes (14): Any, datetime, UUID, _iso(), Google Calendar sync — per-user OAuth fan-out.  Mirrors the shape of ``tasks/dri, Drive the sweep across every connected user (or the given subset)., Full Calendar sweep across every connected user., Single-user Calendar sweep — for the lead detail + /calendar page buttons. (+6 more)
 
 ### Community 88 - "Community 88"
 Cohesion: 0.04
-Nodes (52): ChatHistorySidebarProps, CallDetail, CallsResponse, CallSummary, CiTranscriptUploadPage(), PendingCall, StatusCardProps, CallsResponse (+44 more)
+Nodes (51): CallDetail, CallsResponse, CallSummary, CiTranscriptUploadPage(), PendingCall, StatusCardProps, CallsResponse, CallSummary (+43 more)
 
 ### Community 89 - "Community 89"
-Cohesion: 0.12
-Nodes (12): Settings, _build_client(), Supabase client factory.  Returns a configured ``supabase.Client`` instance when, Attempt to build a Supabase client from settings.      Returns the client on suc, AsyncSession, BaseSettings, HealthResponse, TranscriberOperator — Audio extraction and Whisper API transcription.  Downloads (+4 more)
+Cohesion: 0.18
+Nodes (7): Settings, _build_client(), Supabase client factory.  Returns a configured ``supabase.Client`` instance when, Attempt to build a Supabase client from settings.      Returns the client on suc, BaseSettings, TranscriberOperator — Audio extraction and Whisper API transcription.  Downloads, Celery application instance for Central Intelligence background tasks.  The brok
 
 ### Community 90 - "Community 90"
-Cohesion: 0.17
-Nodes (9): ICP, ICPRepository, Repository for Ideal Customer Profile segments.      Enforces the invariant that, Upsert an ICP segment by name.          If a segment with the same ``segment`` n, Set ``is_primary=False`` on all active primary ICP rows.          Parameters, Return the single active primary ICP segment, or None., Return all active ICP segments, primary first.          Parameters         -----, Return ICP segments filtered by status. (+1 more)
+Cohesion: 0.15
+Nodes (8): ICPRepository, Repository for Ideal Customer Profile segments.      Enforces the invariant that, Upsert an ICP segment by name.          If a segment with the same ``segment`` n, Set ``is_primary=False`` on all active primary ICP rows.          Parameters, Return the single active primary ICP segment, or None., Return all active ICP segments, primary first.          Parameters         -----, Return ICP segments filtered by status., Soft-delete all active segments whose names are NOT in ``keep_segment_names``.
 
 ### Community 91 - "Community 91"
-Cohesion: 0.13
-Nodes (15): 6.x Central Intelligence Endpoints, CI Calls Endpoints, CI Content Ideas Endpoints, CI Insights Endpoints, CI Market Signals Endpoints, CI Transcript Endpoints, GET /v1/ci/calls, GET /v1/ci/calls/:call_id (+7 more)
+Cohesion: 0.10
+Nodes (20): 6.x Central Intelligence Endpoints, CI Calls Endpoints, CI Content Ideas Endpoints, CI Insights Endpoints, CI Market Signals Endpoints, CI Reference Data Endpoints, CI Transcript Endpoints, GET /v1/ci/calls (+12 more)
 
 ### Community 92 - "Community 92"
 Cohesion: 0.13
@@ -765,8 +760,8 @@ Cohesion: 0.15
 Nodes (12): 1. Frontend, 2. Backend, 3. Supabase, Architecture, Central Intelligence, Environment Variables, File Structure, Prerequisites (+4 more)
 
 ### Community 104 - "Community 104"
-Cohesion: 0.05
-Nodes (41): Conversation, DM_TEMPLATES, DmPage(), DmTemplate, Platform, RECENT_CONVERSATIONS, AI_SUGGESTIONS, OffersPage() (+33 more)
+Cohesion: 0.10
+Nodes (15): Conversation, DM_TEMPLATES, DmPage(), DmTemplate, Platform, RECENT_CONVERSATIONS, FilterBar(), FilterBarProps (+7 more)
 
 ### Community 105 - "Community 105"
 Cohesion: 0.17
@@ -797,8 +792,8 @@ Cohesion: 0.17
 Nodes (10): Request / response schemas for the transcription endpoints.  Covers both the syn, Payload for POST /api/v1/transcribe (sync) and /api/v1/transcribe/async., Reject obviously invalid URLs before any network I/O., Response from POST /api/v1/transcribe (sync)., Response from POST /api/v1/transcribe/async (Celery-backed)., Response from GET /api/v1/transcribe/{task_id}/status., TaskStatusResponse, TranscribeAsyncResponse (+2 more)
 
 ### Community 112 - "Community 112"
-Cohesion: 0.14
-Nodes (14): AsyncSession, AsyncSession, compute_member_stats(), get_recent_wins(), _int(), Shared fulfillment aggregation helpers.  Single source of truth for the member K, Return the most recent member wins, newest first., Return value as int, falling back to 0 for None or non-numeric values. (+6 more)
+Cohesion: 0.16
+Nodes (13): AsyncSession, AsyncSession, compute_member_stats(), get_recent_wins(), _int(), Shared fulfillment aggregation helpers.  Single source of truth for the member K, Return the most recent member wins, newest first., Return value as int, falling back to 0 for None or non-numeric values. (+5 more)
 
 ### Community 113 - "Community 113"
 Cohesion: 0.16
@@ -813,16 +808,16 @@ Cohesion: 0.31
 Nodes (28): AsyncSession, CurrentUser, Response, UUID, CreateTicketRequest, _coerce_author_uuid(), create_ticket(), delete_ticket() (+20 more)
 
 ### Community 116 - "Community 116"
-Cohesion: 0.19
-Nodes (8): datetime, FunnelStats, FunnelStatsRepository, Concrete repositories for Sprint 3 marketing domain models., Repository for FunnelStats — aggregated funnel metrics., Return the most recent period's stats for all stages of a funnel., Return the most recent stats across all funnels., Find-or-create a stats row by funnel_id + stage + period_start.
+Cohesion: 0.24
+Nodes (6): FunnelStats, FunnelStatsRepository, Repository for FunnelStats — aggregated funnel metrics., Return the most recent period's stats for all stages of a funnel., Return the most recent stats across all funnels., Find-or-create a stats row by funnel_id + stage + period_start.
 
 ### Community 117 - "Community 117"
-Cohesion: 0.18
-Nodes (4): ConnectionState, DirectorWebSocket, MessageHandler, StateChangeHandler
+Cohesion: 0.17
+Nodes (5): ConnectionState, DirectorWebSocket, MessageHandler, StateChangeHandler, WebSocketMessage
 
 ### Community 118 - "Community 118"
-Cohesion: 0.14
-Nodes (12): datetime, Call, CallRepository, Concrete repositories for all operational domain models., Return all calls associated with a member, most recent first., Return all calls associated with a lead, most recent first., Return calls that have a transcript_uid but no processed_date., Return calls that occurred within the given date window. (+4 more)
+Cohesion: 0.07
+Nodes (16): UUID, PainPointRepository, Return all calls associated with a member, most recent first., Return all calls associated with a lead, most recent first., Return all active goals for a member., Return all active goals associated with a lead., Repository for the PainPoint model., Return all pain points linked to a member. (+8 more)
 
 ### Community 119 - "Community 119"
 Cohesion: 0.18
@@ -837,8 +832,8 @@ Cohesion: 0.18
 Nodes (11): 11. Error Handling Strategy, 12. Security Considerations, 13. Soft Delete Strategy, 14. Circuit Breaker Pattern, 3. Python Agent Class Hierarchy, 6. Database Layer: Supabase + SQLAlchemy, Central Intelligence (Central Intelligence) - Technical Plan v3.0.0, Repository Pattern for Database Abstraction (+3 more)
 
 ### Community 122 - "Community 122"
-Cohesion: 0.18
-Nodes (5): AdsSpecialist, AdsSpecialist — Domain expert for paid advertising performance and copy.  Sprint, Paid advertising performance analysis and copy generation specialist.      Domai, Register read-only paid ads data access tools., Register ad copy generation action tools.
+Cohesion: 0.22
+Nodes (10): AsyncSession, CurrentUser, FunnelDataResponse, FunnelWebhookRequest, FunnelWebhookResponse, get_funnel_data(), Funnel webhook endpoint.    POST /api/v1/funnels — receive and log funnel conver, Receive and persist a funnel conversion event.      Accepts webhook payloads fro (+2 more)
 
 ### Community 123 - "Community 123"
 Cohesion: 0.22
@@ -849,20 +844,20 @@ Cohesion: 0.29
 Nodes (9): datetime, Session, Email Stats Celery task — Operator OPS-SE1.  Scheduled task that pulls and updat, Scheduled Celery task that pulls and updates email campaign metrics.      Sprint, Update integrations.{last_synced_at, last_sync_status, last_sync_error}.      On, Upsert one campaign row.      Dedup key:       1. ``(source, external_id)`` when, _stamp_integration_sync(), update_email_stats() (+1 more)
 
 ### Community 125 - "Community 125"
-Cohesion: 0.18
-Nodes (15): Any, Any, UUID, Record of each external data synchronization operation., SyncLog, GHL contacts → leads sync — Celery task.  Runs in two modes, same task:   - Beat, Pull every contact from GHL and upsert into leads.      Returns a small summary, sync_ghl_contacts() (+7 more)
+Cohesion: 0.33
+Nodes (9): Any, UUID, Gmail thread sync — per-user OAuth fan-out.  Each staff member connects their ow, Full-mailbox sweep — every connected user × every lead with email., Per-lead sweep across every connected user — used by the     lead detail page's, Drive the sync across every connected user.      ``lead_ids=None`` → every lead, _run_sync(), sync_gmail_threads() (+1 more)
 
 ### Community 126 - "Community 126"
 Cohesion: 0.20
 Nodes (9): Architecture Migration Overview, Central Intelligence Technical Documentation Enhancement - Creation Summary, Files Saved, New Architecture (Python Agentic), Previous Architecture (n8n-based), Questions & Support, Summary Statistics, Technology Stack Comparison (+1 more)
 
 ### Community 127 - "Community 127"
-Cohesion: 0.14
-Nodes (16): AddAppointmentModal(), AppointmentRow, AppointmentsKpis, AppointmentsListResponse, AppointmentsPage(), AppointmentsStatsResponse, AppointmentStatus, AppointmentTableRow() (+8 more)
+Cohesion: 0.27
+Nodes (5): inter, metadata, Providers(), APP_CONFIG, Toaster()
 
 ### Community 128 - "Community 128"
-Cohesion: 0.09
-Nodes (11): AsyncSession, FunnelsSpecialist, FunnelsSpecialist — Domain expert for funnel analysis and conversion optimizatio, Funnel analysis and conversion optimization specialist.      Domain: funnel_anal, Register read-only funnel data access tools., Register funnel analysis action tools., OfferSpecialist, OfferSpecialist — Domain expert for offer optimization and creation.  Sprint 4b (+3 more)
+Cohesion: 0.15
+Nodes (5): OfferSpecialist, OfferSpecialist — Domain expert for offer optimization and creation.  Sprint 4b, Register offer design action tools., Offer optimization and creation specialist.      Domain: offer_optimization, Register read-only offer and intelligence data access tools.
 
 ### Community 129 - "Community 129"
 Cohesion: 0.22
@@ -897,8 +892,8 @@ Cohesion: 0.25
 Nodes (3): ErrorBoundary, Props, State
 
 ### Community 137 - "Community 137"
-Cohesion: 0.11
-Nodes (11): TranscribeUploadResponse, TranscriptCallType, TranscriptFileType, TranscriptUploadRequest, TranscriptUploadResponse, AUDIO_VIDEO_EXTENSIONS, AUDIO_VIDEO_TYPES, DroppedFile (+3 more)
+Cohesion: 0.27
+Nodes (9): _ensure_local_user_row(), _extract_bearer_token(), get_current_user(), get_optional_user(), FastAPI authentication dependencies.  Provides two injectable dependencies:  - `, FastAPI dependency that resolves the authenticated user.      In mock mode the `, FastAPI dependency that resolves the user without requiring auth.      Behaves i, Parse a raw ``Authorization`` header value and return the token part.      Param (+1 more)
 
 ### Community 138 - "Community 138"
 Cohesion: 0.25
@@ -949,8 +944,8 @@ Cohesion: 0.33
 Nodes (6): WebSocket, director_websocket(), _get_or_create_director(), Director routes — WebSocket streaming endpoints for department-level agents.  WS, Return (session_id, agent). Creates a new director when needed., WebSocket endpoint for real-time chat with a Director agent.
 
 ### Community 150 - "Community 150"
-Cohesion: 0.14
-Nodes (7): ArchivedRow(), EmailCampaignRow, EmailData, EmailPage(), formatDate(), formatPercent(), SentRow()
+Cohesion: 0.06
+Nodes (25): ArchivedRow(), EmailCampaignRow, EmailData, EmailPage(), formatDate(), formatPercent(), SentRow(), AI_SUGGESTIONS (+17 more)
 
 ### Community 151 - "Community 151"
 Cohesion: 0.29
@@ -969,8 +964,8 @@ Cohesion: 0.29
 Nodes (7): 1. System Architecture, 3-Level Org Chart Architecture, Benefits, How Levels Interact, Level Definitions, Overview, Why This Pattern
 
 ### Community 155 - "Community 155"
-Cohesion: 0.22
-Nodes (44): Any, Any, AsyncSession, AsyncSession, BusinessProfile, CreateCallFromTranscriptRequest, CreateContentIdeaRequest, InsightTag (+36 more)
+Cohesion: 0.25
+Nodes (7): AuthContext, AuthContextType, AuthProvider(), AuthUser, isMockConfigured(), MOCK_USER, MockUser
 
 ### Community 156 - "Community 156"
 Cohesion: 0.33
@@ -1213,8 +1208,8 @@ Cohesion: 0.50
 Nodes (3): build_social_analysis_user_prompt(), Social Analysis prompt — v1 (CI-MKT-SOC / M01-2).  Defines the system prompt, us, Format pre-loaded Marketing Director enrichment data into the social analysis pr
 
 ### Community 216 - "Community 216"
-Cohesion: 0.14
-Nodes (12): AI_SUGGESTIONS, AiSuggestion, buildKpiTiles(), formatFunnelId(), FunnelData, FunnelsPage(), FunnelStageStats, FunnelVisualizationCard() (+4 more)
+Cohesion: 0.25
+Nodes (4): FulfillmentDirector, FulfillmentDirector — Department coordinator for the Fulfillment domain.  Sprint, Department head for the Fulfillment domain.      Registered data tools give Clau, Wire up read-only fulfillment data-access tools.
 
 ### Community 218 - "Community 218"
 Cohesion: 0.50
@@ -1253,12 +1248,12 @@ Cohesion: 0.29
 Nodes (4): FunnelEvent, FunnelEventRepository, Repository for FunnelEvent — raw funnel webhook events., Return event counts grouped by stage for a given funnel.
 
 ### Community 274 - "Community 274"
-Cohesion: 0.29
-Nodes (5): DmStats, DmStatsRepository, Repository for DmStats — aggregated DM outreach metrics., Return totals across the latest stats row per platform.          Uses a subquery, Find-or-create a stats row by platform+period_start, then update.
+Cohesion: 0.33
+Nodes (6): Engine, _get_engine(), _get_sync_db_url(), Shared synchronous database session factory for Celery tasks.  Celery workers ru, Convert an asyncpg URL to a psycopg2 URL., Lazily build the shared engine + session factory.
 
 ### Community 275 - "Community 275"
-Cohesion: 0.47
-Nodes (3): Repository for SocialComment — collected social media comments., SocialCommentRepository, SocialComment
+Cohesion: 0.20
+Nodes (7): DmStatsRepository, Concrete repositories for Sprint 3 marketing domain models., Repository for SocialComment — collected social media comments., Repository for DmStats — aggregated DM outreach metrics., Return totals across the latest stats row per platform.          Uses a subquery, SocialCommentRepository, SocialComment
 
 ### Community 276 - "Community 276"
 Cohesion: 0.12
@@ -1277,8 +1272,8 @@ Cohesion: 0.67
 Nodes (3): 4. SQLAlchemy Model Definitions, Base Model Setup, Core Models
 
 ### Community 280 - "Community 280"
-Cohesion: 0.17
-Nodes (10): ContentIdea, ContentIdeaRepository, Repository for the ContentIdea model., Return content ideas filtered by status, e.g. 'Idea', 'Draft', 'Published'., Return ideas best suited for a specific platform., Return the highest-scoring content ideas., Return all content ideas derived from a given insight., Return content ideas for a specific format, e.g. 'Email', 'Reel', 'Post'. (+2 more)
+Cohesion: 0.08
+Nodes (13): AsyncSession, ContentIdeaRepository, ObjectionRepository, Concrete repositories for all operational domain models., Repository for the ContentIdea model., Return content ideas filtered by status, e.g. 'Idea', 'Draft', 'Published'., Return ideas best suited for a specific platform., Return the highest-scoring content ideas. (+5 more)
 
 ### Community 283 - "Community 283"
 Cohesion: 0.32
@@ -1297,44 +1292,40 @@ Cohesion: 0.14
 Nodes (12): ChartDataPoint, FUNNEL_STAGES, FUNNEL_SUMMARY, FunnelStage, LEAD_VOLUME_DATA, LEADS_KPI_STATS, LeadsKpiStat, MOCK_LEADS (+4 more)
 
 ### Community 288 - "Community 288"
-Cohesion: 0.18
-Nodes (8): get_session(), FastAPI dependency that yields an async database session., AsyncSession, AsyncSession, DM outreach endpoints.  POST /api/v1/dm  — analyze DM outreach and generate sequ, get_marketing_summary(), Marketing department summary endpoint.  GET /api/v1/marketing/summary  Aggregate, Aggregate and return marketing department metrics.
+Cohesion: 0.11
+Nodes (16): get_session(), FastAPI dependency that yields an async database session., create_app(), FastAPI application factory for the Central Intelligence API.  Usage ----- Start, Construct and configure the FastAPI application.      Importing routers inside t, AsyncSession, AsyncSession, FastAPI (+8 more)
 
 ### Community 289 - "Community 289"
-Cohesion: 0.29
-Nodes (7): list_calls(), list_content_ideas(), list_insights(), _pagination(), List processed calls with filters (CI-MKT-01)., Query insights with filters (CI-MKT-01)., Query content ideas with filters (CI-MKT-01).
+Cohesion: 0.40
+Nodes (3): FormState, ResetPasswordPage(), createClient()
 
 ### Community 290 - "Community 290"
 Cohesion: 0.18
 Nodes (5): MembersSpecialist, MembersSpecialist — Domain expert for the member roster.  Sprint 6a-lite / F01 (, No write tools — member CRUD lives in the members route., Member-roster analysis specialist.      Domain: fulfillment_members      DB tool, Register read-only member data access tools.
 
 ### Community 291 - "Community 291"
-Cohesion: 0.18
-Nodes (5): SocialMediaSpecialist — Domain expert for social media content and analytics.  S, Social media content creation and analysis specialist.      Domain: social_media, Register read-only social data access tools., Register content-generation action tools., SocialMediaSpecialist
+Cohesion: 0.24
+Nodes (5): Find-or-create a stats row by platform + period_start, then update., Repository for SocialStats — aggregated social media metrics., Return totals across the latest stats row per platform.          Uses a subquery, SocialStatsRepository, SocialStats
 
 ### Community 292 - "Community 292"
 Cohesion: 0.23
 Nodes (11): Any, Namespace, _build_payload(), _email_from_name(), _fresh_contact_id(), _get_token(), main(), Build a plausible-looking email with a short random suffix so     re-runs don't (+3 more)
 
+### Community 293 - "Community 293"
+Cohesion: 0.18
+Nodes (4): CentralIntelligenceWebSocket, ConnectionState, MessageHandler, StateChangeHandler
+
 ### Community 294 - "Community 294"
-Cohesion: 0.20
-Nodes (5): CallAnalyzerSpecialist, CallAnalyzerSpecialist — Domain expert for sales-call intelligence.  Sprint 5a /, No write tools — transcription/analysis runs in Celery tasks., Sales-call intelligence specialist.      Domain: sales_calls      DB tools:, Register read-only call-intelligence tools.
+Cohesion: 0.50
+Nodes (3): collect_social_comments(), Comments Collector Celery task — Operator OPS-SC1.  Polling task that collects n, Polling Celery task that collects and stores social media comments.      Sprint
 
 ### Community 295 - "Community 295"
 Cohesion: 0.25
 Nodes (5): Path, Download, extract audio, and transcribe without the AI loop.          Parameters, Tool handler invoked by BaseAgent when Claude calls transcribe_audio., Download file from URL, validate size, extract audio as MP3.          Returns th, Transcribe via local faster-whisper. Returns ``{transcript, duration_seconds, la
 
-### Community 296 - "Community 296"
-Cohesion: 0.24
-Nodes (7): Member, MemberRepository, Repository for the Member model., Look up a member by their unique email address., Return all active members assigned to a specific coach., Return members filtered by enrollment status., Return members who enrolled after the given date.
-
 ### Community 297 - "Community 297"
 Cohesion: 0.33
 Nodes (5): [0.2.0] - 2026-03-30 — Sprint 1B Auth + Error Handling Core, Added, Changed, Changelog, [Sprint 2] Marketing Director + Shared Repository Layer + Summary Endpoint
-
-### Community 298 - "Community 298"
-Cohesion: 0.40
-Nodes (5): CI Reference Data Endpoints, GET /v1/ci/monthly-preferences/:year/:month, GET /v1/ci/offers, GET /v1/ci/tags, PUT /v1/ci/monthly-preferences/:year/:month
 
 ### Community 299 - "Community 299"
 Cohesion: 0.29
@@ -1349,8 +1340,8 @@ Cohesion: 0.29
 Nodes (8): AsyncSession, compute_ticket_stats(), get_open_tickets(), _int(), Shared Tech SOS (support ticket) aggregation helpers.  Single source of truth fo, Return the most recent open/in-progress tickets, newest first., Aggregate support tickets into KPIs, category + status breakdowns, and an     8-, _week_label()
 
 ### Community 302 - "Community 302"
-Cohesion: 0.24
-Nodes (6): ChatHistorySidebar(), ChatTopbarProps, ChatView(), metadata, useChat(), ChatConnecting()
+Cohesion: 0.15
+Nodes (11): ChatHistorySidebar(), ChatHistorySidebarProps, ChatTopbarProps, ChatView(), metadata, useChat(), chatSessionsClient, ChatSessionDetailResponse (+3 more)
 
 ### Community 303 - "Community 303"
 Cohesion: 0.47
@@ -1368,21 +1359,13 @@ Nodes (6): Added — Sprint 5 S01: Appointments, Backend — Inbound GHL webhook
 Cohesion: 0.33
 Nodes (6): Backend — Bug Fix, Backend — Celery Tasks Wired to Database, Backend — New Models & Repositories, Backend — Routes Wired to Database, Fixed — Sprint 3 Data Connectivity: Database Persistence Pipeline, Frontend — Pages Wired to Backend APIs
 
-### Community 307 - "Community 307"
-Cohesion: 0.50
-Nodes (3): generate_offers(), Offer Generator Celery task — Operator OPS-O1.  Scheduled/triggered task that au, Celery task that auto-generates offer drafts using seed data.      Sprint 4b / O
-
 ### Community 308 - "Community 308"
 Cohesion: 0.29
 Nodes (9): embed_batch(), _parse_retry_after(), Thin HTTP wrapper around Voyage AI's embeddings endpoint.  One public function —, Voyage's Retry-After is a number of seconds. Default to 0 so the     backoff sch, Raised when the Voyage API returns a non-retryable error., Raised when 429s persist after exhausting the backoff schedule.      The embed w, Embed a batch of texts. Returns (vectors, tokens_used).      Each vector is a 10, VoyageError (+1 more)
 
-### Community 309 - "Community 309"
-Cohesion: 0.36
-Nodes (8): Any, _api_status_for(), _emit_audit_sync(), push_lead_to_ghl_async(), CI → GHL push — Celery retry task.  Fires when the inline push from ``PATCH /lea, Inline AuditLog row construction. The async record_event helper     can't run fr, Retry the push for one lead. Returns the result tuple flattened., _score_for_db_status()
-
 ### Community 310 - "Community 310"
-Cohesion: 0.33
-Nodes (6): EmailDraftRequest, EmailDraftResponse, draft_email(), _parse_email_draft(), Parse the model's response into {subject, body, cta?}.      Tries strict JSON fi, Generate a structured email draft (subject + body + cta).      Unlike POST /emai
+Cohesion: 0.11
+Nodes (14): MarketingDirector, MarketingDirector — Department coordinator for the Marketing domain.  Extends Di, Wire up read-only marketing data-access tools., Department head for the Marketing domain.      Registered data tools give Claude, EmailAnalyzeRequest, EmailAnalyzeResponse, EmailDraftRequest, EmailDraftResponse (+6 more)
 
 ### Community 311 - "Community 311"
 Cohesion: 0.25
@@ -1400,10 +1383,6 @@ Nodes (7): Any, _field(), list_providers(), Provider registry for third-party in
 Cohesion: 0.50
 Nodes (4): Re-run the Sales Call Analyzer on an existing Call row.      Useful for:       -, trigger_call_analysis(), AnalyzeCallResponse, Response from POST /api/v1/ci/calls/{call_id}/analyze.      The analyzer runs as
 
-### Community 317 - "Community 317"
-Cohesion: 0.50
-Nodes (3): Ads Stats Celery task — Operator OPS-SA1.  Scheduled task that pulls and updates, Scheduled Celery task that pulls and updates paid ads metrics.      Sprint 4a /, update_ads_stats()
-
 ### Community 318 - "Community 318"
 Cohesion: 0.50
 Nodes (3): Social Stats Celery task — Operator OPS-SS1.  Scheduled task that pulls and upda, Scheduled Celery task that pulls and updates social media metrics.      Sprint 3, update_social_stats()
@@ -1417,19 +1396,19 @@ Cohesion: 0.18
 Nodes (13): Added, Added — Accountability (Goal tracking), Added — Coaching Calls (Fulfillment), Added — Tech SOS (Fulfillment support tickets, F04), Backend, Backend, Backend, Backend (+5 more)
 
 ## Knowledge Gaps
-- **1111 isolated node(s):** `Connection`, `AsyncSession`, `Request`, `Response`, `AsyncSession` (+1106 more)
+- **1112 isolated node(s):** `Connection`, `AsyncSession`, `Request`, `Response`, `AsyncSession` (+1107 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **22 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **21 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `CurrentUser` connect `Community 85` to `Community 7`, `Community 10`, `Community 11`, `Community 13`, `Community 15`, `Community 18`, `Community 26`, `Community 29`, `Community 32`, `Community 34`, `Community 37`, `Community 40`, `Community 41`, `Community 49`, `Community 310`, `Community 57`, `Community 59`, `Community 62`, `Community 71`, `Community 74`, `Community 115`?**
-  _High betweenness centrality (0.080) - this node is a cross-community bridge._
-- **Why does `HTTPException` connect `Community 71` to `Community 7`, `Community 10`, `Community 11`, `Community 13`, `Community 280`, `Community 25`, `Community 26`, `Community 155`, `Community 29`, `Community 32`, `Community 34`, `Community 37`, `Community 41`, `Community 303`, `Community 48`, `Community 51`, `Community 311`, `Community 57`, `Community 59`, `Community 85`, `Community 115`?**
-  _High betweenness centrality (0.045) - this node is a cross-community bridge._
-- **Why does `Call` connect `Community 0` to `Community 98`, `Community 68`, `Community 294`, `Community 7`, `Community 296`, `Community 20`, `Community 118`, `Community 280`, `Community 25`, `Community 90`, `Community 155`, `Community 285`?**
-  _High betweenness centrality (0.024) - this node is a cross-community bridge._
+- **Why does `CurrentUser` connect `Community 32` to `Community 7`, `Community 137`, `Community 10`, `Community 11`, `Community 13`, `Community 15`, `Community 18`, `Community 26`, `Community 29`, `Community 34`, `Community 37`, `Community 40`, `Community 41`, `Community 49`, `Community 310`, `Community 57`, `Community 59`, `Community 62`, `Community 71`, `Community 74`, `Community 85`, `Community 115`, `Community 122`?**
+  _High betweenness centrality (0.083) - this node is a cross-community bridge._
+- **Why does `HTTPException` connect `Community 11` to `Community 7`, `Community 137`, `Community 10`, `Community 13`, `Community 14`, `Community 18`, `Community 25`, `Community 26`, `Community 29`, `Community 32`, `Community 34`, `Community 37`, `Community 41`, `Community 303`, `Community 48`, `Community 51`, `Community 311`, `Community 57`, `Community 59`, `Community 71`, `Community 115`?**
+  _High betweenness centrality (0.052) - this node is a cross-community bridge._
+- **Why does `Integration` connect `Community 93` to `Community 64`, `Community 67`, `Community 292`, `Community 45`, `Community 48`, `Community 20`, `Community 87`, `Community 26`, `Community 124`, `Community 125`?**
+  _High betweenness centrality (0.025) - this node is a cross-community bridge._
 - **Are the 168 inferred relationships involving `CurrentUser` (e.g. with `AdsAnalyzeRequest` and `AdsAnalyzeResponse`) actually correct?**
   _`CurrentUser` has 168 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 87 inferred relationships involving `HTTPException` (e.g. with `get_current_user()` and `CurrentUser`) actually correct?**
