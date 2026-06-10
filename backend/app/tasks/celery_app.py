@@ -26,6 +26,7 @@ celery_app = Celery(
         "app.tasks.social_stats",
         "app.tasks.comments_collector",
         "app.tasks.funnel_stats",
+        "app.tasks.market_signals",
         "app.tasks.ads_stats",
         "app.tasks.offer_generator",
         "app.tasks.ghl_sync",
@@ -53,6 +54,12 @@ celery_app.conf.beat_schedule = {
     "funnel-stats-hourly": {
         "task": "app.tasks.funnel_stats.update_funnel_stats",
         "schedule": crontab(minute=5),  # every hour at :05 — cheap aggregation over funnel_events
+    },
+    "market-signals-hourly": {
+        "task": "app.tasks.market_signals.update_market_signals",
+        # every hour at :35 — recompute market_signals from insights (rolling 7d/30d
+        # windows need a full recompute, not increments). Off the :05–:25 updaters.
+        "schedule": crontab(minute=35),
     },
     "social-stats-every-6h": {
         "task": "app.tasks.social_stats.update_social_stats",

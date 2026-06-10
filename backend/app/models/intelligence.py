@@ -77,6 +77,11 @@ class MarketSignal(Base):
     """Aggregated signal frequency across all calls, updated by intelligence pipeline."""
 
     __tablename__ = "market_signals"
+    __table_args__ = (
+        # Natural aggregation key — the market_signals recompute job upserts on
+        # this via INSERT ... ON CONFLICT (signal_family, signal).
+        UniqueConstraint("signal_family", "signal", name="uq_market_signals_family_signal"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     signal_family: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
