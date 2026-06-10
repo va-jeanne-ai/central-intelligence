@@ -280,8 +280,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/operational.py": {
-    "mtime": 1780944416.399885,
-    "ast_hash": "9010aef1c56b15fc8afca0e94dbe8937",
+    "mtime": 1781074856.0487292,
+    "ast_hash": "6d1b51bc3f06913f0c650884e65f49c6",
     "semantic_hash": ""
   },
   "backend/app/prompts/__init__.py": {
@@ -860,8 +860,8 @@
     "semantic_hash": ""
   },
   "frontend/package.json": {
-    "mtime": 1779360519.5742245,
-    "ast_hash": "008b2d46f22e49a82eaa20bda3b096de",
+    "mtime": 1781075202.7896821,
+    "ast_hash": "90f9deaf67d29d221577fff8897daccc",
     "semantic_hash": ""
   },
   "frontend/postcss.config.mjs": {
@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1781073077.2515829,
-    "ast_hash": "8bae1511911b2cb3da0071ce87ba20ec",
+    "mtime": 1781075428.8957386,
+    "ast_hash": "48bbe26f664324af1967ca81ae88c1b3",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1760,23 +1760,33 @@
     "semantic_hash": ""
   },
   "backend/app/routes/goals.py": {
-    "mtime": 1781072500.4995246,
-    "ast_hash": "9744f305beb52ee54d8a03fe5db19b97",
+    "mtime": 1781075150.758199,
+    "ast_hash": "c17513c77f3951718c7f029915772eb8",
     "semantic_hash": ""
   },
   "backend/app/schemas/goals.py": {
-    "mtime": 1781072423.4130003,
-    "ast_hash": "6895bd7ca44eabd2eaa75ef6d5b6eb07",
+    "mtime": 1781075010.1400588,
+    "ast_hash": "b9aea6f9eade0e86a63e36ca9f9bf976",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/accountability/page.tsx": {
-    "mtime": 1781072830.0174658,
-    "ast_hash": "0386d34aa76044234df3ac7254c8b3f0",
+    "mtime": 1781075338.6238337,
+    "ast_hash": "9a40794e6948a77cef448f5da91f5394",
     "semantic_hash": ""
   },
   "frontend/src/components/goals/goal-modal.tsx": {
-    "mtime": 1781072779.5295045,
-    "ast_hash": "979f66a89c972a8aedaf6356eadda186",
+    "mtime": 1781074333.247379,
+    "ast_hash": "2b56ebcc0d41e5999a6368ee2e17faaf",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/cd767c18679b_add_goals_stage.py": {
+    "mtime": 1781074896.60214,
+    "ast_hash": "d5f6f4286bc1af78005eacc1afda3425",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/goals/goal-board.tsx": {
+    "mtime": 1781075248.5850298,
+    "ast_hash": "3349db80ffa4031b866fae6aa6dec58d",
     "semantic_hash": ""
   }
 }
