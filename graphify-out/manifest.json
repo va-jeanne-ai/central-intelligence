@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "backend/app/agents/central_intelligence.py": {
-    "mtime": 1779955773.3388596,
-    "ast_hash": "cc2a310d01c3be75cbe371ac3f14fbe1",
+    "mtime": 1781095206.7035272,
+    "ast_hash": "ee3883f7b8d33626f8b776f74318ce05",
     "semantic_hash": ""
   },
   "backend/app/agents/directors/__init__.py": {
@@ -305,8 +305,8 @@
     "semantic_hash": ""
   },
   "backend/app/prompts/central_intelligence_v1.py": {
-    "mtime": 1779955883.7712317,
-    "ast_hash": "97d86f3938c35164613ff11c9f9ebeac",
+    "mtime": 1781095497.744719,
+    "ast_hash": "8b6a4f186f28651d89549030d69b63fa",
     "semantic_hash": ""
   },
   "backend/app/prompts/dm_analysis_v1.py": {
@@ -445,8 +445,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/dashboard.py": {
-    "mtime": 1775879268.0,
-    "ast_hash": "8f54cb5dfc8900c0d3b8981d58f133f4",
+    "mtime": 1781095750.959914,
+    "ast_hash": "d2a7e400fbb8bdcc285bcf7cd88e3725",
     "semantic_hash": ""
   },
   "backend/app/routes/directors.py": {
@@ -565,8 +565,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/dashboard.py": {
-    "mtime": 1774882259.0,
-    "ast_hash": "00104af6adef88de98997c665f57ea41",
+    "mtime": 1781095522.2871644,
+    "ast_hash": "ce0e8c03659cdb4c1d9044f8b10b24c1",
     "semantic_hash": ""
   },
   "backend/app/schemas/dm.py": {
@@ -890,8 +890,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/ci-market-signals/page.tsx": {
-    "mtime": 1774951498.0,
-    "ast_hash": "c0d9622333a7e69eef9223c26af98c8f",
+    "mtime": 1781088875.7939544,
+    "ast_hash": "d890d63f6d829d1e8efb23d53b5e4ea8",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/ci-transcript-upload/page.tsx": {
@@ -900,8 +900,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/dashboard/page.tsx": {
-    "mtime": 1775881196.0,
-    "ast_hash": "51d7b0dee728be71b15249cdf188cee7",
+    "mtime": 1781095967.8371353,
+    "ast_hash": "4038d6c675aff47af0b61ee6c5143953",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/error.tsx": {
@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1781088163.1475072,
-    "ast_hash": "bdff3556c06ec954a6ce4aa0a5fafc86",
+    "mtime": 1781096094.375093,
+    "ast_hash": "533f6037c807c184e5ae8cffb46a1c63",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1827,6 +1827,11 @@
   "backend/app/tasks/market_signals.py": {
     "mtime": 1781087898.090309,
     "ast_hash": "2f31b1d7915a37348e8459e69f6795a2",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/dashboard/weekly-focus.tsx": {
+    "mtime": 1781095943.371056,
+    "ast_hash": "1f11c5f807e209e10ab2342fec4149b4",
     "semantic_hash": ""
   }
 }
