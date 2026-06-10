@@ -6,6 +6,64 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Accountability (Goal tracking)
+
+Wires the dead `/accountability` sidebar link to a goal-tracking dashboard (Sprint 6 F03). Built on the existing `Goal` model — no migration. Goals also still arrive via the CI insight-sync bridge (`insight_type='Goal'`); manual CRUD is additive.
+
+#### Backend
+- `app/repositories/goal_stats.py` — `compute_goal_stats()`: KPIs (total, in_progress, completed, overdue), 3-stage goal funnel (matches the fulfillment dashboard), status breakdown. Member-scoped.
+- `app/schemas/goals.py` + `app/routes/goals.py` — goals CRUD: `GET /goals` (filters: member_id/status/overdue/search), `GET /goals/stats`, `GET /goals/{id}`, `GET /goals/{id}/history`, `POST /goals` (create for a member, `goal.created` audit), `PATCH /goals/{id}` (per-field audit incl. `goal.status_changed`; complete = status='completed'), `DELETE /goals/{id}` (soft-delete, `goal.deleted` audit).
+- `app/main.py` mounts `goals_router`; `app/middleware/auth.py` exempts `/api/v1/goals`.
+- `app/agents/specialists/members.py` — `get_goal_progress` read tool (funnel + overdue across members).
+
+#### Frontend (Fulfillment orange #F97316)
+- `components/goals/goal-modal.tsx` — shared Add/Edit Goal modal (member locked in member-detail context).
+- `(app)/accountability/page.tsx` — dashboard: KPI cards (Total/In Progress/Completed/Overdue), goal-funnel bars, goals table (member link, status badge + overdue flag, target date) with Complete/Edit/Delete row actions, status + overdue + search filters, Add Goal.
+- `(app)/members/[member_id]/page.tsx` — Goals section gained Add + per-goal Complete/Edit/Delete.
+
+### Added — Coaching Calls (Fulfillment)
+
+Wires the dead `/coaching-calls` sidebar link to a real page. Coaching calls are `calls` rows with `call_type='Coaching'` — same VOC pipeline as sales calls (transcript → insights incl. wins → content ideas), analyzed by the coaching-tuned analyzer built in Sprint 6a-lite. Mostly a themed frontend mirror of `/sales-calls` plus member-linking on upload.
+
+#### Backend
+- `app/routes/transcribe.py` — `POST /transcribe/upload` now accepts a `memberId` form field (validated UUID + existence check, mirroring `leadId`), so file-uploaded coaching calls attach to a member.
+- `app/routes/ci.py` + `app/schemas/ci.py` — `POST /ci/transcripts/upload` (base64 transcript path) now accepts optional `lead_id`/`member_id` and sets them on the Call (previously it linked neither).
+
+#### Frontend (Fulfillment orange #F97316)
+- `components/upload/transcript-upload-widget.tsx` — new optional `memberId` prop, threaded into all three submit paths (multipart `/transcribe/upload`, URL `/transcribe`, base64 `/ci/transcripts/upload`).
+- `(app)/coaching-calls/page.tsx` — list page mirroring `/sales-calls`: upload widget (callType=Coaching), table of analyzed coaching calls (`GET /ci/calls?call_type=Coaching`), download transcript.
+- `(app)/coaching-calls/[call_id]/page.tsx` — orange-themed detail page (copy of the call-type-agnostic sales detail): summary + insights (inline edit) + content ideas + transcript + re-analyze.
+- `(app)/members/[member_id]/page.tsx` — member call rows now link to `/coaching-calls/{id}` (coaching) or `/sales-calls/{id}` (else).
+- Sidebar/header already routed `/coaching-calls` → Fulfillment Director (no change).
+
+### Added — Sprint 5 S01: Appointments
+
+Makes appointments a first-class entity (previously only a lead status / funnel proxy). Fed by an inbound GHL appointment webhook + manual entry. Outbound nightly GHL appointment pull is deferred (GHL calendar-API access unverified).
+
+#### Backend — Model + migration
+- `app/models/operational.py` — new `Appointment` model (`appointments` table): nullable `lead_id`/`member_id` FKs (SET NULL), contact snapshot (name/email/phone), `status` (booked/confirmed/showed/no-show/cancelled/rescheduled), `appointment_type`, `scheduled_at`/`end_at`, `source` ('ghl'|'manual'), `external_id` (GHL appt id — dedup key), `notes`. Registered in `models/__init__.py`.
+- `alembic/versions/ca825332c707_add_appointments_table.py` — creates `appointments` + 6 indexes only (hand-trimmed autogenerate drift).
+
+#### Backend — Inbound GHL webhook
+- `app/services/ghl_upsert.py` — `upsert_ghl_appointment()` + `GHL_APPT_FIELD_VARIANTS` + `_GHL_APPT_STATUS_MAP` + tolerant datetime parse (ISO + epoch-ms). Dedup on `(source='ghl', external_id)`; best-effort link to a lead (external_id then email) and member (email). Refactored `_pick` → generic `_pick_from`. INSERT → `appointment.created`; UPDATE → `appointment.status_changed`/`rescheduled` only on real change (so book→reschedule→cancel reads cleanly).
+- `app/routes/webhooks.py` — new `POST /webhooks/ghl/{webhook_token}/appointments` (LIVE), mirroring the lead webhook's constant-time token validation. Extracted shared `_resolve_ghl_integration` helper.
+
+#### Backend — Stats, CRUD, surfaces
+- `app/repositories/appointment_stats.py` — `compute_appointment_stats()` (KPIs: total, upcoming_this_week, show_rate, no_show_rate; 8-week volume; status breakdown) + `get_upcoming_appointments()`.
+- `app/schemas/appointments.py` + `app/routes/appointments.py` — `GET /appointments` (filters: status/search/window/date), `GET /appointments/stats`, `GET /appointments/{id}`, `GET /appointments/{id}/history`, `POST /appointments` (manual booking), `PATCH /appointments/{id}` (per-field audit incl. rescheduled), `DELETE /appointments/{id}` (soft-cancel → status='cancelled', row stays visible).
+- `app/routes/leads.py` — `GET /leads/{id}/appointments` for the lead-detail card.
+- `app/routes/sales.py` — `/sales/summary` gains an additive `appointments` block (real booked counts). The funnel's "Appointments" stage is unchanged (still the lead-status proxy) — `/leads/stats` shape preserved.
+- `app/agents/specialists/leads.py` — `get_appointments` tool so the Sales Director (via leads_analyst) can answer "what's booked this week?".
+- `app/main.py` mounts `appointments_router`; `app/middleware/auth.py` exempts `/api/v1/appointments` (matches /leads, /members).
+
+#### Frontend (Sales blue #3B82F6)
+- `(app)/appointments/page.tsx` — directory: KPI cards (Total, Upcoming, Show Rate, No-Show Rate), table (contact → /leads/{id} when linked, scheduled time, status badge, type), status + window + search filters, "Book Appointment" modal (manual create).
+- `(app)/leads/[lead_id]/page.tsx` — Appointments card (fetches `/leads/{id}/appointments`).
+
+#### Notes
+- Lead/member linking is best-effort; a webhook for an unknown contact lands with null FKs and renders via the contact snapshot (won't retro-link if the lead arrives later).
+- Outbound nightly GHL appointment pull remains the one deferred GHL roadmap item.
+
 ### Added — Sprint 6a-lite: Fulfillment Department core (Fulfillment Director + Members/Coaching specialists)
 
 Adds the Fulfillment Director coordination layer (post-sale: members, goals, wins, coaching intelligence) on top of the existing Member/Goal/Win/Call data layer. Deferred to Sprint 6b: Accountability specialist, Tech SOS (greenfield model), and the CI integrations (ActiveCampaign, Fireflies, content-calendar). Lead→Member conversion also deferred.

@@ -23,6 +23,7 @@ from app.models.intelligence import (  # noqa: F401
 
 # operational — depends on User (created_by / coach_id) and InsightTag (relationship)
 from app.models.operational import (  # noqa: F401
+    Appointment,
     Call,
     ContentIdea,
     EmailMessage,
@@ -88,6 +89,7 @@ __all__ = [
     # operational
     "Lead",
     "Member",
+    "Appointment",
     "Call",
     "Insight",
     "ContentIdea",

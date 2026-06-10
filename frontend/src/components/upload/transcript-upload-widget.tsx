@@ -25,6 +25,9 @@ export interface TranscriptUploadResult {
 export interface TranscriptUploadWidgetProps {
   callType?: TranscriptCallType;
   leadId?: string;
+  /** Optional member to attach the call to (coaching calls). Independent of
+   *  leadId — a call can carry either, both, or neither. */
+  memberId?: string;
   callOwner?: string;
   onSuccess?: (result: TranscriptUploadResult) => void;
   /** Fired the moment a file is accepted (passes validation) — useful for
@@ -195,6 +198,7 @@ function Spinner() {
 export function TranscriptUploadWidget({
   callType,
   leadId,
+  memberId,
   callOwner,
   onSuccess,
   onFileSelected,
@@ -234,11 +238,17 @@ export function TranscriptUploadWidget({
     const { complete } = simulateProgress(setProgress, 3000);
 
     try {
-      const payload: { videoUrl: string; callType?: TranscriptCallType; leadId?: string } = {
+      const payload: {
+        videoUrl: string;
+        callType?: TranscriptCallType;
+        leadId?: string;
+        memberId?: string;
+      } = {
         videoUrl: trimmed,
       };
       if (callType !== undefined) payload.callType = callType;
       if (leadId !== undefined) payload.leadId = leadId;
+      if (memberId !== undefined) payload.memberId = memberId;
 
       const data = await apiClient.post<TranscribeUploadResponse>(
         "/transcribe",
@@ -269,7 +279,7 @@ export function TranscriptUploadWidget({
         err instanceof Error ? err.message : "Failed to submit video URL. Please try again.",
       );
     }
-  }, [videoUrl, callType, leadId, onSuccess]);
+  }, [videoUrl, callType, leadId, memberId, onSuccess]);
 
   // ─── Handle file drop / select ──────────────────────────────────────────────
 
@@ -302,6 +312,7 @@ export function TranscriptUploadWidget({
           formData.append("file", file);
           if (callType !== undefined) formData.append("callType", callType);
           if (leadId !== undefined) formData.append("leadId", leadId);
+          if (memberId !== undefined) formData.append("memberId", memberId);
 
           const token = apiClient.getToken();
           const headers: HeadersInit = {};
@@ -376,6 +387,8 @@ export function TranscriptUploadWidget({
           };
           if (callOwner !== undefined) payload.call_owner = callOwner;
           if (callType !== undefined) payload.call_type = callType;
+          if (leadId !== undefined) payload.lead_id = leadId;
+          if (memberId !== undefined) payload.member_id = memberId;
 
           const data = await apiClient.post<TranscriptUploadResponse>(
             "/ci/transcripts/upload",
@@ -405,7 +418,7 @@ export function TranscriptUploadWidget({
         }
       }
     },
-    [callType, leadId, callOwner, onSuccess, onFileSelected],
+    [callType, leadId, memberId, callOwner, onSuccess, onFileSelected],
   );
 
   // ─── Drag-and-drop events ───────────────────────────────────────────────────

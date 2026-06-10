@@ -108,6 +108,22 @@ class MembersSpecialist(SpecialistAgent):
             handler=self._handle_get_member_goals,
         )
 
+        self.register_tool(
+            name="get_goal_progress",
+            description=(
+                "Get accountability/goal progress across all members: KPIs "
+                "(total, in progress, completed, overdue), the goal funnel "
+                "(Goals Set → In Progress → Completed), and the status breakdown. "
+                "Use for 'how are members tracking on their goals?'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+            handler=self._handle_get_goal_progress,
+        )
+
     def _register_operator_tools(self) -> None:
         """No write tools — member CRUD lives in the members route."""
         return None
@@ -174,3 +190,10 @@ class MembersSpecialist(SpecialistAgent):
                 for g in goals
             ]
         )
+
+    async def _handle_get_goal_progress(self) -> str:
+        if not self._session:
+            return json.dumps({"error": "No database session available"})
+        from app.repositories.goal_stats import compute_goal_stats
+
+        return json.dumps(await compute_goal_stats(self._session))

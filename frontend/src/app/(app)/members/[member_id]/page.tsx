@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { GoalModal } from "@/components/goals/goal-modal";
+import type { GoalModalGoal } from "@/components/goals/goal-modal";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { showSuccess, showApiError } from "@/lib/toast";
@@ -210,10 +213,20 @@ function InlineField({ label, value, onSave, type = "text", options, placeholder
 
 // ─── Section list card ──────────────────────────────────────────────────────────
 
-function SectionCard({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+function SectionCard({
+  title,
+  count,
+  children,
+  action,
+}: {
+  title: string;
+  count: number;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
     <Card>
-      <CardHeader title={`${title} (${count})`} />
+      <CardHeader title={`${title} (${count})`} action={action} />
       <CardBody>{children}</CardBody>
     </Card>
   );
@@ -238,6 +251,12 @@ export default function MemberDetailPage({ params }: { params: { member_id: stri
   const [postingNote, setPostingNote] = useState(false);
   const [deleteNoteId, setDeleteNoteId] = useState<string | null>(null);
   const [deletingNote, setDeletingNote] = useState(false);
+
+  // goals CRUD
+  const [showAddGoal, setShowAddGoal] = useState(false);
+  const [editGoal, setEditGoal] = useState<GoalModalGoal | null>(null);
+  const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
+  const [deletingGoal, setDeletingGoal] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
 
   const loadDetail = useCallback(async () => {
@@ -319,6 +338,38 @@ export default function MemberDetailPage({ params }: { params: { member_id: stri
     }
   }, [memberId, deleteNoteId, loadDetail, loadHistory]);
 
+  const completeGoal = useCallback(
+    async (goalId: string) => {
+      try {
+        await apiClient.patch(`/goals/${goalId}`, { status: "completed" });
+        showSuccess("Goal completed");
+        await Promise.all([loadDetail(), loadHistory()]);
+      } catch (err) {
+        showApiError(err as Error);
+      }
+    },
+    [loadDetail, loadHistory],
+  );
+
+  const confirmDeleteGoal = useCallback(async () => {
+    if (!deleteGoalId) return;
+    setDeletingGoal(true);
+    try {
+      await apiClient.delete(`/goals/${deleteGoalId}`);
+      showSuccess("Goal deleted");
+      setDeleteGoalId(null);
+      await Promise.all([loadDetail(), loadHistory()]);
+    } catch (err) {
+      showApiError(err as Error);
+    } finally {
+      setDeletingGoal(false);
+    }
+  }, [deleteGoalId, loadDetail, loadHistory]);
+
+  const onGoalSaved = useCallback(() => {
+    void Promise.all([loadDetail(), loadHistory()]);
+  }, [loadDetail, loadHistory]);
+
   if (notFound) {
     return (
       <>
@@ -391,17 +442,63 @@ export default function MemberDetailPage({ params }: { params: { member_id: stri
         {/* Two-column: goals/wins/pain + notes/history */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="space-y-4">
-            <SectionCard title="Goals" count={member.goals.length}>
+            <SectionCard
+              title="Goals"
+              count={member.goals.length}
+              action={
+                <button
+                  type="button"
+                  onClick={() => setShowAddGoal(true)}
+                  className="text-[11px] font-semibold text-orange-600 hover:text-orange-700"
+                >
+                  + Add
+                </button>
+              }
+            >
               {member.goals.length === 0 ? (
                 <EmptyRow text="No goals yet." />
               ) : (
                 <ul className="space-y-2">
                   {member.goals.map((g) => (
-                    <li key={g.id} className="flex items-start justify-between gap-3 text-sm">
+                    <li key={g.id} className="group flex items-start justify-between gap-3 text-sm">
                       <span className="text-gray-800">{g.goal_text || "—"}</span>
-                      <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusBadgeClasses(g.status)}`}>
-                        {g.status ? humanise(g.status) : "—"}
-                      </span>
+                      <div className="shrink-0 flex items-center gap-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusBadgeClasses(g.status)}`}>
+                          {g.status ? humanise(g.status) : "—"}
+                        </span>
+                        <span className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 text-[11px]">
+                          {g.status !== "completed" && (
+                            <button
+                              type="button"
+                              onClick={() => void completeGoal(g.id)}
+                              className="font-medium text-green-600 hover:text-green-700"
+                            >
+                              Complete
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditGoal({
+                                id: g.id,
+                                goal_text: g.goal_text,
+                                status: g.status,
+                                target_date: g.target_date,
+                              })
+                            }
+                            className="font-medium text-orange-600 hover:text-orange-700"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteGoalId(g.id)}
+                            className="font-medium text-red-500 hover:text-red-600"
+                          >
+                            Delete
+                          </button>
+                        </span>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -450,14 +547,25 @@ export default function MemberDetailPage({ params }: { params: { member_id: stri
                 <EmptyRow text="No calls logged yet." />
               ) : (
                 <ul className="space-y-2">
-                  {member.calls.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="text-gray-800">{c.call_type ? humanise(c.call_type) : "Call"}</span>
-                      <span className="shrink-0 text-[11px] text-gray-400">
-                        {c.processed_date ? `${c.insights_count} insights · ${fmtDate(c.date)}` : "Analyzing…"}
-                      </span>
-                    </li>
-                  ))}
+                  {member.calls.map((c) => {
+                    const isCoaching = (c.call_type ?? "").toLowerCase().includes("coaching");
+                    const href = `${isCoaching ? "/coaching-calls" : "/sales-calls"}/${c.id}`;
+                    return (
+                      <li key={c.id}>
+                        <Link
+                          href={href}
+                          className="flex items-center justify-between gap-3 text-sm rounded-md -mx-1 px-1 py-0.5 hover:bg-orange-50/50 group"
+                        >
+                          <span className="text-gray-800 group-hover:text-orange-700">
+                            {c.call_type ? humanise(c.call_type) : "Call"}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-gray-400">
+                            {c.processed_date ? `${c.insights_count} insights · ${fmtDate(c.date)}` : "Analyzing…"}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </SectionCard>
@@ -566,6 +674,31 @@ export default function MemberDetailPage({ params }: { params: { member_id: stri
         confirmLabel="Delete"
         variant="danger"
         loading={deletingNote}
+      />
+
+      {/* Goal CRUD — member is locked to this member */}
+      <GoalModal
+        open={showAddGoal}
+        memberId={memberId}
+        onClose={() => setShowAddGoal(false)}
+        onSaved={onGoalSaved}
+      />
+      <GoalModal
+        open={editGoal !== null}
+        goal={editGoal}
+        memberId={memberId}
+        onClose={() => setEditGoal(null)}
+        onSaved={onGoalSaved}
+      />
+      <ConfirmDialog
+        open={deleteGoalId !== null}
+        onClose={() => setDeleteGoalId(null)}
+        onConfirm={() => void confirmDeleteGoal()}
+        title="Delete goal?"
+        description="This removes the goal from accountability tracking."
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deletingGoal}
       />
     </>
   );

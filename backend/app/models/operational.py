@@ -527,6 +527,63 @@ class MemberNote(Base):
     member: Mapped["Member"] = relationship("Member", back_populates="staff_notes")
 
 
+class Appointment(Base, TimestampMixin, SoftDeleteMixin):
+    """A booked call / meeting with a prospect (lead) or member.
+
+    Fed by the inbound GHL appointment webhook (book/reschedule/cancel) and by
+    manual entry. ``lead_id`` / ``member_id`` are best-effort links (both
+    nullable) — a webhook for an unknown contact still renders via the
+    de-normalised contact snapshot. ``external_id`` is the GHL appointment id
+    (dedup key for webhook upserts). ``notes`` holds the raw GHL payload JSON
+    for webhook rows, or free text for manual rows.
+    """
+
+    __tablename__ = "appointments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("leads.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    member_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("members.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Contact snapshot — so a webhook with no matching lead/member still renders.
+    contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # booked / confirmed / showed / no-show / cancelled / rescheduled
+    status: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    appointment_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    scheduled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(128), nullable=True)  # 'ghl' | 'manual'
+    external_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True
+    )  # GHL appointment id — dedup key
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Relationships
+    lead: Mapped["Lead | None"] = relationship("Lead", lazy="select")
+    member: Mapped["Member | None"] = relationship("Member", lazy="select")
+
+
 class EmailThread(Base):
     """One Gmail thread linked to a lead via the email-address match.
 

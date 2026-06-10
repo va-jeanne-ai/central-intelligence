@@ -98,10 +98,19 @@ The pull and the webhook feed the same upsert path in [`backend/app/services/ghl
 | [`/leads`](frontend/src/app/(app)/leads/page.tsx) | Every pushed GHL contact appears as a row, `source='ghl'`. KPI cards (`/leads/stats`) fill in once leads start arriving. |
 | [`/integrations/ghl`](frontend/src/app/(app)/integrations/[slug]/page.tsx) | Webhook URL in a copyable code block, `api_access_token` + `location_id` form fields for the pull sync, **Sync contacts now** button, Test + Disconnect actions, "Last synced" timestamp updating on every webhook hit *and* every sync run. |
 | `sync_log` table | Per-run history of the contact pull. Query `SELECT * FROM sync_log WHERE operation='ghl_contacts_sync' ORDER BY created_at DESC` to see inserted/updated/errors counts. |
+| [`/appointments`](frontend/src/app/(app)/appointments/page.tsx) + lead-detail **Appointments** card | Appointment webhook rows appear here. KPI cards (total, upcoming this week, show rate, no-show rate). |
+
+**Appointments webhook (LIVE)**
+
+A second inbound endpoint `POST /api/v1/webhooks/ghl/{webhook_token}/appointments` ([`backend/app/routes/webhooks.py`](backend/app/routes/webhooks.py)) feeds the `appointments` table. Same constant-time path-token validation as the lead webhook. Point a GHL appointment-booked / -rescheduled / -cancelled workflow webhook at this URL.
+
+- **Upsert:** `upsert_ghl_appointment` ([`backend/app/services/ghl_upsert.py`](backend/app/services/ghl_upsert.py)) — tolerant field-variant extraction, status normalized to booked/confirmed/showed/no-show/cancelled/rescheduled, datetime parsed from ISO or epoch-ms. Dedup on `(source='ghl', external_id=<appointment id>)`, so book → reschedule → cancel update one row.
+- **Linking:** best-effort to a lead (by `(source='ghl', external_id)` then email) and a member (by email); both stay nullable when unmatched (the contact snapshot still renders).
+- **Surfaces:** `/appointments` directory, the lead-detail Appointments card, an `appointments` KPI block in `/sales/summary`, and the Sales Director's `get_appointments` tool ("what's booked this week?").
 
 **What it could power but doesn't yet**
 
-- **Appointments webhook** — a second endpoint `POST /webhooks/ghl/appointments` to feed the `appointments` table. GHL has appointment-booked / -rescheduled / -cancelled triggers. Would populate the Sales Calls "next 7 days" surface.
+- **Outbound appointment pull** — a nightly `sync_ghl_appointments` Celery task + `fetch_appointments()` GHL client method to backfill appointments the webhook missed (e.g. booked before the webhook was wired). Deferred until GHL calendar-API scope is confirmed on the access token.
 - **Tags as a real `lead_tags` table** — today GHL tags land inside `notes` JSON. A dedicated `lead_tags` table would unlock "all leads tagged 'hot-lead'" queries from the Marketing Director chat.
 - **Custom-field mapping UI** — let the user map their GHL custom fields (LTV, lead score, etc.) into specific Lead columns instead of stuffing them into `notes`. Mailchimp-style "field schema" approach.
 - **Reverse-sync write-back for raw contact fields** — today we push CI-side enrichments (status, score, custom fields) but never name/email/phone (GHL still wins on those). A "force CI as source of truth" mode would push those too; needs conflict resolution UX.

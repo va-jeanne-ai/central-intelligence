@@ -129,6 +129,8 @@ export interface TranscriptUploadRequest {
   file_type: TranscriptFileType;
   call_owner?: string;
   call_type?: TranscriptCallType;
+  lead_id?: string;
+  member_id?: string;
 }
 
 export interface TranscriptUploadResponse {

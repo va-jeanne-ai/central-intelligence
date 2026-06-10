@@ -90,6 +90,8 @@ def create_app() -> FastAPI:
     from app.routes.sales import router as sales_router
     from app.routes.fulfillment import router as fulfillment_router
     from app.routes.members import router as members_router
+    from app.routes.appointments import router as appointments_router
+    from app.routes.goals import router as goals_router
     from app.routes.central_intelligence import router as central_intelligence_router
     from app.routes.directors import router as directors_router
     from app.routes.transcribe import router as transcribe_router
@@ -130,6 +132,14 @@ def create_app() -> FastAPI:
     # Resolves to:  GET /api/v1/fulfillment/summary  and  /api/v1/members/*
     app.include_router(fulfillment_router, prefix="/api/v1")
     app.include_router(members_router, prefix="/api/v1")
+
+    # Appointments endpoints under /api/v1.
+    # Resolves to:  GET /api/v1/appointments  and  /api/v1/appointments/*
+    app.include_router(appointments_router, prefix="/api/v1")
+
+    # Goals (accountability) endpoints under /api/v1.
+    # Resolves to:  GET /api/v1/goals  and  /api/v1/goals/*
+    app.include_router(goals_router, prefix="/api/v1")
 
     # Transcription endpoint under /api/v1 (prefix applied here).
     # Resolves to:  POST /api/v1/transcribe

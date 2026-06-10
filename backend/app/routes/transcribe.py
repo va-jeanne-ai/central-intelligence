@@ -161,6 +161,7 @@ async def transcribe_upload(
     file: UploadFile = File(...),
     callType: str | None = Form(default=None),
     leadId: str | None = Form(default=None),
+    memberId: str | None = Form(default=None),
     db: AsyncSession = Depends(get_session),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> TranscribeResponse:
@@ -235,6 +236,22 @@ async def transcribe_upload(
         if exists is None:
             raise HTTPException(status_code=404, detail="Lead not found")
 
+    # Same validation for the optional memberId — coaching calls are logged
+    # against a member, sales calls against a lead. Both are optional and
+    # independent; a call can carry either, both, or neither.
+    member_uuid: uuid.UUID | None = None
+    if memberId:
+        try:
+            member_uuid = uuid.UUID(memberId)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"Invalid memberId: {memberId!r}") from exc
+        exists = (await db.execute(
+            text("SELECT 1 FROM members WHERE id = :id AND deleted_at IS NULL"),
+            {"id": str(member_uuid)},
+        )).scalar_one_or_none()
+        if exists is None:
+            raise HTTPException(status_code=404, detail="Member not found")
+
     call_id = f"CALL_{uuid4().hex[:8].upper()}"
     call = Call(
         id=call_id,
@@ -248,6 +265,7 @@ async def transcribe_upload(
         transcript_source="whisper_upload",
         call_duration_minutes=(duration_seconds / 60.0) if duration_seconds else None,
         lead_id=lead_uuid,
+        member_id=member_uuid,
     )
     db.add(call)
     await db.flush()

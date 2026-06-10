@@ -85,6 +85,24 @@ interface LeadHistoryResponse {
   events: LeadHistoryEvent[];
 }
 
+interface LeadAppointmentRow {
+  id: string;
+  contact_name: string | null;
+  status: string | null;
+  appointment_type: string | null;
+  scheduledAt: string | null;
+  source: string | null;
+}
+
+const APPT_STATUS_DOT: Record<string, string> = {
+  booked: "#3B82F6",
+  confirmed: "#6366F1",
+  showed: "#10B981",
+  "no-show": "#EF4444",
+  cancelled: "#9CA3AF",
+  rescheduled: "#F59E0B",
+};
+
 interface EmailAttachmentMeta {
   filename: string;
   size: number;
@@ -609,6 +627,9 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventRow[]>([]);
   const [isSyncingEvents, setIsSyncingEvents] = useState(false);
 
+  // Appointments booked for this lead (GHL webhook or manual).
+  const [appointments, setAppointments] = useState<LeadAppointmentRow[]>([]);
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -675,6 +696,18 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
     }
   }, [leadId]);
 
+  const loadAppointments = useCallback(async () => {
+    try {
+      const data = await apiClient.get<{
+        appointments: LeadAppointmentRow[];
+        total: number;
+      }>(`/leads/${leadId}/appointments`, { silent: true });
+      setAppointments(data.appointments);
+    } catch {
+      // No appointments yet; degrade silently.
+    }
+  }, [leadId]);
+
   useEffect(() => {
     if (authLoading) return;
     void load();
@@ -682,7 +715,8 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
     void loadEmails();
     void loadDocuments();
     void loadEvents();
-  }, [authLoading, load, loadHistory, loadEmails, loadDocuments, loadEvents]);
+    void loadAppointments();
+  }, [authLoading, load, loadHistory, loadEmails, loadDocuments, loadEvents, loadAppointments]);
 
   // Poll the lead detail every 10s while at least one call is still being
   // analyzed. Once every call has processed_date set, the interval is
@@ -1279,6 +1313,54 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
             </CardBody>
           </Card>
         )}
+
+        {/* Appointments — booked calls/meetings for this lead, from the
+            GHL appointment webhook or manual entry. */}
+        <Card>
+          <CardHeader
+            title="Appointments"
+            action={
+              <span className="text-[11px] text-gray-400">
+                {appointments.length} appointment{appointments.length === 1 ? "" : "s"}
+              </span>
+            }
+          />
+          <CardBody noPadding>
+            {appointments.length === 0 ? (
+              <p className="px-5 py-4 text-[13px] text-gray-400 italic">
+                No appointments booked for this lead yet.
+              </p>
+            ) : (
+              <HistoryList className="py-1">
+                {appointments.map((appt) => (
+                  <HistoryItem
+                    key={appt.id}
+                    dotColor={APPT_STATUS_DOT[(appt.status ?? "").toLowerCase()] ?? "#9CA3AF"}
+                    trailing={
+                      <span
+                        className="text-[11px] text-gray-400"
+                        title={appt.scheduledAt ? formatDate(appt.scheduledAt) : undefined}
+                      >
+                        {appt.scheduledAt ? relativeTime(appt.scheduledAt) : "—"}
+                      </span>
+                    }
+                  >
+                    <div className="text-[13px] font-semibold text-gray-700 truncate">
+                      {appt.appointment_type || "Appointment"}
+                      <span className="ml-2 text-[11px] font-normal text-gray-400 capitalize">
+                        {appt.status ?? ""}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-0.5 truncate">
+                      {appt.scheduledAt ? formatDate(appt.scheduledAt) : "Unscheduled"}
+                      {appt.source && <span className="ml-2">· {appt.source}</span>}
+                    </div>
+                  </HistoryItem>
+                ))}
+              </HistoryList>
+            )}
+          </CardBody>
+        </Card>
 
         {/* Events — Google Calendar events where this lead's email is
             in the attendees list. Populated by the Calendar sync task.
