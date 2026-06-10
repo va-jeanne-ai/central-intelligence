@@ -308,6 +308,10 @@ class Goal(Base, SoftDeleteMixin):
         DateTime(timezone=True), nullable=True
     )
     status: Mapped[str] = mapped_column(String(64), default="active", nullable=False)
+    # Kanban workflow stage — orthogonal to status. todo / in_progress / blocked
+    # / done. Nullable: existing rows + status-only goals have no stage; the
+    # board treats NULL as "To Do".
+    stage: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

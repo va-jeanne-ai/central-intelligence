@@ -27,6 +27,7 @@ class GoalRecord(BaseModel):
     member_name: str | None = None
     goal_text: str | None = None
     status: str | None = None
+    stage: str | None = None
     targetDate: str | None = None  # noqa: N815 — camelCase for frontend binding
     created_at: str | None = None
     overdue: bool = False
@@ -80,6 +81,7 @@ class GoalDetailResponse(BaseModel):
     member_name: str | None = None
     goal_text: str | None = None
     status: str | None = None
+    stage: str | None = None
     target_date: str | None = None
     created_at: str | None = None
     overdue: bool = False
@@ -95,11 +97,13 @@ class CreateGoalRequest(BaseModel):
     goal_text: str = Field(..., min_length=1, max_length=2000)
     target_date: str | None = None
     status: str | None = None  # defaults to 'active' in the route
+    stage: str | None = None   # defaults to 'todo' in the route
 
 
 class UpdateGoalRequest(BaseModel):
     goal_text: str | None = None
     status: str | None = None
+    stage: str | None = None
     target_date: str | None = None
 
 

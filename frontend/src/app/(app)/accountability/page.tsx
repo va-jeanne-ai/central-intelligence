@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GoalModal } from "@/components/goals/goal-modal";
 import type { GoalModalGoal } from "@/components/goals/goal-modal";
+import { GoalBoard } from "@/components/goals/goal-board";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { showSuccess, showApiError } from "@/lib/toast";
@@ -22,10 +23,13 @@ interface GoalRow {
   member_name: string | null;
   goal_text: string | null;
   status: string | null;
+  stage: string | null;
   targetDate: string | null;
   created_at: string | null;
   overdue: boolean;
 }
+
+type View = "table" | "board";
 
 interface GoalsListResponse {
   goals: GoalRow[];
@@ -117,6 +121,18 @@ export default function AccountabilityPage() {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [view, setView] = useState<View>("table");
+
+  // Restore the saved Table/Board preference once on mount.
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem("accountability_view") : null;
+    if (saved === "board" || saved === "table") setView(saved);
+  }, []);
+
+  const changeView = useCallback((v: View) => {
+    setView(v);
+    if (typeof window !== "undefined") window.localStorage.setItem("accountability_view", v);
+  }, []);
 
   const [showAdd, setShowAdd] = useState(false);
   const [editGoal, setEditGoal] = useState<GoalModalGoal | null>(null);
@@ -225,9 +241,26 @@ export default function AccountabilityPage() {
             <h1 className="text-xl font-bold text-gray-900">Accountability</h1>
             <p className="text-sm text-gray-500 mt-0.5">Track member goals, progress, and overdue commitments.</p>
           </div>
-          <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
-            + Add Goal
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Table / Board toggle */}
+            <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+              {(["table", "board"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => changeView(v)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                    view === v ? "bg-orange-100 text-orange-700" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {v === "table" ? "Table" : "Board"}
+                </button>
+              ))}
+            </div>
+            <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
+              + Add Goal
+            </Button>
+          </div>
         </div>
 
         {/* KPI Row */}
@@ -292,6 +325,11 @@ export default function AccountabilityPage() {
                 </label>
               </div>
 
+              {view === "board" ? (
+                <div className="p-4">
+                  <GoalBoard goals={listData.goals} onChanged={refresh} />
+                </div>
+              ) : (
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
@@ -377,6 +415,7 @@ export default function AccountabilityPage() {
                   )}
                 </tbody>
               </table>
+              )}
             </div>
           </div>
         </div>

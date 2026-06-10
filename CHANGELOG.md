@@ -6,6 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Goals kanban board (Accountability)
+
+A Table / Board view toggle on `/accountability` with drag-and-drop across kanban stages.
+
+- `goals.stage` column (todo/in_progress/blocked/done) + migration (`cd767c18679b`). **Independent of `status`** (active/completed/abandoned) — orthogonal workflow dimension; `compute_goal_stats` (KPIs/funnel) stays status-based.
+- `app/schemas/goals.py` + `app/routes/goals.py` thread `stage` through list/detail/create (defaults `todo`)/PATCH (audited `goal.stage_changed`); new `GET /goals?stage=` filter.
+- `components/goals/goal-board.tsx` — dnd-kit board (4 columns; cards show member/goal/status/overdue/target). Dragging a card optimistically moves it then `PATCH /goals/{id}` with the new stage; reverts on error.
+- `(app)/accountability/page.tsx` — Table/Board toggle (persisted to localStorage); same KPIs/funnel/filters apply to both. Added `@dnd-kit/core` + `@dnd-kit/utilities`.
+
 ### Added — Accountability (Goal tracking)
 
 Wires the dead `/accountability` sidebar link to a goal-tracking dashboard (Sprint 6 F03). Built on the existing `Goal` model — no migration. Goals also still arrive via the CI insight-sync bridge (`insight_type='Goal'`); manual CRUD is additive.
