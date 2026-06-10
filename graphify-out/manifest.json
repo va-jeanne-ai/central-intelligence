@@ -170,8 +170,8 @@
     "semantic_hash": ""
   },
   "backend/app/agents/specialists/leads.py": {
-    "mtime": 1780567382.394191,
-    "ast_hash": "b8a0b8544e31661eaf30c9e425808075",
+    "mtime": 1780946303.1975594,
+    "ast_hash": "dedac97901fc1410e315bd2eca6db2b0",
     "semantic_hash": ""
   },
   "backend/app/agents/specialists/offers.py": {
@@ -220,8 +220,8 @@
     "semantic_hash": ""
   },
   "backend/app/main.py": {
-    "mtime": 1780928875.919433,
-    "ast_hash": "2aa5f85e68b13c5508bc45569e878110",
+    "mtime": 1781072517.694641,
+    "ast_hash": "e4292359a3dec7b4b04ba220bbff78a3",
     "semantic_hash": ""
   },
   "backend/app/middleware/__init__.py": {
@@ -230,8 +230,8 @@
     "semantic_hash": ""
   },
   "backend/app/middleware/auth.py": {
-    "mtime": 1780928881.4175873,
-    "ast_hash": "ee06caad0c16190d1703b96a1de223b5",
+    "mtime": 1781072524.9943254,
+    "ast_hash": "5f2e5969c901db596cd59834fa59fdf9",
     "semantic_hash": ""
   },
   "backend/app/middleware/optimistic_lock.py": {
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/__init__.py": {
-    "mtime": 1780927200.1573792,
-    "ast_hash": "0df11e7f5e6698a2d4b3b19d7db446f2",
+    "mtime": 1780944434.9762628,
+    "ast_hash": "022952bf7ab7f774e4fa50190fd6a8bf",
     "semantic_hash": ""
   },
   "backend/app/models/audit.py": {
@@ -280,8 +280,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/operational.py": {
-    "mtime": 1780927176.0403235,
-    "ast_hash": "3fe6c45fdb8a1a04a2c149165b70e00a",
+    "mtime": 1780944416.399885,
+    "ast_hash": "9010aef1c56b15fc8afca0e94dbe8937",
     "semantic_hash": ""
   },
   "backend/app/prompts/__init__.py": {
@@ -440,8 +440,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/ci.py": {
-    "mtime": 1779294061.216371,
-    "ast_hash": "46669ac15c092eb1bca793dd95ba694d",
+    "mtime": 1781070442.5218549,
+    "ast_hash": "dbbf426424d3b86a20a836e5a51ac3b9",
     "semantic_hash": ""
   },
   "backend/app/routes/dashboard.py": {
@@ -485,8 +485,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/leads.py": {
-    "mtime": 1780567246.7652025,
-    "ast_hash": "6c04567fd095978614c22f3c386b54ea",
+    "mtime": 1780946098.0188804,
+    "ast_hash": "c5ad626ac4cf5623792cfa2e8de11416",
     "semantic_hash": ""
   },
   "backend/app/routes/marketing.py": {
@@ -510,8 +510,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/sales.py": {
-    "mtime": 1780567440.596694,
-    "ast_hash": "82b2ec5c2d8c861087ed34ed91e612c4",
+    "mtime": 1780946326.254748,
+    "ast_hash": "815a8e91a1fe82f2f2739ca3a3a43647",
     "semantic_hash": ""
   },
   "backend/app/routes/social.py": {
@@ -520,13 +520,13 @@
     "semantic_hash": ""
   },
   "backend/app/routes/transcribe.py": {
-    "mtime": 1779627031.3282225,
-    "ast_hash": "50a672248dfe168636055df211911f4b",
+    "mtime": 1781070141.178301,
+    "ast_hash": "a53fbf876f7d85706e85b17cc787f8d6",
     "semantic_hash": ""
   },
   "backend/app/routes/webhooks.py": {
-    "mtime": 1779635131.3210618,
-    "ast_hash": "6fb1d8fb9c480f1bbcb7ef2119447155",
+    "mtime": 1780945591.3224263,
+    "ast_hash": "24c710999bf0f39c17a6bf3967413eb6",
     "semantic_hash": ""
   },
   "backend/app/schemas/__init__.py": {
@@ -555,8 +555,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/ci.py": {
-    "mtime": 1779293991.684,
-    "ast_hash": "ac4f3d74a12302775878f4678d7173d1",
+    "mtime": 1781070429.867997,
+    "ast_hash": "3ba74ec4ffd2c50bfc7187cb518e2be1",
     "semantic_hash": ""
   },
   "backend/app/schemas/common.py": {
@@ -665,8 +665,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/ghl_upsert.py": {
-    "mtime": 1779635324.8221858,
-    "ast_hash": "e3157404d4c08342108ab5a7ca2f77c5",
+    "mtime": 1780945157.817818,
+    "ast_hash": "c461c3d0f93716a9fe82cc8afb792915",
     "semantic_hash": ""
   },
   "backend/app/services/gmail_client.py": {
@@ -925,8 +925,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/leads/[lead_id]/page.tsx": {
-    "mtime": 1779956150.374909,
-    "ast_hash": "1e8caa88142ec0b53e80060c1f13eef5",
+    "mtime": 1780946854.8212595,
+    "ast_hash": "c670e431e82ed5f34b9f02187184396b",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/leads/page.tsx": {
@@ -1190,8 +1190,8 @@
     "semantic_hash": ""
   },
   "frontend/src/components/layout/sidebar.tsx": {
-    "mtime": 1780929111.0927567,
-    "ast_hash": "5ae6173876dd0164c12f3ecc392864e3",
+    "mtime": 1780934429.3713002,
+    "ast_hash": "c4305d3277568985efdc6562fc0aed56",
     "semantic_hash": ""
   },
   "frontend/src/components/providers.tsx": {
@@ -1285,8 +1285,8 @@
     "semantic_hash": ""
   },
   "frontend/src/components/upload/transcript-upload-widget.tsx": {
-    "mtime": 1779632293.7491157,
-    "ast_hash": "cafbb9dfe9802038987323675984d967",
+    "mtime": 1781070479.5937524,
+    "ast_hash": "ee88304590a46b9e9ca3ca0aca2d488a",
     "semantic_hash": ""
   },
   "frontend/src/contexts/auth-context.tsx": {
@@ -1380,8 +1380,8 @@
     "semantic_hash": ""
   },
   "frontend/src/types/index.ts": {
-    "mtime": 1779959086.7397132,
-    "ast_hash": "cb67685e6596cf1ad7ca4510194bcd72",
+    "mtime": 1781070458.5731556,
+    "ast_hash": "a2861d5d0789c5e8599c6c753758e0c3",
     "semantic_hash": ""
   },
   "frontend/tailwind.config.ts": {
@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1780929147.4571636,
-    "ast_hash": "fe17d9ce74e81029142a01263c1edae6",
+    "mtime": 1781073077.2515829,
+    "ast_hash": "8bae1511911b2cb3da0071ce87ba20ec",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1445,8 +1445,8 @@
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1779956383.505379,
-    "ast_hash": "b952b88f83b17805a255c155b1aec63a",
+    "mtime": 1780947692.4274201,
+    "ast_hash": "9a2c99d32ef2df2f97f8904547652b48",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
@@ -1660,8 +1660,8 @@
     "semantic_hash": ""
   },
   "backend/app/agents/specialists/members.py": {
-    "mtime": 1780928277.2509055,
-    "ast_hash": "e7286ec5821d58b2fe4557d389479e64",
+    "mtime": 1781072550.1758506,
+    "ast_hash": "3fa7774ab110fc21907bf626430be9cc",
     "semantic_hash": ""
   },
   "backend/app/prompts/coaching_analyzer_v1.py": {
@@ -1685,13 +1685,13 @@
     "semantic_hash": ""
   },
   "backend/app/routes/members.py": {
-    "mtime": 1780928497.6669858,
-    "ast_hash": "ac6a67518be235a083ca5e432332b203",
+    "mtime": 1780932037.2874148,
+    "ast_hash": "f077220eb80a785dbb8ef566cbb26ab9",
     "semantic_hash": ""
   },
   "backend/app/schemas/members.py": {
-    "mtime": 1780928403.8711286,
-    "ast_hash": "6721d9d77c36ba425a4d8e619adda376",
+    "mtime": 1780932007.7494495,
+    "ast_hash": "b5bdabab1b9ddc0a5845050f39b545f6",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/fulfillment-director/page.tsx": {
@@ -1705,18 +1705,78 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/members/[member_id]/page.tsx": {
-    "mtime": 1780929646.4663382,
-    "ast_hash": "6009d5ea3de7721b0d1681d7045a6678",
+    "mtime": 1781072968.3206418,
+    "ast_hash": "d89c490da98b23df1944a828b7d84b10",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/members/page.tsx": {
-    "mtime": 1780929190.4311473,
-    "ast_hash": "e4299406b0b2545c46a30f03965631c5",
+    "mtime": 1780932155.3814576,
+    "ast_hash": "255d871c41b5742662cad8b8ebbb91e5",
     "semantic_hash": ""
   },
   "frontend/src/components/chat/fulfillment-director-chat-view.tsx": {
     "mtime": 1780929010.1302192,
     "ast_hash": "1a1ad1d9b85117e8c592f3918c39724e",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/ca825332c707_add_appointments_table.py": {
+    "mtime": 1780944567.9880934,
+    "ast_hash": "ac76e6624259854cd54cf4f3cac13184",
+    "semantic_hash": ""
+  },
+  "backend/app/repositories/appointment_stats.py": {
+    "mtime": 1780945796.4864953,
+    "ast_hash": "14123e0e7131e502b17ac25c37844591",
+    "semantic_hash": ""
+  },
+  "backend/app/routes/appointments.py": {
+    "mtime": 1780946070.69408,
+    "ast_hash": "ac0985d69d6f0f091bbd7cd311f7c167",
+    "semantic_hash": ""
+  },
+  "backend/app/schemas/appointments.py": {
+    "mtime": 1780946007.155196,
+    "ast_hash": "3dd0a6bd6c9965f97e944cecca370be3",
+    "semantic_hash": ""
+  },
+  "frontend/src/app/(app)/appointments/page.tsx": {
+    "mtime": 1780946787.942206,
+    "ast_hash": "5d751f70136555d959c444a12110f506",
+    "semantic_hash": ""
+  },
+  "frontend/src/app/(app)/coaching-calls/[call_id]/page.tsx": {
+    "mtime": 1781070657.088949,
+    "ast_hash": "0a50ea0d3bd9e7f2a36073ecf3568c80",
+    "semantic_hash": ""
+  },
+  "frontend/src/app/(app)/coaching-calls/page.tsx": {
+    "mtime": 1781070564.5083,
+    "ast_hash": "cfbcd5ef58a29810636428750e8fd55c",
+    "semantic_hash": ""
+  },
+  "backend/app/repositories/goal_stats.py": {
+    "mtime": 1781072370.6743875,
+    "ast_hash": "ee5242dd5fb297eadf6b3391951a1851",
+    "semantic_hash": ""
+  },
+  "backend/app/routes/goals.py": {
+    "mtime": 1781072500.4995246,
+    "ast_hash": "9744f305beb52ee54d8a03fe5db19b97",
+    "semantic_hash": ""
+  },
+  "backend/app/schemas/goals.py": {
+    "mtime": 1781072423.4130003,
+    "ast_hash": "6895bd7ca44eabd2eaa75ef6d5b6eb07",
+    "semantic_hash": ""
+  },
+  "frontend/src/app/(app)/accountability/page.tsx": {
+    "mtime": 1781072830.0174658,
+    "ast_hash": "0386d34aa76044234df3ac7254c8b3f0",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/goals/goal-modal.tsx": {
+    "mtime": 1781072779.5295045,
+    "ast_hash": "979f66a89c972a8aedaf6356eadda186",
     "semantic_hash": ""
   }
 }
