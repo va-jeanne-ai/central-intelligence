@@ -6,6 +6,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Market Signals aggregation job
+
+Fills the missing engine for `market_signals` (handover §3.6): the table, read API, and UI surfaces existed, but nothing ever populated it from `insights`. Now a scheduled job recomputes it so the trend dashboards (`/ci-market-signals`, the Marketing Director's `get_market_signals` tool, `/marketing/summary`) show live data.
+
+- `app/tasks/market_signals.py` — `update_market_signals` Celery task. Recomputes (not increments) from `insights` grouped by `(signal_family, signal)`: `total_mentions` + rolling `last_30_days`/`last_7_days` (windows must decay, so a full recompute each run), most-frequent `insight_type`, and the newest `raw_quote`/`call_id` as the example. Single `INSERT ... ON CONFLICT` upsert that **preserves the human-curated `best_marketing_angle`/`notes`**. Idempotent; no-ops cleanly on empty insights (never wipes the table).
+- `app/models/intelligence.py` + migration `c4049d9dcf4c` — unique constraint `uq_market_signals_family_signal` on `(signal_family, signal)` (the aggregation key for `ON CONFLICT`).
+- `app/tasks/celery_app.py` — task added to the worker include list + a `market-signals-hourly` beat entry (recompute hourly at :35).
+- `app/routes/ci.py` — `POST /ci/market-signals/refresh` enqueues the job on demand (mirrors the GHL sync button).
+
+No frontend change — the existing read surfaces light up once the job populates the table. Zero API cost (pure SQL aggregation).
+
 ### Added — Tech SOS (Fulfillment support tickets, F04)
 
 Wires the last unbuilt Fulfillment sidebar link (`/tech-sos`) to a member support-ticket tracker. Greenfield (new table). AI categorization deferred (F04-2) — category is staff-set for now.

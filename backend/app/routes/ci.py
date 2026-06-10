@@ -955,6 +955,29 @@ async def list_market_signals(
 
 
 # ===================================================================
+# 9b. POST /ci/market-signals/refresh — on-demand recompute
+# ===================================================================
+
+
+@router.post("/market-signals/refresh", status_code=202)
+async def refresh_market_signals() -> dict:
+    """Enqueue the market-signals recompute job (aggregates insights → market_signals).
+
+    Mirrors the GHL on-demand sync pattern. The job also runs hourly via Celery
+    beat; this lets staff force an immediate refresh. Returns the task id when the
+    broker is reachable, otherwise a graceful "unavailable" status.
+    """
+    try:
+        from app.tasks.market_signals import update_market_signals
+
+        task = update_market_signals.delay()
+        return {"task_id": task.id, "status": "queued"}
+    except Exception as exc:  # noqa: BLE001 — broker/redis may be down; don't 500
+        logger.warning("refresh_market_signals: enqueue failed — %s", exc)
+        return {"task_id": None, "status": "unavailable"}
+
+
+# ===================================================================
 # 10. GET /ci/tags
 # ===================================================================
 

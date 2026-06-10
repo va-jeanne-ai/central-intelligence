@@ -8,7 +8,18 @@ import type { CIMarketSignal, CIMarketSignalsResponse } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const INSIGHT_TYPES = ["All", "Pain", "Objection", "Goal"] as const;
+// value = the raw insight_type stored on insights/market_signals (lowercase,
+// AI-coined); label = a human-friendly display. "All" is the no-filter sentinel.
+const INSIGHT_TYPES: { value: string; label: string }[] = [
+  { value: "All", label: "All" },
+  { value: "pain_point", label: "Pain Point" },
+  { value: "win", label: "Win" },
+  { value: "objection", label: "Objection" },
+  { value: "goal", label: "Goal" },
+  { value: "belief", label: "Belief" },
+  { value: "identity", label: "Identity" },
+  { value: "buying_signal", label: "Buying Signal" },
+];
 
 type SortBy = "total_mentions" | "last_30_days" | "last_7_days";
 
@@ -187,8 +198,8 @@ function FilterBar({
           className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
         >
           {INSIGHT_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
+            <option key={t.value} value={t.value}>
+              {t.label}
             </option>
           ))}
         </select>
