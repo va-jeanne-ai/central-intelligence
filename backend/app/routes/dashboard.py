@@ -48,6 +48,8 @@ from app.schemas.dashboard import (
     RecommendationItem,
     RecommendationsResponse,
     StatCard,
+    WeeklyFocusItem,
+    WeeklyFocusResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -367,6 +369,12 @@ async def get_dashboard_stats(
 # same process; intentionally not shared across workers).
 _recommendations_cache: dict = {"data": None, "timestamp": 0}
 _CACHE_TTL_SECONDS = 900  # 15 minutes
+
+# Weekly-focus runs Central Intelligence, which fans out to all three Directors
+# (several chained Claude calls) — so it is cached more aggressively than the
+# recommendations endpoint to avoid re-running that fan-out on every load.
+_weekly_focus_cache: dict = {"data": None, "timestamp": 0}
+_WEEKLY_FOCUS_TTL_SECONDS = 900  # 15 minutes
 
 RECOMMENDATIONS_PROMPT = """You are Central Intelligence, the AI business intelligence for a coaching/consulting business.
 
@@ -720,5 +728,223 @@ async def get_dashboard_recommendations() -> RecommendationsResponse:
     # Store in cache
     _recommendations_cache["data"] = payload
     _recommendations_cache["timestamp"] = now
+
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# Weekly Focus — Central Intelligence cross-department synthesis
+# ---------------------------------------------------------------------------
+
+# The fixed instruction we send Central Intelligence for the dashboard panel.
+# We ask for STRICT JSON so the panel can render structured priorities. The CI
+# system prompt forbids exposing internal machinery, so the prose inside each
+# item reads as a single CEO's synthesis — exactly what we want here.
+_WEEKLY_FOCUS_PROMPT = (
+    "Looking across the whole business — marketing, sales, and fulfillment — "
+    "what are the 3 to 4 most important things we should focus on this week? "
+    "Consult each department, then synthesize ONE prioritized list, most "
+    "important first. Back each focus item with a real number where you can.\n\n"
+    "Respond with ONLY a JSON object, no prose before or after, in this exact "
+    "shape:\n"
+    '{"summary": "<one-sentence headline of the week\'s single biggest priority>", '
+    '"focus": [{"title": "<short imperative title>", "detail": "<1-2 sentence '
+    'explanation with a number>"}]}'
+)
+
+
+def _extract_json_object(raw: str) -> dict:
+    """Pull the first JSON object out of an LLM response, tolerating stray prose.
+
+    CI is instructed to return bare JSON, but models occasionally wrap it in a
+    sentence or a ```json fence. Slice from the first ``{`` to the last ``}``.
+    """
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise ValueError(f"No JSON object found in response: {raw[:200]}")
+    return json.loads(raw[start : end + 1])
+
+
+async def _run_central_intelligence_weekly_focus() -> tuple[list[WeeklyFocusItem], str]:
+    """Run Central Intelligence once for the weekly-focus question.
+
+    Returns (focus_items, summary). Raises on any failure — the caller falls
+    back to deterministic output. CI fans out to the three Directors via its
+    delegate tools, so this triggers several chained Claude calls (hence the
+    aggressive cache on the endpoint).
+    """
+    # Imported lazily so the dashboard module doesn't pull the whole agent stack
+    # at import time (and to mirror how the WS route constructs CI on demand).
+    from app.agents.central_intelligence import CentralIntelligence
+
+    ci = CentralIntelligence()
+    result = await ci.execute(_WEEKLY_FOCUS_PROMPT)
+    parsed = _extract_json_object(result.get("response", ""))
+
+    raw_items = parsed.get("focus", [])
+    if not isinstance(raw_items, list) or not raw_items:
+        raise ValueError("CI weekly-focus returned no focus items")
+
+    items: list[WeeklyFocusItem] = []
+    for item in raw_items[:4]:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title", "")).strip()
+        detail = str(item.get("detail", "")).strip()
+        if title:
+            items.append(WeeklyFocusItem(title=title, detail=detail))
+
+    if not items:
+        raise ValueError("CI weekly-focus produced no usable items")
+
+    return items, str(parsed.get("summary", "")).strip()
+
+
+def _fallback_weekly_focus(metrics: dict) -> tuple[list[WeeklyFocusItem], str]:
+    """Deterministic weekly-focus from raw metrics — no Claude, no Directors.
+
+    Used when no API key is configured or the CI run fails. Mirrors the
+    deterministic recommendations fallback so the dashboard always renders.
+    """
+    items: list[WeeklyFocusItem] = []
+
+    stale = metrics.get("stale_leads", {})
+    stale_count = int(stale.get("count", 0) or 0)
+    avg_days = int(stale.get("avg_age_days", 0) or 0)
+    if stale_count > 0:
+        items.append(
+            WeeklyFocusItem(
+                title="Work the stale pipeline",
+                detail=(
+                    f"{stale_count} lead{'s' if stale_count != 1 else ''} have gone quiet"
+                    + (f" (avg {avg_days} days)" if avg_days else "")
+                    + ". Re-engage them before they go cold."
+                ),
+            )
+        )
+
+    pipeline = metrics.get("pipeline_by_status", {})
+    qualified = int(pipeline.get("qualified", 0) or 0)
+    appt = int(pipeline.get("appointment-set", 0) or 0)
+    if qualified or appt:
+        items.append(
+            WeeklyFocusItem(
+                title="Convert qualified leads",
+                detail=(
+                    f"{qualified} qualified and {appt} with appointments booked — "
+                    "prioritize moving these toward close this week."
+                ),
+            )
+        )
+
+    members = metrics.get("members_by_status", {})
+    active_members = int(members.get("active", 0) or 0)
+    if active_members:
+        items.append(
+            WeeklyFocusItem(
+                title="Keep members on track",
+                detail=(
+                    f"{active_members} active member{'s' if active_members != 1 else ''} — "
+                    "check coaching cadence and accountability goals so nobody slips."
+                ),
+            )
+        )
+
+    pains = metrics.get("top_pain_points", [])
+    if pains:
+        top = pains[0].get("description", "")
+        items.append(
+            WeeklyFocusItem(
+                title="Turn pain points into content",
+                detail=(
+                    f"The most common theme on calls is \"{top}\". "
+                    "Build a marketing angle around it."
+                ),
+            )
+        )
+
+    if not items:
+        items.append(
+            WeeklyFocusItem(
+                title="Build pipeline",
+                detail="Things are quiet across the board — focus on lead generation this week.",
+            )
+        )
+
+    summary = items[0].detail
+    return items[:4], summary
+
+
+@router.get(
+    "/dashboard/weekly-focus",
+    response_model=WeeklyFocusResponse,
+    summary="Cross-department weekly focus (Central Intelligence)",
+    description=(
+        "Runs Central Intelligence once with a fixed 'what should we focus on "
+        "this week?' question. CI delegates to the Marketing, Sales, and "
+        "Fulfillment Directors and synthesizes a single prioritized list. "
+        "Results are cached in-memory for 15 minutes because the run fans out "
+        "to all three Directors (several chained model calls). Falls back to "
+        "deterministic priorities when no API key is configured."
+    ),
+)
+async def get_dashboard_weekly_focus() -> WeeklyFocusResponse:
+    """Return Central Intelligence's synthesized cross-department weekly focus."""
+
+    now = time.monotonic()
+
+    if (
+        _weekly_focus_cache["data"] is not None
+        and (now - _weekly_focus_cache["timestamp"]) < _WEEKLY_FOCUS_TTL_SECONDS
+    ):
+        logger.debug("Serving weekly-focus from cache")
+        cached: WeeklyFocusResponse = _weekly_focus_cache["data"]
+        return WeeklyFocusResponse(
+            focus=cached.focus,
+            summary=cached.summary,
+            generated_at=cached.generated_at,
+            cached=True,
+        )
+
+    generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    used_ai = False
+
+    if settings.anthropic_api_key:
+        try:
+            focus, summary = await _run_central_intelligence_weekly_focus()
+            used_ai = True
+        except Exception:
+            logger.exception(
+                "Central Intelligence weekly-focus run failed — falling back to deterministic output"
+            )
+            async with AsyncSessionLocal() as session:
+                try:
+                    metrics = await _query_recommendation_metrics(session)
+                except Exception:
+                    logger.exception("Failed to query weekly-focus fallback metrics")
+                    metrics = {}
+            focus, summary = _fallback_weekly_focus(metrics)
+    else:
+        logger.debug("anthropic_api_key not configured — using deterministic weekly focus")
+        async with AsyncSessionLocal() as session:
+            try:
+                metrics = await _query_recommendation_metrics(session)
+            except Exception:
+                logger.exception("Failed to query weekly-focus fallback metrics")
+                metrics = {}
+        focus, summary = _fallback_weekly_focus(metrics)
+
+    logger.info("Weekly focus generated — ai=%s items=%d", used_ai, len(focus))
+
+    payload = WeeklyFocusResponse(
+        focus=focus,
+        summary=summary,
+        generated_at=generated_at,
+        cached=False,
+    )
+
+    _weekly_focus_cache["data"] = payload
+    _weekly_focus_cache["timestamp"] = now
 
     return payload

@@ -6,6 +6,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Central Intelligence cross-department delegation (Sprint 8)
+
+Connects the top-level Central Intelligence chat agent to the three department Directors so it can finally answer cross-department questions ("what should we focus on this week?") with real Sales/Marketing/Fulfillment intelligence. Previously CI's only tools were `query_database`/`search_knowledge_base`/`query_calendar`, and its prompt admitted Directors weren't connected.
+
+**Strict hierarchy (deliberate invariant):** delegation flows strictly **down** — CI → Director → specialists. CI is the *only* cross-department agent; **Directors never delegate to each other** (enforced by omission — no peer-delegate tools are added to any Director, verified in tests). Specialists stay department-scoped.
+
+#### Backend
+- `app/agents/central_intelligence.py` — three new delegate tools: `delegate_to_marketing_director`, `delegate_to_sales_director`, `delegate_to_fulfillment_director` (CI now registers 6 tools). Each handler opens a **fresh `AsyncSessionLocal()`**, builds the Director on the spot, runs `director.execute(task)`, and returns its prose. Directors must be built per-call because CI is a long-lived per-session object while DB sessions are per-request — a Director held at `__init__` would carry a stale, closed session. Handlers are error-resilient (return a short JSON error string instead of crashing the CI tool loop).
+- `app/prompts/central_intelligence_v1.py` — removed the false "Directors are not yet connected" limitation; added a **Delegating to Directors** section: a routing table (which Director per topic), scoped-vs-broad guidance (one Director for a scoped question; all three + synthesize for strategy), and a cross-department optimization framework (leads not being worked, fulfillment at capacity → pause sales, recurring call pain → content angle, member wins → proof). Existing secrecy guardrails retained (never name a Director/specialist/tool; present as one CEO synthesis).
+- `app/routes/dashboard.py` + `app/schemas/dashboard.py` — `GET /dashboard/weekly-focus`: runs CI once with a fixed "what should we focus on this week?" prompt (asks for strict JSON), returns `{focus:[{title,detail}], summary, generated_at, cached}`. **Cached 15 min** because each run fans out to all three Directors (several chained model calls), and falls back to deterministic priorities (from the recommendation-metrics queries) when no API key is configured or the CI run fails. JSON extraction tolerates stray prose/fences.
+
+#### Frontend
+- `frontend/src/components/dashboard/weekly-focus.tsx` — new "This Week's Focus" panel (indigo CI accent matching `CIWidget`): fetches `/dashboard/weekly-focus` with the `apiClient.get(..., {silent:true})` + `authLoading` pattern, renders the synthesized summary + numbered priority list, with skeleton and graceful empty state.
+- `frontend/src/app/(app)/dashboard/page.tsx` — renders `WeeklyFocus` as a full-width row above the existing snapshot/recommendations row; added a matching skeleton bar.
+
+No migration, no new agent classes, no Director changes. Real-AI path (CI → 3 Directors → specialists) incurs app-key spend and is gated behind the 15-min cache; verified structurally with zero API cost (6-tool registration, Director isolation, deterministic weekly-focus fallback, tolerant JSON parse).
+
 ### Added — Market Signals aggregation job
 
 Fills the missing engine for `market_signals` (handover §3.6): the table, read API, and UI surfaces existed, but nothing ever populated it from `insights`. Now a scheduled job recomputes it so the trend dashboards (`/ci-market-signals`, the Marketing Director's `get_market_signals` tool, `/marketing/summary`) show live data.
