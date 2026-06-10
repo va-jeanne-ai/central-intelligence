@@ -42,6 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.repositories.sales_stats import compute_lead_stats
+from app.schemas.appointments import AppointmentRecord, LeadAppointmentsResponse
 from app.schemas.leads import (
     CreateNoteRequest,
     DocumentRow,
@@ -929,6 +930,52 @@ async def get_lead_events(
         for r in rows_sorted
     ]
     return CalendarEventsResponse(events=events, total=len(events))
+
+
+@router.get("/leads/{lead_id}/appointments", response_model=LeadAppointmentsResponse)
+async def get_lead_appointments(
+    lead_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> LeadAppointmentsResponse:
+    """Return appointments booked for this lead, soonest-scheduled first."""
+    uid = _parse_lead_uuid(lead_id)
+
+    exists = (await session.execute(
+        text("SELECT 1 FROM leads WHERE id = :id AND deleted_at IS NULL"),
+        {"id": str(uid)},
+    )).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    rows = (await session.execute(
+        text(
+            """
+            SELECT id::text AS id, contact_name, contact_email,
+                   lead_id::text AS lead_id, member_id::text AS member_id,
+                   status, appointment_type, scheduled_at, source
+            FROM appointments
+            WHERE lead_id = :id AND deleted_at IS NULL
+            ORDER BY scheduled_at DESC NULLS LAST
+            """
+        ),
+        {"id": str(uid)},
+    )).mappings().all()
+
+    appointments = [
+        AppointmentRecord(
+            id=r["id"],
+            contact_name=r["contact_name"],
+            contact_email=r["contact_email"],
+            lead_id=r["lead_id"],
+            member_id=r["member_id"],
+            status=r["status"],
+            appointment_type=r["appointment_type"],
+            scheduledAt=r["scheduled_at"].isoformat() if r["scheduled_at"] else None,
+            source=r["source"],
+        )
+        for r in rows
+    ]
+    return LeadAppointmentsResponse(appointments=appointments, total=len(appointments))
 
 
 @router.post("/leads/{lead_id}/sync-events", status_code=202)

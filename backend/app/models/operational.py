@@ -114,6 +114,9 @@ class Member(Base, TimestampMixin, SoftDeleteMixin):
     pain_points: Mapped[list["PainPoint"]] = relationship(
         "PainPoint", back_populates="member", lazy="select"
     )
+    staff_notes: Mapped[list["MemberNote"]] = relationship(
+        "MemberNote", back_populates="member", lazy="select"
+    )
 
 
 class Call(Base, SoftDeleteMixin):
@@ -305,6 +308,10 @@ class Goal(Base, SoftDeleteMixin):
         DateTime(timezone=True), nullable=True
     )
     status: Mapped[str] = mapped_column(String(64), default="active", nullable=False)
+    # Kanban workflow stage — orthogonal to status. todo / in_progress / blocked
+    # / done. Nullable: existing rows + status-only goals have no stage; the
+    # board treats NULL as "To Do".
+    stage: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -484,6 +491,146 @@ class LeadNote(Base):
     )
 
     lead: Mapped["Lead"] = relationship("Lead", back_populates="staff_notes")
+
+
+class MemberNote(Base):
+    """Append-only staff journal entry attached to a Member.
+
+    Mirrors ``LeadNote`` for the fulfillment side. Each row is one
+    staff-side observation/reminder, displayed as a timeline on the
+    member detail page. Most recent first.
+    """
+
+    __tablename__ = "member_notes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    member_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("members.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Nullable: covers system-generated notes, mock-mode posts, and rows
+    # whose author was later deleted (FK is SET NULL).
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    member: Mapped["Member"] = relationship("Member", back_populates="staff_notes")
+
+
+class Appointment(Base, TimestampMixin, SoftDeleteMixin):
+    """A booked call / meeting with a prospect (lead) or member.
+
+    Fed by the inbound GHL appointment webhook (book/reschedule/cancel) and by
+    manual entry. ``lead_id`` / ``member_id`` are best-effort links (both
+    nullable) — a webhook for an unknown contact still renders via the
+    de-normalised contact snapshot. ``external_id`` is the GHL appointment id
+    (dedup key for webhook upserts). ``notes`` holds the raw GHL payload JSON
+    for webhook rows, or free text for manual rows.
+    """
+
+    __tablename__ = "appointments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("leads.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    member_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("members.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Contact snapshot — so a webhook with no matching lead/member still renders.
+    contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # booked / confirmed / showed / no-show / cancelled / rescheduled
+    status: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    appointment_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    scheduled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(128), nullable=True)  # 'ghl' | 'manual'
+    external_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True
+    )  # GHL appointment id — dedup key
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Relationships
+    lead: Mapped["Lead | None"] = relationship("Lead", lazy="select")
+    member: Mapped["Member | None"] = relationship("Member", lazy="select")
+
+
+class SupportTicket(Base, TimestampMixin, SoftDeleteMixin):
+    """A member tech-support ticket (Tech SOS).
+
+    Raised by staff on a member's behalf, or via the public submit endpoint
+    (a future member form). ``member_id`` is best-effort; the contact snapshot
+    lets a ticket render even when no member matches. ``category`` is staff-set
+    for now (AI categorization is a later add).
+    """
+
+    __tablename__ = "support_tickets"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    member_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("members.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # login / billing / video / portal / access / other
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # open / in_progress / resolved / closed
+    status: Mapped[str] = mapped_column(String(32), default="open", nullable=False, index=True)
+    # low / normal / high
+    priority: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(32), nullable=True)  # 'staff' | 'submit'
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Relationships
+    member: Mapped["Member | None"] = relationship("Member", lazy="select")
 
 
 class EmailThread(Base):

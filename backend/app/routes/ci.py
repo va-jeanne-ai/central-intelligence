@@ -153,6 +153,21 @@ async def upload_transcript(
     transcript_text = decoded.decode("utf-8", errors="replace")
     call_id = f"CALL_{uuid.uuid4().hex[:12].upper()}"
 
+    # Optional entity links (best-effort: ignore malformed UUIDs rather than
+    # 400, matching the POST /ci/calls create-from-transcript behaviour).
+    lead_uuid: uuid.UUID | None = None
+    if body.lead_id:
+        try:
+            lead_uuid = uuid.UUID(body.lead_id)
+        except ValueError:
+            lead_uuid = None
+    member_uuid: uuid.UUID | None = None
+    if body.member_id:
+        try:
+            member_uuid = uuid.UUID(body.member_id)
+        except ValueError:
+            member_uuid = None
+
     call_repo = CallRepository(session)
     await call_repo.create(
         id=call_id,
@@ -161,6 +176,8 @@ async def upload_transcript(
         transcript_source="ci_upload",
         transcript_text=transcript_text,
         date=datetime.now(timezone.utc),
+        lead_id=lead_uuid,
+        member_id=member_uuid,
     )
 
     return UploadTranscriptResponse(

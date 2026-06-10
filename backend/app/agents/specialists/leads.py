@@ -94,6 +94,28 @@ class LeadsSpecialist(SpecialistAgent):
             handler=self._handle_get_lead_list,
         )
 
+        self.register_tool(
+            name="get_appointments",
+            description=(
+                "Get booked appointments. Returns appointment KPIs (total, "
+                "upcoming this week, show rate, no-show rate) plus a list of "
+                "upcoming appointments (next 7 days). Use for questions like "
+                "'what's booked this week?'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max upcoming appointments to list (default 20)",
+                        "default": 20,
+                    },
+                },
+                "required": [],
+            },
+            handler=self._handle_get_appointments,
+        )
+
     def _register_operator_tools(self) -> None:
         """No write tools — lead CRUD lives in the leads route."""
         return None
@@ -108,6 +130,18 @@ class LeadsSpecialist(SpecialistAgent):
         from app.repositories.sales_stats import compute_lead_stats
 
         return json.dumps(await compute_lead_stats(self._session))
+
+    async def _handle_get_appointments(self, limit: int = 20) -> str:
+        if not self._session:
+            return json.dumps({"error": "No database session available"})
+        from app.repositories.appointment_stats import (
+            compute_appointment_stats,
+            get_upcoming_appointments,
+        )
+
+        stats = await compute_appointment_stats(self._session)
+        upcoming = await get_upcoming_appointments(self._session, limit=limit)
+        return json.dumps({"kpis": stats["kpis"], "upcoming": upcoming})
 
     async def _handle_get_lead_list(
         self, status: str = "", source: str = "", limit: int = 50

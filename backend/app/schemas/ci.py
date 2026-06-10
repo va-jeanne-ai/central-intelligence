@@ -33,6 +33,10 @@ class UploadTranscriptRequest(BaseModel):
     call_type: Literal[
         "Sales", "Discovery", "Coaching", "Accountability", "Support"
     ] | None = None
+    # Optional entity links — a coaching transcript attaches to a member,
+    # a sales transcript to a lead. Both optional/independent.
+    lead_id: str | None = None
+    member_id: str | None = None
 
 
 class UploadTranscriptResponse(BaseModel):

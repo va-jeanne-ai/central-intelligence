@@ -39,11 +39,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.models.integration import Integration
 from app.services import secrets as app_secrets
-from app.services.ghl_upsert import upsert_ghl_lead
+from app.services.ghl_upsert import upsert_ghl_appointment, upsert_ghl_lead
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+
+async def _resolve_ghl_integration(
+    session: AsyncSession, webhook_token: str
+) -> Integration:
+    """Return the connected GHL integration row IFF the path token matches.
+
+    Constant-time token compare against the encrypted blob's webhook_token.
+    Raises 404 on any mismatch / missing row / decrypt failure — never 401,
+    so a probing attacker can't confirm a token-shaped URL is valid.
+    """
+    result = await session.execute(
+        select(Integration).where(
+            Integration.provider == "ghl",
+            Integration.status == "connected",
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None or not row.credentials_encrypted:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    try:
+        blob = json.loads(app_secrets.decrypt(row.credentials_encrypted))
+        stored_token = str(blob.get("webhook_token") or "")
+    except (ValueError, json.JSONDecodeError) as exc:
+        logger.warning("ghl webhook: decrypt failed — %s", exc)
+        raise HTTPException(status_code=404, detail="Not found") from exc
+
+    if not stored_token or not _stdlib_secrets.compare_digest(
+        stored_token.encode("utf-8"), webhook_token.encode("utf-8")
+    ):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    return row
 
 
 # ---------------------------------------------------------------------------
@@ -76,31 +110,7 @@ async def ghl_lead_webhook(
     non-2xx and we don't want a malformed payload to retry-storm us.
     """
     # 1. Find the GHL integration row, validate the path token.
-    result = await session.execute(
-        select(Integration).where(
-            Integration.provider == "ghl",
-            Integration.status == "connected",
-        )
-    )
-    row = result.scalar_one_or_none()
-    if row is None or not row.credentials_encrypted:
-        # No integration row → URL was guessed. 404 to avoid confirming
-        # that a token-shaped URL exists.
-        raise HTTPException(status_code=404, detail="Not found")
-
-    try:
-        blob = json.loads(app_secrets.decrypt(row.credentials_encrypted))
-        stored_token = str(blob.get("webhook_token") or "")
-    except (ValueError, json.JSONDecodeError) as exc:
-        logger.warning("ghl_lead_webhook: decrypt failed — %s", exc)
-        raise HTTPException(status_code=404, detail="Not found") from exc
-
-    if not stored_token or not _stdlib_secrets.compare_digest(
-        stored_token.encode("utf-8"), webhook_token.encode("utf-8")
-    ):
-        # Constant-time compare so the timing of mismatched tokens leaks
-        # nothing about the real token's prefix length.
-        raise HTTPException(status_code=404, detail="Not found")
+    row = await _resolve_ghl_integration(session, webhook_token)
 
     # 2. Upsert the lead, swallow errors so GHL doesn't retry-storm.
     now = datetime.now(timezone.utc)
@@ -111,6 +121,45 @@ async def ghl_lead_webhook(
         row.last_sync_error = None
     except Exception as exc:  # noqa: BLE001 — broad on purpose
         logger.exception("ghl_lead_webhook: upsert failed — %s", exc)
+        row.last_sync_status = "error"
+        row.last_sync_error = str(exc)[:500]
+
+    session.add(row)
+    await session.commit()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# GHL appointment webhook
+# ---------------------------------------------------------------------------
+# Book / reschedule / cancel events from GHL's calendar triggers. Same token
+# validation as the lead webhook; upsert + dedup live in ghl_upsert.py.
+
+
+@router.post("/ghl/{webhook_token}/appointments")
+async def ghl_appointment_webhook(
+    webhook_token: str,
+    payload: dict[str, Any] = Body(...),
+    session: AsyncSession = Depends(get_session),
+):
+    """Receive an appointment pushed from a GHL calendar webhook trigger.
+
+    Same auth model as the lead webhook (constant-time path-token compare →
+    404 on mismatch). Dedup on ``(source='ghl', external_id=<appointment id>)``
+    so book → reschedule → cancel on the same appointment update one row. The
+    raw payload lands in ``appointment.notes`` as JSON. Parse failures stamp
+    ``last_sync_error`` but still return 200 to avoid GHL retry-storms.
+    """
+    row = await _resolve_ghl_integration(session, webhook_token)
+
+    now = datetime.now(timezone.utc)
+    try:
+        await upsert_ghl_appointment(session, payload)
+        row.last_synced_at = now
+        row.last_sync_status = "ok"
+        row.last_sync_error = None
+    except Exception as exc:  # noqa: BLE001 — broad on purpose
+        logger.exception("ghl_appointment_webhook: upsert failed — %s", exc)
         row.last_sync_status = "error"
         row.last_sync_error = str(exc)[:500]
 

@@ -38,7 +38,17 @@ from app.prompts.call_analyzer_v1 import (
     MOCK_CALL_ANALYZER_OUTPUT,
     build_user_prompt,
 )
+from app.prompts.coaching_analyzer_v1 import (
+    COACHING_ANALYZER_SYSTEM_PROMPT_V1,
+    MOCK_COACHING_ANALYZER_OUTPUT,
+    build_coaching_user_prompt,
+)
 from app.tasks.celery_app import celery_app
+
+
+def _is_coaching(call_type: str | None) -> bool:
+    """True when the call should use the coaching-tuned analyzer prompt."""
+    return bool(call_type) and "coaching" in call_type.lower()
 
 logger = logging.getLogger(__name__)
 
@@ -118,24 +128,35 @@ def _call_claude(transcript_text: str, call_type: str | None) -> tuple[str | Non
         if the model omitted it), insights is the 0–N list of structured
         dicts with the 21 Claude-extracted fields each.
     """
+    # Coaching calls use the wins-first coaching analyzer; everything else
+    # (sales, discovery, appointment) uses the original sales-flavoured prompt.
+    coaching = _is_coaching(call_type)
+
     if not settings.anthropic_api_key or settings.mock_mode:
         logger.warning(
             "call_analyzer: Anthropic API key missing or mock_mode=True — using mock output."
         )
-        mock = json.loads(MOCK_CALL_ANALYZER_OUTPUT)
+        mock_raw = MOCK_COACHING_ANALYZER_OUTPUT if coaching else MOCK_CALL_ANALYZER_OUTPUT
+        mock = json.loads(mock_raw)
         return mock.get("summary"), mock.get("insights", [])
 
     import anthropic  # lazy import — large module
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    user_prompt = build_user_prompt(transcript_text, call_type=call_type)
+
+    if coaching:
+        system_prompt = COACHING_ANALYZER_SYSTEM_PROMPT_V1
+        user_prompt = build_coaching_user_prompt(transcript_text, call_type=call_type)
+    else:
+        system_prompt = CALL_ANALYZER_SYSTEM_PROMPT_V1
+        user_prompt = build_user_prompt(transcript_text, call_type=call_type)
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
         # The 21-field structured output for 3–8 insights can run long.
         # 8192 tokens gives ~6000 words of room — comfortable headroom.
         max_tokens=8192,
-        system=CALL_ANALYZER_SYSTEM_PROMPT_V1,
+        system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )
 

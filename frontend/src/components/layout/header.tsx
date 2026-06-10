@@ -41,8 +41,8 @@ function getActionButton(pathname: string): ActionButton {
   if (pathname.startsWith("/leads") || pathname.startsWith("/sales") || pathname.startsWith("/appointments")) {
     return { href: "/sales-director", label: "Sales Director", icon: "💼" };
   }
-  if (pathname.startsWith("/members") || pathname.startsWith("/coaching") || pathname.startsWith("/accountability") || pathname.startsWith("/tech-sos")) {
-    return { href: "/chat", label: "Fulfillment Director", icon: "🏆" };
+  if (pathname.startsWith("/members") || pathname.startsWith("/fulfillment") || pathname.startsWith("/coaching") || pathname.startsWith("/accountability") || pathname.startsWith("/tech-sos")) {
+    return { href: "/fulfillment-director", label: "Fulfillment Director", icon: "🏆" };
   }
   return { href: "/chat", label: "Central Intelligence", icon: "👑" };
 }
