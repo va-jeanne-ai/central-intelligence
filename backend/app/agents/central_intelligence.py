@@ -491,6 +491,51 @@ async def _query_calendar(
     return out
 
 
+# ---------------------------------------------------------------------------
+# Cross-department delegation
+# ---------------------------------------------------------------------------
+# Central Intelligence is the ONLY agent that reaches across departments. It
+# delegates DOWN to the three Directors; Directors never call each other. Each
+# delegate opens a FRESH AsyncSessionLocal and builds its director on the spot
+# — CI is a long-lived per-session object, but DB sessions are per-request, so
+# directors can't be held on the CI instance. The director runs its own tool
+# loop (its specialists + data tools) and returns synthesized prose.
+
+
+async def _delegate_to_director(task: str, dotted_path: str, label: str) -> str:
+    """Run a Director against `task` with a fresh session and return its prose."""
+    import importlib
+
+    try:
+        module_path, class_name = dotted_path.rsplit(".", 1)
+        director_class = getattr(importlib.import_module(module_path), class_name)
+        async with AsyncSessionLocal() as db:
+            director = director_class(session=db)
+            result = await director.execute(task)
+        return result.get("response") or f"(The {label} returned no response.)"
+    except Exception as exc:  # noqa: BLE001 — never crash the CI tool loop
+        logger.exception("CI delegate to %s failed: %s", label, exc)
+        return json.dumps({"error": f"Could not reach the {label} right now."})
+
+
+async def _delegate_to_marketing_director(task: str) -> str:
+    return await _delegate_to_director(
+        task, "app.agents.directors.marketing.MarketingDirector", "Marketing Director"
+    )
+
+
+async def _delegate_to_sales_director(task: str) -> str:
+    return await _delegate_to_director(
+        task, "app.agents.directors.sales.SalesDirector", "Sales Director"
+    )
+
+
+async def _delegate_to_fulfillment_director(task: str) -> str:
+    return await _delegate_to_director(
+        task, "app.agents.directors.fulfillment.FulfillmentDirector", "Fulfillment Director"
+    )
+
+
 class CentralIntelligence(BaseAgent):
     """CEO agent — orchestrates all departments.
 
@@ -624,3 +669,56 @@ class CentralIntelligence(BaseAgent):
             },
             handler=_query_calendar,
         )
+
+        # --- Cross-department delegation to the three Directors --------------
+        # CI is the only agent that spans departments. Use these for
+        # department-specific questions (delegate to one) or broad strategy
+        # questions like "what should we focus on this week?" (delegate to all
+        # three, then synthesize). Directors run their own specialists.
+        _DIRECTOR_DELEGATES = (
+            (
+                "delegate_to_marketing_director",
+                "the Marketing Director — campaigns, content, email, social, ads, "
+                "DM, offers, market signals, and content ideas",
+                _delegate_to_marketing_director,
+            ),
+            (
+                "delegate_to_sales_director",
+                "the Sales Director — pipeline, leads, conversion, appointments, "
+                "and sales-call insights",
+                _delegate_to_sales_director,
+            ),
+            (
+                "delegate_to_fulfillment_director",
+                "the Fulfillment Director — members, coaching calls, accountability "
+                "goals, wins, and tech-support tickets",
+                _delegate_to_fulfillment_director,
+            ),
+        )
+        for tool_name, scope, handler in _DIRECTOR_DELEGATES:
+            self.register_tool(
+                name=tool_name,
+                description=(
+                    f"Delegate a question or task to {scope}. Send a clear, "
+                    "detailed instruction as 'task'. The director analyzes its "
+                    "department (using its own specialists and data) and returns "
+                    "findings. Use one director for a department-specific question; "
+                    "delegate to all three for broad cross-department strategy, then "
+                    "synthesize their answers into one response."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "task": {
+                            "type": "string",
+                            "description": (
+                                "A detailed natural-language instruction for the "
+                                "director (e.g. 'Summarize pipeline health and the "
+                                "top reasons leads are stalling this week')."
+                            ),
+                        }
+                    },
+                    "required": ["task"],
+                },
+                handler=handler,
+            )

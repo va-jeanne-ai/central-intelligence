@@ -73,3 +73,23 @@ class RecommendationsResponse(BaseModel):
     recommendations: list[RecommendationItem]
     generated_at: str
     cached: bool = False
+
+
+class WeeklyFocusItem(BaseModel):
+    """A single cross-department focus priority for the week."""
+
+    title: str
+    detail: str
+
+
+class WeeklyFocusResponse(BaseModel):
+    """Payload returned by GET /api/v1/dashboard/weekly-focus.
+
+    A synthesized cross-department answer to "what should we focus on this
+    week?" produced by Central Intelligence delegating to the three Directors.
+    """
+
+    focus: list[WeeklyFocusItem]
+    summary: str = ""
+    generated_at: str
+    cached: bool = False

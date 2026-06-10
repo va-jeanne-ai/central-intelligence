@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/header";
 import { DepartmentCard } from "@/components/dashboard/department-card";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { CIWidget } from "@/components/dashboard/ci-widget";
+import { WeeklyFocus } from "@/components/dashboard/weekly-focus";
 import {
   DepartmentCardSkeleton,
   KpiGridSkeleton,
@@ -165,6 +166,9 @@ function DashboardSkeleton() {
         </div>
       </section>
 
+      {/* Weekly-focus skeleton (full width) */}
+      <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-5 h-28 animate-pulse" />
+
       {/* Bottom 2-column skeleton */}
       <div className="grid grid-cols-2 gap-4">
         <KpiGridSkeleton />
@@ -261,6 +265,9 @@ export default function DashboardPage() {
               ))}
             </div>
           </section>
+
+          {/* This week's focus — full-width cross-department synthesis */}
+          <WeeklyFocus />
 
           {/* Bottom 2-column layout */}
           <div className="grid grid-cols-2 gap-4">
