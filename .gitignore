@@ -42,3 +42,6 @@ celerybeat-schedule-wal
 
 # WAT framework
 .tmp/
+
+# graphify local interpreter (regenerable, never commit)
+graphify-out/.graphify_venv/

@@ -472,12 +472,6 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
   // Confirm-dialog state for Disconnect — replaces window.confirm()
   // (CLAUDE.md rule: never use native popups).
   const [isDisconnectConfirmOpen, setIsDisconnectConfirmOpen] = useState(false);
-  // Setup-steps panel: collapsed by default once connected so the page
-  // stays tidy; expanded by default for first-time onboarding. Toggle
-  // applies only to the Google Workspace provider (the only one with
-  // a multi-step service-account dance to walk through).
-  const [showSetupSteps, setShowSetupSteps] = useState(false);
-
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -504,15 +498,6 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
     if (authLoading) return;
     void load();
   }, [authLoading, load]);
-
-  // For Google Workspace: expand setup steps by default while not yet
-  // connected (first-time onboarding); collapse once connected so the
-  // page stays tidy.
-  useEffect(() => {
-    if (slug === "google_workspace" && detail !== null) {
-      setShowSetupSteps(!detail.connected);
-    }
-  }, [slug, detail]);
 
   async function handleSave() {
     if (!detail) return;

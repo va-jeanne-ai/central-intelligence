@@ -317,14 +317,23 @@ function CalendarView({ promotions, onEdit }: CalendarViewProps) {
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Month nav */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <button
-          type="button"
-          onClick={prevMonth}
-          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
-          aria-label="Previous month"
-        >
-          &larr;
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={prevMonth}
+            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+            aria-label="Previous month"
+          >
+            &larr;
+          </button>
+          <button
+            type="button"
+            onClick={goToday}
+            className="px-2.5 py-1 text-xs font-semibold rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
+          >
+            Today
+          </button>
+        </div>
         <div className="flex items-center gap-1">
           <select
             value={month}

@@ -87,6 +87,7 @@ def create_app() -> FastAPI:
     from app.routes.icp import router as icp_router
     from app.routes.leads import router as leads_router
     from app.routes.marketing import router as marketing_router
+    from app.routes.sales import router as sales_router
     from app.routes.central_intelligence import router as central_intelligence_router
     from app.routes.directors import router as directors_router
     from app.routes.transcribe import router as transcribe_router
@@ -118,6 +119,10 @@ def create_app() -> FastAPI:
     # Marketing endpoints under /api/v1 (prefix applied here).
     # Resolves to:  GET /api/v1/marketing/summary
     app.include_router(marketing_router, prefix="/api/v1")
+
+    # Sales endpoints under /api/v1 (prefix applied here).
+    # Resolves to:  GET /api/v1/sales/summary
+    app.include_router(sales_router, prefix="/api/v1")
 
     # Transcription endpoint under /api/v1 (prefix applied here).
     # Resolves to:  POST /api/v1/transcribe

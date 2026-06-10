@@ -38,6 +38,8 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Sales",
     department: "sales",
     items: [
+      { label: "Sales Overview", icon: "📊", href: "/sales", department: "sales" },
+      { label: "Sales Director", icon: "💼", href: "/sales-director", department: "sales" },
       { label: "Leads", icon: "🧲", href: "/leads", department: "sales" },
       { label: "Sales Calls", icon: "📞", href: "/sales-calls", department: "sales" },
       { label: "Appointments", icon: "📅", href: "/appointments", department: "sales" },
