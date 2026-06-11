@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Facebook Page integration (Meta Graph API)
+
+Makes the `/marketing/social` **Facebook** column live, mirroring the Instagram connector. Manual long-lived **Page** token + Page ID; no migration. Unlike Instagram, Facebook needs no account-type conversion — any Page admin can read Page insights.
+
+- `app/services/facebook_client.py` (new) — Graph API v19 wrapper: Page profile (`followers_count`/`fan_count`, `name`), Page Insights (`page_impressions` over `days_28`, summed across the window), and recent `/posts` (likes+comments summary) for an engagement-rate estimate. Profile required; insights + posts best-effort. `reach` left null (no Page metric comparable to IG reach). `verify()` powers the Test button.
+- `app/services/facebook_credentials.py` (new) — decrypts `(access_token, page_id)` from the integration blob (mirrors `instagram_credentials.py`).
+- `app/tasks/social_stats.py` — refactored the per-platform live sync into a generic `_sync_live_platform(db, platform, …)` driven by a `_LIVE_PLATFORMS` map `{instagram, facebook}` (each → its creds-loader + fetch fn). Facebook syncs live when connected, **skips** (no fake-data overwrite) when not connected or on error, stamping `last_sync_status`/`last_sync_error` + a `sync_log` row. Removed `facebook` from `_SEED_DATA` (linkedin/tiktok stay seeded). The task result dict now reports per-platform sync results.
+- `app/services/integrations_registry.py` — new `facebook` provider (icon 📘, category social, `available`, fields `access_token` + `page_id`, `trigger_task: "facebook"`).
+- `app/routes/integrations.py` — `_trigger_sync` enqueues the shared `update_social_stats` for both `instagram`/`facebook`; `test_integration` facebook branch calls `facebook_client.verify()`.
+- `frontend/.../integrations/[slug]/page.tsx` — `FacebookSetupStepsCard`: collapsible steps for getting a long-lived Page token (Graph API Explorer → select Page → token-exchange) and the Page ID (`/me/accounts`).
+
+No `/marketing/social` change — it already renders a Facebook row; it lights up once a sync writes real data. Verified structurally with zero API cost (registry/fields, creds-None-on-empty, engagement-rate math, insight-value summing, `verify()` not-connected message, task syncs both live platforms + skips gracefully with no rows). Live Graph test needs a user-provided long-lived Page token + Page ID.
+
 ### Added — Instagram social integration (Meta Graph API)
 
 Makes the `/marketing/social` Instagram column **live**. Previously `update_social_stats` wrote hardcoded seed data for all platforms; now Instagram pulls real organic metrics from the Meta Graph API. Manual-token connector following the GHL/Mailchimp pattern — no migration (the `integrations` table already has every column needed).

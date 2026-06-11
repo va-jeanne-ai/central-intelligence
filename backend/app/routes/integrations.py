@@ -179,9 +179,10 @@ def _trigger_sync(slug: str) -> str | None:
         except Exception as exc:
             logger.warning("Failed to enqueue sync_ghl_contacts: %s", exc)
             return None
-    if slug == "instagram":
-        # Instagram metrics ride the shared social-stats task; it pulls IG
-        # live when connected and leaves the other platforms on seed values.
+    if slug in ("instagram", "facebook"):
+        # Instagram + Facebook metrics ride the shared social-stats task; it
+        # pulls each live platform when connected and leaves the rest on seed
+        # values. Either provider's Sync button enqueues the same task.
         try:
             from app.tasks.social_stats import update_social_stats
             task = update_social_stats.delay()
@@ -448,6 +449,11 @@ async def test_integration(
         # Lazy import to avoid pulling httpx into route module-load time.
         from app.services import instagram_client
         ok, message = instagram_client.verify()
+        return TestIntegrationResponse(ok=ok, message=message)
+
+    if slug == "facebook":
+        from app.services import facebook_client
+        ok, message = facebook_client.verify()
         return TestIntegrationResponse(ok=ok, message=message)
 
     if slug == "google_workspace":

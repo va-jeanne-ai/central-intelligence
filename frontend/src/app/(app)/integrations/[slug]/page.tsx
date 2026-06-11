@@ -172,6 +172,125 @@ function InstagramSetupStepsCard() {
   );
 }
 
+// ─── Facebook setup-steps card ────────────────────────────────────────────────
+// Renders for slug='facebook'. Walks the admin through getting a long-lived
+// Page access token + the Page ID to paste into the credentials form below.
+
+function FacebookSetupStepsCard() {
+  const [showSetupSteps, setShowSetupSteps] = useState(true);
+
+  const linkClass =
+    "text-indigo-600 hover:text-indigo-700 underline underline-offset-2";
+
+  return (
+    <Card>
+      <CardHeader
+        title="Setup steps"
+        action={
+          <button
+            type="button"
+            onClick={() => setShowSetupSteps((v) => !v)}
+            className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            {showSetupSteps ? "Hide" : "Show"}
+          </button>
+        }
+      />
+      {showSetupSteps && (
+        <CardBody className="space-y-5">
+          {/* Prerequisites */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Before you start
+            </h3>
+            <ul className="list-disc list-inside space-y-1 text-[13px] text-gray-700">
+              <li>
+                You must be an <strong>admin</strong> of the Facebook Page you
+                want to track. (No personal-account conversion needed — unlike
+                Instagram, Pages work directly.)
+              </li>
+              <li>
+                You need a Meta app with the <strong>Facebook Login</strong>{" "}
+                product added (
+                <a
+                  href="https://developers.facebook.com/apps"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  developers.facebook.com/apps
+                </a>{" "}
+                → Create App → Business).
+              </li>
+            </ul>
+          </div>
+
+          {/* Get the Page access token */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Get your Page access token
+            </h3>
+            <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
+              <li>
+                Open the{" "}
+                <a
+                  href="https://developers.facebook.com/tools/explorer/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  Graph API Explorer
+                </a>
+                , select your app, and under <strong>User or Page</strong> pick{" "}
+                <strong>your Page</strong> (this issues a <em>Page</em> token,
+                not a user token).
+              </li>
+              <li>
+                <strong>Generate Access Token</strong> granting{" "}
+                <code>pages_read_engagement</code>, <code>pages_show_list</code>,
+                and <code>read_insights</code>. This is a{" "}
+                <strong>short-lived</strong> token (~1 hour).
+              </li>
+              <li>
+                Exchange it for a <strong>long-lived</strong> (~60-day) token via
+                the{" "}
+                <a
+                  href="https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  token-exchange endpoint
+                </a>
+                . Paste it as the <strong>Page Access Token</strong> below.
+              </li>
+            </ol>
+          </div>
+
+          {/* Get the Page ID */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Get your Facebook Page ID
+            </h3>
+            <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
+              <li>
+                Call <code>GET /me/accounts</code> (in the Graph API Explorer).
+                Each entry is a Page you manage — its numeric <code>id</code> is
+                the <strong>Page ID</strong>. Paste it below.
+              </li>
+            </ol>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800">
+            Long-lived tokens expire ~every 60 days — re-paste a fresh one here
+            when that happens.
+          </div>
+        </CardBody>
+      )}
+    </Card>
+  );
+}
+
 // ─── Google Workspace connect card ────────────────────────────────────────────
 //
 // Replaces the credentials form for slug='google_workspace'. Each staff
@@ -890,6 +1009,9 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
           )}
           {slug === "instagram" && (
             <InstagramSetupStepsCard />
+          )}
+          {slug === "facebook" && (
+            <FacebookSetupStepsCard />
           )}
           {slug === "ghl" && detail.values.webhook_url && (
             <Card>

@@ -4,21 +4,21 @@ Social Stats Celery task — Operator OPS-SS1.
 Scheduled task that pulls and updates social media metrics and persists them
 to the social_stats table.
 
-Instagram is LIVE: when an ``integrations`` row (provider='instagram',
-status='connected') has valid credentials, the task pulls real metrics from
-the Meta Graph API and stamps the integration's sync status + a sync_log row.
-When Instagram isn't connected (or the pull fails) it is SKIPPED — we never
-overwrite real data with seed values.
+Instagram and Facebook are LIVE: when an ``integrations`` row (provider=
+'instagram' / 'facebook', status='connected') has valid credentials, the task
+pulls real metrics from the Meta Graph API and stamps the integration's sync
+status + a sync_log row. When a platform isn't connected (or the pull fails)
+it is SKIPPED — we never overwrite real data with seed values.
 
-facebook / linkedin / tiktok are still STUBBED with seed values (no live
-connector yet) so the /marketing/social dashboard stays populated. Wire each
-the same way Instagram is wired when its connector lands.
+linkedin / tiktok are still STUBBED with seed values (no live connector yet)
+so the /marketing/social dashboard stays populated. Wire each the same way
+when its connector lands.
 
 Uses a synchronous SQLAlchemy session because Celery runs outside FastAPI's
 async event loop.
 
 Sprint 3a / OPS-SS1 — Social Stats Updater
-Instagram integration: Meta Graph API (manual-token connector)
+Instagram + Facebook integrations: Meta Graph API (manual-token connectors)
 """
 
 import logging
@@ -32,7 +32,8 @@ from sqlalchemy import select
 from app.models.audit import SyncLog
 from app.models.integration import Integration
 from app.models.marketing import SocialStats
-from app.services import instagram_client
+from app.services import facebook_client, instagram_client
+from app.services.facebook_credentials import load_facebook_credentials
 from app.services.instagram_credentials import load_instagram_credentials
 from app.tasks.celery_app import celery_app
 from app.tasks.db import make_sync_session
@@ -40,11 +41,18 @@ from app.tasks.db import make_sync_session
 logger = logging.getLogger(__name__)
 
 # Platforms without a live connector yet — keep dashboards populated. Remove a
-# platform from here once it has a real integration (as Instagram does below).
+# platform from here once it has a real integration (as Instagram + Facebook do).
 _SEED_DATA = {
-    "facebook": {"followers": 8320, "posts_count": 54, "engagement_rate": 1.8, "reach": 22000, "impressions": 67000},
     "linkedin": {"followers": 5100, "posts_count": 32, "engagement_rate": 4.1, "reach": 18000, "impressions": 42000},
     "tiktok": {"followers": 3200, "posts_count": 23, "engagement_rate": 6.5, "reach": 95000, "impressions": 310000},
+}
+
+# Platforms with a live Meta Graph connector. Each entry: how to load creds
+# from the integration row + how to fetch its stats. Both return an object
+# with followers/posts_count/engagement_rate/reach/impressions.
+_LIVE_PLATFORMS = {
+    "instagram": (load_instagram_credentials, instagram_client.fetch_instagram_stats),
+    "facebook": (load_facebook_credentials, facebook_client.fetch_facebook_stats),
 }
 
 _PLATFORMS = ["instagram", "facebook", "linkedin", "tiktok"]
@@ -78,33 +86,37 @@ def _upsert_platform_stats(
         )
 
 
-def _sync_instagram(db, period_start: datetime, period_end: datetime) -> str:
-    """Pull live Instagram metrics and upsert them.
+def _sync_live_platform(
+    db, platform: str, period_start: datetime, period_end: datetime
+) -> str:
+    """Pull live metrics for one Meta-connected platform and upsert them.
 
-    Returns one of: 'synced' (live data written), 'skipped' (not connected),
-    or 'error' (connected but the pull failed). Stamps the integration row's
-    sync status and writes a sync_log entry. Never raises — a problem with
-    one platform must not abort the whole task.
+    Driven by ``_LIVE_PLATFORMS[platform]`` = (creds_loader, fetch_fn). Returns
+    one of: 'synced' (live data written), 'skipped' (not connected), or 'error'
+    (connected but the pull failed). Stamps the integration row's sync status
+    and writes a sync_log entry. Never raises — a problem with one platform
+    must not abort the whole task.
     """
+    load_creds, fetch_stats = _LIVE_PLATFORMS[platform]
+
     row = db.execute(
-        select(Integration).where(Integration.provider == "instagram")
+        select(Integration).where(Integration.provider == platform)
     ).scalar_one_or_none()
 
     if row is None or row.status != "connected":
-        logger.info("Instagram not connected — skipping live sync")
+        logger.info("%s not connected — skipping live sync", platform)
         return "skipped"
 
-    creds = load_instagram_credentials(row)
+    creds = load_creds(row)
     if creds is None:
-        logger.warning("Instagram connected but credentials unusable — skipping")
+        logger.warning("%s connected but credentials unusable — skipping", platform)
         row.last_sync_status = "error"
         row.last_sync_error = "Credentials missing or unparseable"
         return "error"
 
-    access_token, ig_user_id = creds
-    now = period_end
+    access_token, account_id = creds
     try:
-        stats = instagram_client.fetch_instagram_stats(access_token, ig_user_id)
+        stats = fetch_stats(access_token, account_id)
         metrics = {
             "followers": stats.followers,
             "posts_count": stats.posts_count,
@@ -112,14 +124,14 @@ def _sync_instagram(db, period_start: datetime, period_end: datetime) -> str:
             "reach": stats.reach,
             "impressions": stats.impressions,
         }
-        _upsert_platform_stats(db, "instagram", metrics, period_start, period_end)
-        row.last_synced_at = now
+        _upsert_platform_stats(db, platform, metrics, period_start, period_end)
+        row.last_synced_at = period_end
         row.last_sync_status = "success"
         row.last_sync_error = None
         db.add(
             SyncLog(
                 id=uuid.uuid4(),
-                operation="instagram_social_stats_sync",
+                operation=f"{platform}_social_stats_sync",
                 status="success",
                 details={
                     "followers": stats.followers,
@@ -130,18 +142,18 @@ def _sync_instagram(db, period_start: datetime, period_end: datetime) -> str:
             )
         )
         logger.info(
-            "Instagram synced — followers=%s posts=%s reach=%s",
-            stats.followers, stats.posts_count, stats.reach,
+            "%s synced — followers=%s posts=%s impressions=%s",
+            platform, stats.followers, stats.posts_count, stats.impressions,
         )
         return "synced"
-    except Exception as exc:  # noqa: BLE001 — isolate IG failure from the task
-        logger.exception("Instagram live sync failed: %s", exc)
+    except Exception as exc:  # noqa: BLE001 — isolate one platform's failure
+        logger.exception("%s live sync failed: %s", platform, exc)
         row.last_sync_status = "error"
         row.last_sync_error = str(exc)[:500]
         db.add(
             SyncLog(
                 id=uuid.uuid4(),
-                operation="instagram_social_stats_sync",
+                operation=f"{platform}_social_stats_sync",
                 status="error",
                 details={"error": str(exc)[:500]},
             )
@@ -154,8 +166,9 @@ def _sync_instagram(db, period_start: datetime, period_end: datetime) -> str:
 def update_social_stats(self) -> dict:
     """Pull + upsert social media metrics.
 
-    Instagram is pulled live from the Meta Graph API when connected; the other
-    platforms use seed values until they get their own connectors.
+    Instagram + Facebook are pulled live from the Meta Graph API when
+    connected; the remaining platforms use seed values until they get their
+    own connectors.
 
     Sprint 3a / OPS-SS1 — Social Stats Updater
     Runs on a schedule (configured in Celery beat schedule).
@@ -163,8 +176,8 @@ def update_social_stats(self) -> dict:
     Returns
     -------
     dict
-        Summary including task ID, status, platforms touched, and the
-        Instagram sync result ('synced' | 'skipped' | 'error').
+        Summary including task ID, status, platforms touched, and each live
+        platform's sync result ('synced' | 'skipped' | 'error').
     """
     task_id = self.request.id or uuid4().hex
 
@@ -177,16 +190,19 @@ def update_social_stats(self) -> dict:
             period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             period_end = now
             checked = 0
+            live_results: dict[str, str] = {}
 
-            # Instagram — live. 'skipped'/'error' both mean we leave any
-            # existing instagram row untouched (no fake data overwrite).
-            ig_result = _sync_instagram(db, period_start, period_end)
-            if ig_result == "synced":
-                checked += 1
+            # Live Meta platforms. 'skipped'/'error' both leave any existing
+            # row untouched (no fake-data overwrite).
+            for platform in _LIVE_PLATFORMS:
+                result = _sync_live_platform(db, platform, period_start, period_end)
+                live_results[platform] = result
+                if result == "synced":
+                    checked += 1
 
             # Remaining platforms — seed values until their connectors land.
             for platform in _PLATFORMS:
-                if platform == "instagram":
+                if platform in _LIVE_PLATFORMS:
                     continue
                 seed = _SEED_DATA.get(platform, {})
                 _upsert_platform_stats(db, platform, seed, period_start, period_end)
@@ -201,7 +217,7 @@ def update_social_stats(self) -> dict:
             "status": "completed",
             "message": f"Social stats updated for {checked} platform(s)",
             "profiles_checked": checked,
-            "instagram": ig_result,
+            **live_results,
             "updated_at": now.isoformat(),
         }
 
