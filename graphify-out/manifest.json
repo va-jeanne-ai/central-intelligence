@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1781192597.669114,
-    "ast_hash": "3174f020ba1189d00a2faf44b51182d5",
+    "mtime": 1781193053.7017379,
+    "ast_hash": "14a90c2410238e3e28a363dd5424fc64",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1840,8 +1840,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/facebook_client.py": {
-    "mtime": 1781188920.0293639,
-    "ast_hash": "bbe3149ad5a8815299701c609d533fa0",
+    "mtime": 1781193014.5515316,
+    "ast_hash": "e29bb3b7709165f830c4c78403883a27",
     "semantic_hash": ""
   }
 }
