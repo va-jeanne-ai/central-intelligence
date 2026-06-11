@@ -43,6 +43,129 @@ interface ConnectedUsersResponse {
   users: ConnectedUser[];
 }
 
+// ─── Meta (Instagram) OAuth connect card ──────────────────────────────────────
+// Renders for slug='instagram' when meta_oauth is true. "Connect with Meta"
+// kicks off the single-shared-account OAuth flow (routes/meta_oauth.py). The
+// manual-token form still renders below as a fallback.
+
+function MetaInstagramConnectCard({
+  detail,
+  onChanged,
+}: {
+  detail: IntegrationDetail;
+  onChanged: () => void;
+}) {
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+  useEffect(() => {
+    // Surface the OAuth callback result (?connected=ok|err) as a toast.
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const errParam = params.get("error");
+    if (connected === "ok") {
+      showSuccess("Instagram connected. Metrics will sync on the next run.");
+      window.history.replaceState({}, "", window.location.pathname);
+      onChanged();
+    } else if (connected === "err") {
+      const messages: Record<string, string> = {
+        no_ig_business_account:
+          "No Instagram Business account is linked to your Facebook Page. Link one in Page settings, then reconnect.",
+        token_exchange_failed: "Meta rejected the token exchange. Try again.",
+        no_long_lived_token: "Couldn't obtain a long-lived token from Meta.",
+      };
+      showError(
+        errParam
+          ? (messages[errParam] ?? `Meta OAuth failed: ${errParam}`)
+          : "Meta OAuth was cancelled or failed.",
+      );
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleConnect() {
+    setIsConnecting(true);
+    try {
+      const data = await apiClient.get<{ redirect_url: string }>(
+        "/integrations/instagram/oauth/start",
+        { silent: true },
+      );
+      if (data.redirect_url) {
+        window.location.href = data.redirect_url;
+      } else {
+        showError("Backend didn't return a Meta consent URL.");
+        setIsConnecting(false);
+      }
+    } catch (err) {
+      showError(
+        err instanceof Error
+          ? err.message
+          : "Failed to start the Meta OAuth flow. Is META_OAUTH_CLIENT_ID configured?",
+      );
+      setIsConnecting(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    setIsDisconnecting(true);
+    try {
+      await apiClient.delete("/integrations/instagram/oauth/disconnect", {
+        silent: true,
+      });
+      showSuccess("Instagram disconnected.");
+      onChanged();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Failed to disconnect.");
+    } finally {
+      setIsDisconnecting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader title="Connect with Meta" />
+      <CardBody className="space-y-4">
+        {detail.connected ? (
+          <>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+              <p className="text-[13px] text-emerald-800">
+                <span className="font-semibold">Connected.</span> Instagram
+                metrics sync automatically; the access token is refreshed before
+                it expires.
+              </p>
+            </div>
+            <Button
+              variant="danger"
+              onClick={handleDisconnect}
+              disabled={isDisconnecting}
+            >
+              {isDisconnecting ? "Disconnecting…" : "Disconnect"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-gray-700">
+              Connect one Instagram <strong>Business</strong> or{" "}
+              <strong>Creator</strong> account (linked to a Facebook Page) for
+              the whole workspace. We&apos;ll pull followers, reach,
+              impressions, and engagement — and keep the token fresh
+              automatically.
+            </p>
+            <Button onClick={handleConnect} disabled={isConnecting}>
+              {isConnecting ? "Redirecting…" : "Connect with Meta"}
+            </Button>
+            <p className="text-[11px] text-gray-400">
+              Prefer to paste a token manually? Use the credentials form below.
+            </p>
+          </>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
 // ─── Google Workspace connect card ────────────────────────────────────────────
 //
 // Replaces the credentials form for slug='google_workspace'. Each staff
@@ -758,6 +881,9 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
           <>
           {slug === "google_workspace" && detail.oauth_per_user && (
             <GoogleWorkspaceConnectCard />
+          )}
+          {slug === "instagram" && detail.meta_oauth && (
+            <MetaInstagramConnectCard detail={detail} onChanged={load} />
           )}
           {slug === "ghl" && detail.values.webhook_url && (
             <Card>

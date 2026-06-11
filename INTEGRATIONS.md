@@ -308,15 +308,16 @@ Pulls live organic metrics for one Instagram Business/Creator account from the M
 
 - **`/marketing/social`** — live IG followers, posts, reach, impressions, engagement once a sync runs.
 
-**Auth / setup**
+**Auth / setup** — two ways to connect:
 
-- IG Business or Creator account linked to a Facebook Page.
-- Meta App with `instagram_basic` + `instagram_manage_insights` + `pages_read_engagement` scopes.
-- A **long-lived access token** (~60 days; re-paste on expiry — manual-token connector, no auto-refresh) and the numeric **IG Business account ID**.
+1. **Connect with Meta (OAuth, recommended).** Click **Connect with Meta** on `/integrations/instagram` → Facebook consent → we exchange for a long-lived (~60-day) token, auto-resolve the IG Business account ID, and **auto-refresh the token before it expires** (re-extended on each sync within 7 days of expiry, so the connection doesn't silently die). Single shared brand account. Flow: [`backend/app/routes/meta_oauth.py`](backend/app/routes/meta_oauth.py) + [`backend/app/services/meta_oauth.py`](backend/app/services/meta_oauth.py). Needs `META_OAUTH_CLIENT_ID`/`META_OAUTH_CLIENT_SECRET` in `.env` and a Meta app (App Review required for production scopes; dev-mode works for app testers).
+2. **Manual token (fallback).** Paste a long-lived access token + IG account ID into the form. No auto-refresh — re-paste every ~60 days.
+
+Both paths require: an IG Business/Creator account linked to a Facebook Page, and a Meta App with `instagram_basic` + `instagram_manage_insights` + `pages_read_engagement` (OAuth also requests `pages_show_list` + `business_management`).
 
 **Not yet**
 
-- No OAuth (manual token only). No story/profile-visit metrics. IG comments → `social_comments` still seed-only (separate collector). Facebook shares the same Graph root and can reuse `instagram_client` when wired.
+- No story/profile-visit metrics. IG comments → `social_comments` still seed-only (separate collector). Facebook shares the same Graph root and can reuse `instagram_client` + `meta_oauth` when wired.
 
 ---
 

@@ -61,6 +61,22 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
+    # Meta (Facebook/Instagram) OAuth — single shared business account.
+    # An admin runs through Facebook's consent flow once; CI exchanges the
+    # short-lived token for a long-lived (~60-day) one, resolves the
+    # Instagram Business account ID, and stores both encrypted in the
+    # shared `integrations` row (provider='instagram'). The token is
+    # auto-refreshed on sync before it expires. Create the app in
+    # developers.facebook.com → add Facebook Login + Instagram Graph API,
+    # then add the redirect URI matching the value below.
+    # ------------------------------------------------------------------
+    meta_oauth_client_id: str = ""
+    meta_oauth_client_secret: str = ""
+    meta_oauth_redirect_uri: str = (
+        "http://localhost:8000/api/v1/integrations/instagram/oauth/callback"
+    )
+
+    # ------------------------------------------------------------------
     # Voyage AI embeddings (RAG layer). voyage-3 is 1024-d; the embed
     # worker batches up to ``embed_worker_batch_size`` chunks per API
     # call (Voyage's API limit is 128). Each chunk is sized to at most

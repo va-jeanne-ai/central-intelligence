@@ -105,6 +105,7 @@ def create_app() -> FastAPI:
     from app.routes.promo_calendar import router as promo_calendar_router
     from app.routes.integrations import router as integrations_router
     from app.routes.oauth import router as oauth_router
+    from app.routes.meta_oauth import router as meta_oauth_router
     from app.routes.webhooks import router as webhooks_router
     from app.routes.chat_sessions import router as chat_sessions_router
     from app.routes.calendar import router as calendar_router
@@ -207,6 +208,14 @@ def create_app() -> FastAPI:
     #   GET    /api/v1/integrations/google_workspace/oauth/connected-users
     #   DELETE /api/v1/integrations/google_workspace/oauth/disconnect
     app.include_router(oauth_router, prefix="/api/v1")
+
+    # Meta (Facebook/Instagram) OAuth — single shared business account.
+    # The /callback is auth-exempt (Facebook redirects there directly); the
+    # state token carries a CSRF nonce. See app/routes/meta_oauth.py.
+    #   GET    /api/v1/integrations/instagram/oauth/start
+    #   GET    /api/v1/integrations/instagram/oauth/callback
+    #   DELETE /api/v1/integrations/instagram/oauth/disconnect
+    app.include_router(meta_oauth_router, prefix="/api/v1")
 
     # Inbound webhook receivers — UNAUTHENTICATED (path is exempted in
     # AuthMiddleware via _EXEMPT_PREFIXES). Per-integration tokens in the

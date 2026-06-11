@@ -71,6 +71,7 @@ def _summary_from(provider: dict, row: Integration | None) -> ProviderSummary:
         oauth_pending=bool(provider.get("oauth_pending", False)),
         webhook_only=bool(provider.get("webhook_only", False)),
         oauth_per_user=bool(provider.get("oauth_per_user", False)),
+        meta_oauth=bool(provider.get("meta_oauth", False)),
     )
 
 
