@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — /marketing/social Platform Breakdown shows live per-platform data
+
+The "Platform Breakdown" card rendered a **hardcoded** `PLATFORMS` array of `"—"` literals and never read any data — so Facebook (and every platform) always showed "—" no matter what synced. The `/social` endpoint also only returned summed totals, with no per-platform rows.
+
+- `app/schemas/social.py` + `app/routes/social.py` — `SocialDataResponse` gains a `by_platform` list of `SocialPlatformMetric` (platform, followers, posts_count, engagement_rate); the GET handler populates it via `repo.find_latest_by_platform` for instagram/facebook/tiktok/linkedin (omitting platforms with no row).
+- `frontend/.../marketing/social/page.tsx` — `PlatformMetricsCard` now takes `data` and merges live `by_platform` values onto the display scaffold (icons + order), formatting followers/posts/engagement; falls back to "—" only when a platform has no synced row. The top KPI tiles were already live; this fixes the per-platform breakdown beneath them.
+
 ### Fixed — Logout works (and stale sessions no longer strand you on the dashboard)
 
 Clicking sign-out did nothing when the session was already invalid (expired JWT / missing user). `signOut` `await`ed `supabase.auth.signOut()` *before* clearing local state, so when that call threw/hung on an invalid session, execution never reached the token-clear + `setUser(null)` + redirect — the button silently no-op'd.

@@ -31,9 +31,19 @@ class SocialAnalyzeResponse(BaseModel):
     data_used: dict
 
 
+class SocialPlatformMetric(BaseModel):
+    """Latest metrics for one platform — drives the per-platform breakdown."""
+
+    platform: str  # "instagram" | "facebook" | "linkedin" | "tiktok"
+    followers: int
+    posts_count: int
+    engagement_rate: float | None = None
+
+
 class SocialDataResponse(BaseModel):
     posts: int
     engagement: float
     followers: int
+    by_platform: list[SocialPlatformMetric] = []
     top_content: list[dict]
     generated_at: str

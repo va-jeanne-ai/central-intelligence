@@ -11,34 +11,46 @@ import { Button } from "@/components/ui/button";
 
 // ─── API response type ───────────────────────────────────────────────────────
 
+interface PlatformMetricData {
+  platform: string; // "instagram" | "facebook" | "tiktok" | "linkedin"
+  followers: number;
+  posts_count: number;
+  engagement_rate: number | null;
+}
+
 interface SocialData {
   posts: number;
   engagement: number;
   followers: number;
+  by_platform: PlatformMetricData[];
   top_content: unknown[];
   generated_at: string;
 }
 
 // ─── Platform metrics ─────────────────────────────────────────────────────────
 
-interface PlatformMetric {
+interface PlatformRow {
   name: string;
+  slug: string;
   icon: string;
-  followers: string;
-  posts: string;
-  engagement: string;
 }
 
-const PLATFORMS: PlatformMetric[] = [
-  { name: "Instagram", icon: "📷", followers: "—", posts: "—", engagement: "—" },
-  { name: "Facebook", icon: "📘", followers: "—", posts: "—", engagement: "—" },
-  { name: "TikTok", icon: "🎵", followers: "—", posts: "—", engagement: "—" },
-  { name: "LinkedIn", icon: "💼", followers: "—", posts: "—", engagement: "—" },
+// Display scaffold (icons + order). Live values are merged in from
+// data.by_platform by slug; platforms with no synced row show "—".
+const PLATFORMS: PlatformRow[] = [
+  { name: "Instagram", slug: "instagram", icon: "📷" },
+  { name: "Facebook", slug: "facebook", icon: "📘" },
+  { name: "TikTok", slug: "tiktok", icon: "🎵" },
+  { name: "LinkedIn", slug: "linkedin", icon: "💼" },
 ];
 
 // ─── Platform metrics card ────────────────────────────────────────────────────
 
-function PlatformMetricsCard() {
+function PlatformMetricsCard({ data }: { data: SocialData | null }) {
+  const byPlatform = new Map(
+    (data?.by_platform ?? []).map((p) => [p.platform, p]),
+  );
+
   return (
     <Card>
       <CardHeader
@@ -47,7 +59,15 @@ function PlatformMetricsCard() {
       />
       <CardBody noPadding>
         <div className="divide-y divide-gray-100">
-          {PLATFORMS.map((platform) => (
+          {PLATFORMS.map((platform) => {
+            const live = byPlatform.get(platform.slug);
+            const followers = live ? live.followers.toLocaleString() : "—";
+            const posts = live ? live.posts_count.toLocaleString() : "—";
+            const engagement =
+              live && live.engagement_rate != null
+                ? `${live.engagement_rate.toFixed(1)}%`
+                : "—";
+            return (
             <div
               key={platform.name}
               className="flex items-center gap-4 px-5 py-3"
@@ -64,7 +84,7 @@ function PlatformMetricsCard() {
                     Followers
                   </span>
                   <span className="text-sm font-semibold text-gray-700 tabular-nums">
-                    {platform.followers}
+                    {followers}
                   </span>
                 </div>
                 <div className="flex flex-col gap-0.5">
@@ -72,7 +92,7 @@ function PlatformMetricsCard() {
                     Posts
                   </span>
                   <span className="text-sm font-semibold text-gray-700 tabular-nums">
-                    {platform.posts}
+                    {posts}
                   </span>
                 </div>
                 <div className="flex flex-col gap-0.5">
@@ -80,12 +100,13 @@ function PlatformMetricsCard() {
                     Engagement
                   </span>
                   <span className="text-sm font-semibold text-gray-700 tabular-nums">
-                    {platform.engagement}
+                    {engagement}
                   </span>
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </CardBody>
     </Card>
@@ -279,7 +300,7 @@ export default function SocialMediaPage() {
 
         {/* Row 2: Platform breakdown + Schedule CTA */}
         <div className="grid grid-cols-2 gap-4">
-          <PlatformMetricsCard />
+          <PlatformMetricsCard data={data} />
           <ScheduleCtaCard />
         </div>
 

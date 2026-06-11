@@ -17,7 +17,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.repositories.marketing import SocialStatsRepository
-from app.schemas.social import SocialAnalyzeRequest, SocialAnalyzeResponse, SocialDataResponse
+from app.schemas.social import (
+    SocialAnalyzeRequest,
+    SocialAnalyzeResponse,
+    SocialDataResponse,
+    SocialPlatformMetric,
+)
+
+# Platforms shown in the per-platform breakdown, in display order.
+_BREAKDOWN_PLATFORMS = ["instagram", "facebook", "tiktok", "linkedin"]
 
 logger = logging.getLogger(__name__)
 
@@ -112,10 +120,27 @@ async def get_social_data(
     repo = SocialStatsRepository(session)
     totals = await repo.aggregate_totals()
 
+    # Per-platform latest rows for the breakdown card. Omit a platform that
+    # has no row at all (rather than show a zeroed line).
+    by_platform: list[SocialPlatformMetric] = []
+    for platform in _BREAKDOWN_PLATFORMS:
+        row = await repo.find_latest_by_platform(platform)
+        if row is None:
+            continue
+        by_platform.append(
+            SocialPlatformMetric(
+                platform=platform,
+                followers=row.followers,
+                posts_count=row.posts_count,
+                engagement_rate=row.engagement_rate,
+            )
+        )
+
     return SocialDataResponse(
         posts=totals["total_posts"],
         engagement=totals["avg_engagement"],
         followers=totals["total_followers"],
+        by_platform=by_platform,
         top_content=[],
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
