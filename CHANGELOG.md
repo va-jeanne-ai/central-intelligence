@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Manual "Sync now" button for social + email connectors
+
+The on-demand sync button on the integration detail page (previously GHL-only) now renders for every connector with a backing sync task — **Mailchimp, Instagram, Facebook**, and GHL. The backend `POST /integrations/{slug}/sync` was already generic (routes through `_trigger_sync`); this just surfaces the button with per-provider labels ("Sync metrics now" / "Sync campaigns now" / "Sync contacts now"). Lets an admin pull fresh data immediately after saving credentials instead of waiting for the next beat tick.
+
+- `frontend/.../integrations/[slug]/page.tsx` — `SYNCABLE_SLUGS` set + `SYNC_BUTTON_LABEL` map drive the button's visibility/label; removed the `slug === "ghl"` gate.
+
 ### Added — Facebook Page integration (Meta Graph API)
 
 Makes the `/marketing/social` **Facebook** column live, mirroring the Instagram connector. Manual long-lived **Page** token + Page ID; no migration. Unlike Instagram, Facebook needs no account-type conversion — any Page admin can read Page insights.

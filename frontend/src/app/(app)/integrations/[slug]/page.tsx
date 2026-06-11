@@ -29,6 +29,18 @@ function isMaskedValue(value: string): boolean {
   return value.startsWith("********");
 }
 
+// Providers that expose an on-demand "Sync now" button on the detail page.
+// Each maps to a backing Celery task in the backend's _trigger_sync(slug).
+const SYNCABLE_SLUGS = new Set(["ghl", "mailchimp", "instagram", "facebook"]);
+
+// Per-provider label for the sync button (falls back to "Sync now").
+const SYNC_BUTTON_LABEL: Record<string, string> = {
+  ghl: "Sync contacts now",
+  mailchimp: "Sync campaigns now",
+  instagram: "Sync metrics now",
+  facebook: "Sync metrics now",
+};
+
 // ─── Connected-users payload (per-user OAuth) ────────────────────────────────
 
 interface ConnectedUser {
@@ -1101,9 +1113,9 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
                     {isTesting ? "Testing…" : "Test"}
                   </Button>
                 )}
-                {detail.connected && slug === "ghl" && (
+                {detail.connected && SYNCABLE_SLUGS.has(slug) && (
                   <Button variant="ghost" onClick={handleSync} disabled={isSyncing}>
-                    {isSyncing ? "Queueing…" : "Sync contacts now"}
+                    {isSyncing ? "Queueing…" : SYNC_BUTTON_LABEL[slug] ?? "Sync now"}
                   </Button>
                 )}
                 {detail.connected && (
