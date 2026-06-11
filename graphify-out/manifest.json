@@ -910,8 +910,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/integrations/[slug]/page.tsx": {
-    "mtime": 1781189124.0700495,
-    "ast_hash": "7c1a11b59096b3012511cd51c84c0ceb",
+    "mtime": 1781190441.5350103,
+    "ast_hash": "b6ec8e22c4d465bff0201aeea1334dc1",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/integrations/page.tsx": {
@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1781189624.3387356,
-    "ast_hash": "60eb4b33bfa84132a721938bdb745237",
+    "mtime": 1781190494.4789765,
+    "ast_hash": "ddabd4b43bc2ef0161f7194b3f7ddcba",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
