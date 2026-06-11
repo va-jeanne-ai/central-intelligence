@@ -104,17 +104,29 @@ def _sync_live_platform(
     ).scalar_one_or_none()
 
     if row is None or row.status != "connected":
-        logger.info("%s not connected — skipping live sync", platform)
+        logger.info(
+            "[social-sync] %s: not connected (row=%s, status=%s) — skipping",
+            platform, "yes" if row else "none", getattr(row, "status", None),
+        )
         return "skipped"
 
     creds = load_creds(row)
     if creds is None:
-        logger.warning("%s connected but credentials unusable — skipping", platform)
+        logger.warning(
+            "[social-sync] %s: connected but credentials unusable "
+            "(decrypt/parse failed or missing token/id) — skipping", platform,
+        )
         row.last_sync_status = "error"
         row.last_sync_error = "Credentials missing or unparseable"
         return "error"
 
     access_token, account_id = creds
+    # Mask the token in logs — show only length + last 4 chars.
+    masked = f"…{access_token[-4:]} (len {len(access_token)})" if access_token else "(empty)"
+    logger.info(
+        "[social-sync] %s: creds OK — account_id=%s token=%s; calling Graph API…",
+        platform, account_id, masked,
+    )
     try:
         stats = fetch_stats(access_token, account_id)
         metrics = {
@@ -124,6 +136,7 @@ def _sync_live_platform(
             "reach": stats.reach,
             "impressions": stats.impressions,
         }
+        logger.info("[social-sync] %s: fetched live metrics → %s", platform, metrics)
         _upsert_platform_stats(db, platform, metrics, period_start, period_end)
         row.last_synced_at = period_end
         row.last_sync_status = "success"
@@ -142,12 +155,14 @@ def _sync_live_platform(
             )
         )
         logger.info(
-            "%s synced — followers=%s posts=%s impressions=%s",
-            platform, stats.followers, stats.posts_count, stats.impressions,
+            "[social-sync] %s: SYNCED + upserted for period %s → %s "
+            "(followers=%s posts=%s impressions=%s)",
+            platform, period_start.date(), period_end.date(),
+            stats.followers, stats.posts_count, stats.impressions,
         )
         return "synced"
     except Exception as exc:  # noqa: BLE001 — isolate one platform's failure
-        logger.exception("%s live sync failed: %s", platform, exc)
+        logger.exception("[social-sync] %s: live fetch FAILED — %s", platform, exc)
         row.last_sync_status = "error"
         row.last_sync_error = str(exc)[:500]
         db.add(
@@ -208,6 +223,11 @@ def update_social_stats(self) -> dict:
                 _upsert_platform_stats(db, platform, seed, period_start, period_end)
                 checked += 1
 
+            logger.info(
+                "[social-sync] summary — live=%s seeded=%s",
+                live_results,
+                [p for p in _PLATFORMS if p not in _LIVE_PLATFORMS],
+            )
             db.commit()
         finally:
             db.close()
