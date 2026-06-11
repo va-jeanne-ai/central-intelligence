@@ -292,23 +292,60 @@ Same shape as Meta Ads — search + display performance metrics into `ads_stats`
 
 ---
 
-## Instagram ⬜
+## Instagram ✅
 
-**What it could power**
+**What it does today**
 
-Replace `update_social_stats` ([`backend/app/tasks/social_stats.py`](backend/app/tasks/social_stats.py)) seed rows for the Instagram platform. Followers, reach, impressions, engagement, story views, profile visits.
+Pulls live organic metrics for one Instagram Business/Creator account from the Meta Graph API (v19.0) and upserts them into `social_stats`. Manual-token connector (same pattern as GHL/Mailchimp): the admin saves an **Access Token** + **Instagram Account ID** on `/integrations/instagram`; credentials are encrypted at rest in the `integrations` row.
 
-**Surfaces it would power**
+- [`backend/app/services/instagram_client.py`](backend/app/services/instagram_client.py) — Graph API wrapper. Profile (`followers_count`, `media_count`), account insights (`reach`, `impressions` over `days_28`), and recent media (`like_count`/`comments_count`) to estimate an engagement rate. Insights + media are best-effort; a failure there still records followers/posts.
+- [`backend/app/services/instagram_credentials.py`](backend/app/services/instagram_credentials.py) — decrypts `(access_token, ig_user_id)` from the integration blob (mirrors `ghl_credentials.py`).
+- [`backend/app/tasks/social_stats.py`](backend/app/tasks/social_stats.py) — `update_social_stats` now syncs Instagram live when connected; **skips** IG (no fake-data overwrite) when not connected or on error, and stamps `last_sync_status`/`last_sync_error` + a `sync_log` row. facebook/linkedin/tiktok remain on seed values until their connectors land.
+- Wired into [`backend/app/routes/integrations.py`](backend/app/routes/integrations.py): `_trigger_sync("instagram")` enqueues the task (the page's Sync button) and the **Test** button calls `instagram_client.verify()`.
+- Beat: rides the existing `social-stats-every-6h` schedule.
 
-- **`/marketing/social`** — live IG metrics.
-- **`/ci-market-signals`** — IG comments via `social_comments` table (already seeded; would feed real ones from the Graph API).
-- **Content performance ↔ content idea linkage** — when a post tagged with one of Greg's `content_ideas` is published, automatically attach reach/engagement to the idea row.
+**Surfaces it powers**
 
-**What's needed to ship**
+- **`/marketing/social`** — live IG followers, posts, reach, impressions, engagement once a sync runs.
 
-- IG Business Account (already required for Graph API access — most coaches have this).
-- Meta App with `instagram_basic`, `instagram_manage_insights`, `pages_show_list` permissions.
-- A `meta_graph_client.py` (likely shared with Facebook below — same API root).
+**Auth / setup** — manual token (paste a long-lived token + IG account ID on `/integrations/instagram`; the page has a collapsible **Setup steps** panel walking through both):
+
+- IG Business or Creator account linked to a Facebook Page.
+- Meta App with `instagram_basic` + `instagram_manage_insights` + `pages_read_engagement` scopes.
+- A **long-lived access token** (Graph API Explorer → exchange for a ~60-day token) and the numeric **IG Business account ID** (`GET /me/accounts` → `GET /<page-id>?fields=instagram_business_account`). Re-paste the token every ~60 days when it expires.
+
+**Not yet**
+
+- **"Connect with Meta" OAuth button** (one-click connect + token auto-refresh) — built then deferred to ship the manual connector first; lives in git history (branch `feat/instagram-social-integration`).
+- No story/profile-visit metrics. IG comments → `social_comments` still seed-only (separate collector).
+
+---
+
+## Facebook ✅
+
+**What it does today**
+
+Pulls live organic metrics for one Facebook Page into `social_stats` (the `facebook` platform row), replacing the seed data. Manual long-lived **Page** token + Page ID. Unlike Instagram, no account-type conversion is needed — any Page admin can read Page insights.
+
+- [`backend/app/services/facebook_client.py`](backend/app/services/facebook_client.py) — Graph API v19 wrapper. Page profile (`followers_count`/`fan_count`, `name`), Page Insights (`page_impressions` over `days_28`, summed), recent `/posts` (likes+comments) for an engagement-rate estimate. Profile required; insights + posts best-effort. `reach` is left null (no Page metric comparable to IG reach).
+- [`backend/app/services/facebook_credentials.py`](backend/app/services/facebook_credentials.py) — decrypts `(access_token, page_id)` from the integration blob.
+- [`backend/app/tasks/social_stats.py`](backend/app/tasks/social_stats.py) — Facebook rides the shared `update_social_stats` task via the generic `_sync_live_platform` path (alongside Instagram). Live when connected; **skips** (no fake-data overwrite) when not connected/on error, stamping `last_sync_status`/`last_sync_error` + a `sync_log` row.
+- Wired into [`backend/app/routes/integrations.py`](backend/app/routes/integrations.py): `_trigger_sync("facebook")` enqueues the task (Sync button); **Test** calls `facebook_client.verify()`.
+- Beat: rides the existing `social-stats-every-6h` schedule.
+
+**Surfaces it powers**
+
+- **`/marketing/social`** — live Facebook followers, posts, impressions, engagement once a sync runs.
+
+**Auth / setup** — manual Page token (the `/integrations/facebook` page has a collapsible **Setup steps** panel):
+
+- You must be an **admin** of the Facebook Page.
+- Meta App with **Facebook Login** + the `pages_read_engagement` + `pages_show_list` + `read_insights` scopes.
+- A **long-lived Page access token** (Graph API Explorer → select your Page under "User or Page" → generate → exchange for a ~60-day token) and the numeric **Page ID** (`GET /me/accounts`). Re-paste the token every ~60 days.
+
+**Not yet**
+
+- No "Connect with Meta" OAuth button (manual token only). No per-post breakdown surface. No `page_reach`. Shares `facebook_client` patterns with the Instagram connector.
 
 ---
 

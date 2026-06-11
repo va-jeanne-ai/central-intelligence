@@ -197,9 +197,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const supabase = createClient();
-    if (supabase) {
-      await supabase.auth.signOut();
+    // Best-effort server-side sign-out. If the session is already invalid
+    // (expired JWT / missing user), supabase.auth.signOut() can throw or
+    // hang — that must NOT block the local logout. Always fall through to
+    // clearing local state + redirecting so the button works regardless.
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (err) {
+      // Already-invalid session — nothing to revoke server-side. Proceed.
+      console.warn("supabase.auth.signOut() failed; clearing local session anyway", err);
     }
 
     apiClient.clearToken();
