@@ -200,8 +200,8 @@
     "semantic_hash": ""
   },
   "backend/app/config.py": {
-    "mtime": 1779710054.9974449,
-    "ast_hash": "1013ce2ee963390302b7e98552195b46",
+    "mtime": 1781176888.3083928,
+    "ast_hash": "e4cf4647311ad644b1346fe29d929ba7",
     "semantic_hash": ""
   },
   "backend/app/database.py": {
@@ -220,8 +220,8 @@
     "semantic_hash": ""
   },
   "backend/app/main.py": {
-    "mtime": 1781097170.7868512,
-    "ast_hash": "c8efde0e48b6b7c3d21d0a0b7a647df7",
+    "mtime": 1781177003.7571208,
+    "ast_hash": "62db74d227da84b9f735cdd572e9c8f7",
     "semantic_hash": ""
   },
   "backend/app/middleware/__init__.py": {
@@ -230,8 +230,8 @@
     "semantic_hash": ""
   },
   "backend/app/middleware/auth.py": {
-    "mtime": 1781097170.787298,
-    "ast_hash": "dace99f38e63ed580c11199338c95807",
+    "mtime": 1781177066.8897996,
+    "ast_hash": "37d07264e717e2b7d0148f92a1b2c497",
     "semantic_hash": ""
   },
   "backend/app/middleware/optimistic_lock.py": {
@@ -445,7 +445,7 @@
     "semantic_hash": ""
   },
   "backend/app/routes/dashboard.py": {
-    "mtime": 1781097845.8861034,
+    "mtime": 1781172567.4586778,
     "ast_hash": "d2a7e400fbb8bdcc285bcf7cd88e3725",
     "semantic_hash": ""
   },
@@ -480,8 +480,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/integrations.py": {
-    "mtime": 1781102321.3557389,
-    "ast_hash": "e9bfa4fd209475db3cf6e5e88026184a",
+    "mtime": 1781177137.9960093,
+    "ast_hash": "c4fc4e10f6cafb883933c0fdaad0f592",
     "semantic_hash": ""
   },
   "backend/app/routes/leads.py": {
@@ -565,7 +565,7 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/dashboard.py": {
-    "mtime": 1781097845.8864338,
+    "mtime": 1781172567.4603436,
     "ast_hash": "ce0e8c03659cdb4c1d9044f8b10b24c1",
     "semantic_hash": ""
   },
@@ -585,8 +585,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/integrations.py": {
-    "mtime": 1779703601.2288191,
-    "ast_hash": "f6617f789a30766ea53c5b3d325d14d9",
+    "mtime": 1781177119.7776213,
+    "ast_hash": "03d468b2b97e6fcf2363aee2d8c0fce6",
     "semantic_hash": ""
   },
   "backend/app/schemas/leads.py": {
@@ -685,8 +685,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/integrations_registry.py": {
-    "mtime": 1781102159.5020797,
-    "ast_hash": "1694ae9840130998175939a3aaa440cc",
+    "mtime": 1781177107.9066694,
+    "ast_hash": "f609321194184106795ba14f8e112254",
     "semantic_hash": ""
   },
   "backend/app/services/local_whisper.py": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "backend/app/tasks/social_stats.py": {
-    "mtime": 1781102271.7816794,
-    "ast_hash": "96a816aa61e1ea848bd7ee94103dc2a4",
+    "mtime": 1781177047.7063208,
+    "ast_hash": "104f20fa6d260411fe3211f43be2cccd",
     "semantic_hash": ""
   },
   "backend/app/tasks/transcriber.py": {
@@ -900,7 +900,7 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/dashboard/page.tsx": {
-    "mtime": 1781097845.8868604,
+    "mtime": 1781172567.4634163,
     "ast_hash": "4038d6c675aff47af0b61ee6c5143953",
     "semantic_hash": ""
   },
@@ -910,8 +910,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/integrations/[slug]/page.tsx": {
-    "mtime": 1781097170.8019755,
-    "ast_hash": "944b6cd087049ed297025e27d87a5696",
+    "mtime": 1781177430.1728559,
+    "ast_hash": "9c60372dbeeed6eeac41984e1d18fe20",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/integrations/page.tsx": {
@@ -1380,8 +1380,8 @@
     "semantic_hash": ""
   },
   "frontend/src/types/index.ts": {
-    "mtime": 1781097170.808976,
-    "ast_hash": "a2861d5d0789c5e8599c6c753758e0c3",
+    "mtime": 1781177373.6040943,
+    "ast_hash": "f1e120553401e3e5c5ed32425bc24aef",
     "semantic_hash": ""
   },
   "frontend/tailwind.config.ts": {
@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1781103734.2103477,
-    "ast_hash": "4779b9a694c25f305abb720a5212a1aa",
+    "mtime": 1781177493.5521317,
+    "ast_hash": "911e9849d259f8ac13ccf7e927ea95d2",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1445,8 +1445,8 @@
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1781103719.8431525,
-    "ast_hash": "e9099dcfa6f0dc072cf9b967b445d254",
+    "mtime": 1781177514.5944061,
+    "ast_hash": "3c74406e6177a6956bef2923e8131980",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
@@ -1835,8 +1835,18 @@
     "semantic_hash": ""
   },
   "backend/app/services/instagram_client.py": {
-    "mtime": 1781102227.740533,
+    "mtime": 1781172567.4608614,
     "ast_hash": "70e05bcbf89570843982c309206e924b",
+    "semantic_hash": ""
+  },
+  "backend/app/routes/meta_oauth.py": {
+    "mtime": 1781176982.9960968,
+    "ast_hash": "b4fef5e1c36f0b263f3bc766d4c877cb",
+    "semantic_hash": ""
+  },
+  "backend/app/services/meta_oauth.py": {
+    "mtime": 1781176923.2906828,
+    "ast_hash": "85d8a956871b4d90e107d6da0a74cad3",
     "semantic_hash": ""
   }
 }
