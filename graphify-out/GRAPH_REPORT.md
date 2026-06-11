@@ -1,7 +1,7 @@
 # Graph Report - central-intelligence  (2026-06-11)
 
 ## Corpus Check
-- 351 files · ~613,156 words
+- 351 files · ~613,253 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `0b9f44e7`
+- Built from commit: `559428ed`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -281,7 +281,7 @@
 - [[_COMMUNITY_Community 295|Community 295]]
 - [[_COMMUNITY_Community 297|Community 297]]
 - [[_COMMUNITY_Community 298|Community 298]]
-- [[_COMMUNITY_Community 300|Community 300]]
+- [[_COMMUNITY_Community 299|Community 299]]
 - [[_COMMUNITY_Community 301|Community 301]]
 - [[_COMMUNITY_Community 302|Community 302]]
 - [[_COMMUNITY_Community 303|Community 303]]
@@ -451,7 +451,7 @@ Nodes (31): AsyncSession, CurrentUser, Integration, ProviderSummary, _decrypt_bl
 
 ### Community 27 - "Community 27"
 Cohesion: 0.04
-Nodes (49): ChatHistorySidebar(), ChatHistorySidebarProps, calendarClient, ListEventsParams, chatSessionsClient, ConnectionState, MessageHandler, StateChangeHandler (+41 more)
+Nodes (53): ChatHistorySidebar(), ChatHistorySidebarProps, ApiClient, ApiError, generateRequestId(), parseErrorBody(), sleep(), calendarClient (+45 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.05
@@ -466,8 +466,8 @@ Cohesion: 0.07
 Nodes (30): APPT_STATUS_DOT, describeHistoryEvent(), DocumentRow, DocumentsResponse, EmailAttachmentMeta, EmailMessageRow, EmailThreadRow, EmailThreadsResponse (+22 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.05
-Nodes (31): AD_PLATFORMS, AdPlatform, AdVariant, BRAND_VOICES, BrandVoice, CAMPAIGN_GOALS, CampaignGoal, FormState (+23 more)
+Cohesion: 0.08
+Nodes (15): AD_PLATFORMS, AdPlatform, AdVariant, BRAND_VOICES, BrandVoice, CAMPAIGN_GOALS, CampaignGoal, FormState (+7 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.10
@@ -702,8 +702,8 @@ Cohesion: 0.23
 Nodes (33): AsyncSession, CurrentUser, Response, UUID, AsyncSession, UUID, CreateTicketRequest, _coerce_author_uuid() (+25 more)
 
 ### Community 91 - "Community 91"
-Cohesion: 0.13
-Nodes (15): 6.x Central Intelligence Endpoints, CI Calls Endpoints, CI Content Ideas Endpoints, CI Insights Endpoints, CI Market Signals Endpoints, CI Transcript Endpoints, GET /v1/ci/calls, GET /v1/ci/calls/:call_id (+7 more)
+Cohesion: 0.10
+Nodes (20): 6.x Central Intelligence Endpoints, CI Calls Endpoints, CI Content Ideas Endpoints, CI Insights Endpoints, CI Market Signals Endpoints, CI Reference Data Endpoints, CI Transcript Endpoints, GET /v1/ci/calls (+12 more)
 
 ### Community 92 - "Community 92"
 Cohesion: 0.13
@@ -722,8 +722,8 @@ Cohesion: 0.14
 Nodes (14): 10. API Testing Guide, Authenticate User, Central Intelligence Chat, Database State Validation, FastAPI Testing with pytest, How to Test Each Endpoint (cURL Examples), Integration Test Requirements, Key Endpoint Test Cases (+6 more)
 
 ### Community 96 - "Community 96"
-Cohesion: 0.14
-Nodes (13): 2. Implementation Status Tracker, 6. Login / Authentication System, 7. Error Handling Layer, 8. Edge Case Handlers, Architecture Overview, Central Intelligence / Central Intelligence — Critical Fixes Master Document - ENHANCED, Database Schema, Error Categories (+5 more)
+Cohesion: 0.20
+Nodes (9): 2. Implementation Status Tracker, 7. Error Handling Layer, 8. Edge Case Handlers, Central Intelligence / Central Intelligence — Critical Fixes Master Document - ENHANCED, Error Categories, Error Response Format, Master Tracking Table, Status Definitions (+1 more)
 
 ### Community 97 - "Community 97"
 Cohesion: 0.14
@@ -738,8 +738,8 @@ Cohesion: 0.15
 Nodes (12): Central Intelligence, Configuration, Frontend — Atomic Component Library, Goals, graphify, Integrations catalog, Key References, Pop-up messages — never use native browser dialogs (+4 more)
 
 ### Community 100 - "Community 100"
-Cohesion: 0.15
-Nodes (12): Central Intelligence (Central Intelligence) — REST API Contract, Central Intelligence Subsystem, Endpoints, Error Format, Error Response Example (FastAPI HTTPException), Example Endpoint Conversion, Overview, Rate Limit Response Headers (+4 more)
+Cohesion: 0.12
+Nodes (16): Central Intelligence (Central Intelligence) — REST API Contract, Central Intelligence Subsystem, Endpoints, Error Format, Error Response Example (FastAPI HTTPException), Example Endpoint Conversion, Overview, Pagination Conventions (+8 more)
 
 ### Community 101 - "Community 101"
 Cohesion: 0.15
@@ -802,12 +802,12 @@ Cohesion: 0.16
 Nodes (18): Any, _estimate_engagement_rate(), FacebookStats, fetch_facebook_stats(), _get(), is_configured(), Facebook (Meta Graph API) client — social-stats connector.  Thin httpx wrapper a, Issue a GET against the Graph API and return parsed JSON.      Raises ``httpx.HT (+10 more)
 
 ### Community 116 - "Community 116"
-Cohesion: 0.24
-Nodes (6): FunnelStats, FunnelStatsRepository, Repository for FunnelStats — aggregated funnel metrics., Return the most recent period's stats for all stages of a funnel., Return the most recent stats across all funnels., Find-or-create a stats row by funnel_id + stage + period_start.
+Cohesion: 0.19
+Nodes (8): datetime, FunnelStats, FunnelStatsRepository, Concrete repositories for Sprint 3 marketing domain models., Repository for FunnelStats — aggregated funnel metrics., Return the most recent period's stats for all stages of a funnel., Return the most recent stats across all funnels., Find-or-create a stats row by funnel_id + stage + period_start.
 
 ### Community 117 - "Community 117"
-Cohesion: 0.14
-Nodes (7): ArchivedRow(), EmailCampaignRow, EmailData, EmailPage(), formatDate(), formatPercent(), SentRow()
+Cohesion: 0.10
+Nodes (11): ArchivedRow(), EmailCampaignRow, EmailData, EmailPage(), formatDate(), formatPercent(), SentRow(), CONFIRM_BUTTON_STYLE (+3 more)
 
 ### Community 118 - "Community 118"
 Cohesion: 0.25
@@ -823,7 +823,7 @@ Nodes (11): Gate 1: Code Quality, Gate 2: Testing & QA, Gate 3: Agent Validation
 
 ### Community 121 - "Community 121"
 Cohesion: 0.18
-Nodes (11): 12. Security Considerations, 13. Soft Delete Strategy, 14. Circuit Breaker Pattern, 3. Python Agent Class Hierarchy, 6. Database Layer: Supabase + SQLAlchemy, 9. Cross-Domain Data Flow, Central Intelligence (Central Intelligence) - Technical Plan v3.0.0, Data Flow Diagram (+3 more)
+Nodes (11): 11. Error Handling Strategy, 12. Security Considerations, 13. Soft Delete Strategy, 14. Circuit Breaker Pattern, 3. Python Agent Class Hierarchy, 6. Database Layer: Supabase + SQLAlchemy, Central Intelligence (Central Intelligence) - Technical Plan v3.0.0, Repository Pattern for Database Abstraction (+3 more)
 
 ### Community 122 - "Community 122"
 Cohesion: 0.05
@@ -1198,8 +1198,8 @@ Cohesion: 0.50
 Nodes (3): Funnel Stats Celery task — Operator OPS-SF1.  Scheduled task that pulls and upda, Scheduled Celery task that pulls and updates funnel conversion metrics.      Spr, update_funnel_stats()
 
 ### Community 219 - "Community 219"
-Cohesion: 0.21
-Nodes (8): datetime, Promotion, PromotionRepository, Concrete repositories for Sprint 3 marketing domain models., Repository for Promotion — promo calendar entries., Return promotions whose date range overlaps [start, end]., Return promotions with status 'active' or 'planned'., Return promotions starting in the future, ordered by start_date.
+Cohesion: 0.28
+Nodes (6): Promotion, PromotionRepository, Repository for Promotion — promo calendar entries., Return promotions whose date range overlaps [start, end]., Return promotions with status 'active' or 'planned'., Return promotions starting in the future, ordered by start_date.
 
 ### Community 221 - "Community 221"
 Cohesion: 0.15
@@ -1238,8 +1238,8 @@ Cohesion: 0.12
 Nodes (16): AppointmentDetailResponse, AppointmentHistoryEvent, AppointmentHistoryResponse, AppointmentKpiResponse, AppointmentListResponse, AppointmentRecord, AppointmentStatsResponse, AppointmentVolumePoint (+8 more)
 
 ### Community 277 - "Community 277"
-Cohesion: 0.50
-Nodes (4): Pagination Conventions, Pydantic Model Example, Query Parameters, Response Envelope for Lists
+Cohesion: 0.22
+Nodes (8): fmtDate(), GoalBoard(), GoalCard(), GoalRow, Stage, STAGES, STATUS_BADGE, statusBadge()
 
 ### Community 278 - "Community 278"
 Cohesion: 0.15
@@ -1278,8 +1278,8 @@ Cohesion: 0.29
 Nodes (7): Any, _field(), list_providers(), Provider registry for third-party integrations.  Single source of truth for "wha, Return providers in display order (available first, then coming soon)., Shorthand builder for one form field dict., required_keys()
 
 ### Community 290 - "Community 290"
-Cohesion: 0.40
-Nodes (5): CI Reference Data Endpoints, GET /v1/ci/monthly-preferences/:year/:month, GET /v1/ci/offers, GET /v1/ci/tags, PUT /v1/ci/monthly-preferences/:year/:month
+Cohesion: 0.50
+Nodes (4): 6. Login / Authentication System, Architecture Overview, Database Schema, FastAPI Authentication Middleware
 
 ### Community 291 - "Community 291"
 Cohesion: 0.18
@@ -1305,9 +1305,9 @@ Nodes (11): [0.1.0] - 2026-03-29 — Sprint 1A Foundation, [0.2.0] - 2026-03-30 
 Cohesion: 0.50
 Nodes (4): Re-run the Sales Call Analyzer on an existing Call row.      Useful for:       -, trigger_call_analysis(), AnalyzeCallResponse, Response from POST /api/v1/ci/calls/{call_id}/analyze.      The analyzer runs as
 
-### Community 300 - "Community 300"
+### Community 299 - "Community 299"
 Cohesion: 0.67
-Nodes (3): 11. Error Handling Strategy, Standardized Error Response, Three-Layer Error Handling
+Nodes (3): 9. Cross-Domain Data Flow, Data Flow Diagram, Shared Intelligence Tables
 
 ### Community 301 - "Community 301"
 Cohesion: 0.29

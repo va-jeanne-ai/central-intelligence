@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "backend/app/tasks/social_stats.py": {
-    "mtime": 1781188980.6541882,
-    "ast_hash": "24a5bef4deff2b555cd1f877c38f4b1d",
+    "mtime": 1781191050.7118964,
+    "ast_hash": "44247e8a6c441c16f31af4480b7e7433",
     "semantic_hash": ""
   },
   "backend/app/tasks/transcriber.py": {
