@@ -89,9 +89,6 @@ _EXEMPT_PREFIXES: tuple[str, ...] = (
     # initiating user_id, signed by the integrations encryption key)
     # to know who's connecting.
     "/api/v1/integrations/google_workspace/oauth/callback",
-    # Meta (Facebook/Instagram) OAuth callback — Facebook hits this with no
-    # JWT. The callback validates the `state` CSRF nonce (Fernet-signed).
-    "/api/v1/integrations/instagram/oauth/callback",
     "/docs",
     "/redoc",
     "/openapi.json",

@@ -41,10 +41,6 @@ class ProviderSummary(BaseModel):
     # The frontend renders a "Connect Gmail" button instead of the
     # credentials form; the OAuth dance lives in routes/oauth.py.
     oauth_per_user: bool = False
-    # True for Instagram's "Connect with Meta" OAuth (single shared business
-    # account). The frontend renders a Meta connect button; the manual-token
-    # form stays available as a fallback. Flow lives in routes/meta_oauth.py.
-    meta_oauth: bool = False
 
 
 class IntegrationDetail(ProviderSummary):

@@ -158,11 +158,6 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "status": "available",
         "description": "Organic post metrics, follower growth, reach & impressions via the Meta Graph API.",
         "trigger_task": "instagram",  # mapped in routes/_trigger_sync
-        # Connect via Meta OAuth (single shared business account). The
-        # frontend reads this flag and renders a "Connect with Meta" button.
-        # The manual-token `fields` below stay as a fallback for admins who
-        # prefer to paste a long-lived token directly.
-        "meta_oauth": True,
         "fields": [
             _field(
                 "access_token",

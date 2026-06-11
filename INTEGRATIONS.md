@@ -308,16 +308,16 @@ Pulls live organic metrics for one Instagram Business/Creator account from the M
 
 - **`/marketing/social`** — live IG followers, posts, reach, impressions, engagement once a sync runs.
 
-**Auth / setup** — two ways to connect:
+**Auth / setup** — manual token (paste a long-lived token + IG account ID on `/integrations/instagram`; the page has a collapsible **Setup steps** panel walking through both):
 
-1. **Connect with Meta (OAuth, recommended).** Click **Connect with Meta** on `/integrations/instagram` → Facebook consent → we exchange for a long-lived (~60-day) token, auto-resolve the IG Business account ID, and **auto-refresh the token before it expires** (re-extended on each sync within 7 days of expiry, so the connection doesn't silently die). Single shared brand account. Flow: [`backend/app/routes/meta_oauth.py`](backend/app/routes/meta_oauth.py) + [`backend/app/services/meta_oauth.py`](backend/app/services/meta_oauth.py). Needs `META_OAUTH_CLIENT_ID`/`META_OAUTH_CLIENT_SECRET` in `.env` and a Meta app (App Review required for production scopes; dev-mode works for app testers).
-2. **Manual token (fallback).** Paste a long-lived access token + IG account ID into the form. No auto-refresh — re-paste every ~60 days.
-
-Both paths require: an IG Business/Creator account linked to a Facebook Page, and a Meta App with `instagram_basic` + `instagram_manage_insights` + `pages_read_engagement` (OAuth also requests `pages_show_list` + `business_management`).
+- IG Business or Creator account linked to a Facebook Page.
+- Meta App with `instagram_basic` + `instagram_manage_insights` + `pages_read_engagement` scopes.
+- A **long-lived access token** (Graph API Explorer → exchange for a ~60-day token) and the numeric **IG Business account ID** (`GET /me/accounts` → `GET /<page-id>?fields=instagram_business_account`). Re-paste the token every ~60 days when it expires.
 
 **Not yet**
 
-- No story/profile-visit metrics. IG comments → `social_comments` still seed-only (separate collector). Facebook shares the same Graph root and can reuse `instagram_client` + `meta_oauth` when wired.
+- **"Connect with Meta" OAuth button** (one-click connect + token auto-refresh) — built then deferred to ship the manual connector first; lives in git history (branch `feat/instagram-social-integration`).
+- No story/profile-visit metrics. IG comments → `social_comments` still seed-only (separate collector). Facebook shares the same Graph root and can reuse `instagram_client` when wired.
 
 ---
 

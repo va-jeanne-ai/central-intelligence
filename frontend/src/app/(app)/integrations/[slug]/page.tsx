@@ -43,284 +43,132 @@ interface ConnectedUsersResponse {
   users: ConnectedUser[];
 }
 
-// ─── Meta (Instagram) OAuth connect card ──────────────────────────────────────
-// Renders for slug='instagram' when meta_oauth is true. "Connect with Meta"
-// kicks off the single-shared-account OAuth flow (routes/meta_oauth.py). The
-// manual-token form still renders below as a fallback.
+// ─── Instagram setup-steps card ───────────────────────────────────────────────
+// Renders for slug='instagram'. Walks the admin through getting a long-lived
+// access token + the IG Business account ID to paste into the credentials
+// form below. (OAuth "Connect with Meta" is deferred to a later sprint.)
 
-function MetaInstagramConnectCard({
-  detail,
-  onChanged,
-}: {
-  detail: IntegrationDetail;
-  onChanged: () => void;
-}) {
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isDisconnecting, setIsDisconnecting] = useState(false);
-  // Setup steps: expanded by default until connected (they stop being the
-  // primary content once the account is linked).
-  const [showSetupSteps, setShowSetupSteps] = useState(!detail.connected);
-
-  useEffect(() => {
-    // Surface the OAuth callback result (?connected=ok|err) as a toast.
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const connected = params.get("connected");
-    const errParam = params.get("error");
-    if (connected === "ok") {
-      showSuccess("Instagram connected. Metrics will sync on the next run.");
-      window.history.replaceState({}, "", window.location.pathname);
-      onChanged();
-    } else if (connected === "err") {
-      const messages: Record<string, string> = {
-        no_ig_business_account:
-          "No Instagram Business account is linked to your Facebook Page. Link one in Page settings, then reconnect.",
-        token_exchange_failed: "Meta rejected the token exchange. Try again.",
-        no_long_lived_token: "Couldn't obtain a long-lived token from Meta.",
-      };
-      showError(
-        errParam
-          ? (messages[errParam] ?? `Meta OAuth failed: ${errParam}`)
-          : "Meta OAuth was cancelled or failed.",
-      );
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function handleConnect() {
-    setIsConnecting(true);
-    try {
-      const data = await apiClient.get<{ redirect_url: string }>(
-        "/integrations/instagram/oauth/start",
-        { silent: true },
-      );
-      if (data.redirect_url) {
-        window.location.href = data.redirect_url;
-      } else {
-        showError("Backend didn't return a Meta consent URL.");
-        setIsConnecting(false);
-      }
-    } catch (err) {
-      showError(
-        err instanceof Error
-          ? err.message
-          : "Failed to start the Meta OAuth flow. Is META_OAUTH_CLIENT_ID configured?",
-      );
-      setIsConnecting(false);
-    }
-  }
-
-  async function handleDisconnect() {
-    setIsDisconnecting(true);
-    try {
-      await apiClient.delete("/integrations/instagram/oauth/disconnect", {
-        silent: true,
-      });
-      showSuccess("Instagram disconnected.");
-      onChanged();
-    } catch (err) {
-      showError(err instanceof Error ? err.message : "Failed to disconnect.");
-    } finally {
-      setIsDisconnecting(false);
-    }
-  }
+function InstagramSetupStepsCard() {
+  const [showSetupSteps, setShowSetupSteps] = useState(true);
 
   const linkClass =
     "text-indigo-600 hover:text-indigo-700 underline underline-offset-2";
 
   return (
-    <div className="space-y-6">
-      {/* Setup steps — how to get the Meta app credentials, the manual
-          token, and the IG account ID. */}
-      <Card>
-        <CardHeader
-          title="Setup steps"
-          action={
-            <button
-              type="button"
-              onClick={() => setShowSetupSteps((v) => !v)}
-              className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
-            >
-              {showSetupSteps ? "Hide" : "Show"}
-            </button>
-          }
-        />
-        {showSetupSteps && (
-          <CardBody className="space-y-5">
-            {/* Prerequisites */}
-            <div className="space-y-2">
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
-                Before you start
-              </h3>
-              <ul className="list-disc list-inside space-y-1 text-[13px] text-gray-700">
-                <li>
-                  Your Instagram account must be a{" "}
-                  <strong>Business</strong> or <strong>Creator</strong> account
-                  (Instagram app → Settings → Account type).
-                </li>
-                <li>
-                  That account must be <strong>linked to a Facebook Page</strong>{" "}
-                  (Instagram app → Settings → Linked accounts, or the Page&apos;s
-                  settings). The Graph API reaches Instagram through the Page.
-                </li>
-              </ul>
-            </div>
+    <Card>
+      <CardHeader
+        title="Setup steps"
+        action={
+          <button
+            type="button"
+            onClick={() => setShowSetupSteps((v) => !v)}
+            className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            {showSetupSteps ? "Hide" : "Show"}
+          </button>
+        }
+      />
+      {showSetupSteps && (
+        <CardBody className="space-y-5">
+          {/* Prerequisites */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Before you start
+            </h3>
+            <ul className="list-disc list-inside space-y-1 text-[13px] text-gray-700">
+              <li>
+                Your Instagram account must be a <strong>Business</strong> or{" "}
+                <strong>Creator</strong> account (Instagram app → Settings →
+                Account type).
+              </li>
+              <li>
+                That account must be <strong>linked to a Facebook Page</strong>{" "}
+                (Instagram app → Settings → Linked accounts, or the Page&apos;s
+                settings). The Graph API reaches Instagram through the Page.
+              </li>
+              <li>
+                You need a Meta app with the <strong>Instagram Graph API</strong>{" "}
+                product added (
+                <a
+                  href="https://developers.facebook.com/apps"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  developers.facebook.com/apps
+                </a>{" "}
+                → Create App → Business).
+              </li>
+            </ul>
+          </div>
 
-            {/* One-time: create the Meta app */}
-            <div className="space-y-2">
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
-                One-time: create a Meta app
-              </h3>
-              <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
-                <li>
-                  Open{" "}
-                  <a
-                    href="https://developers.facebook.com/apps"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={linkClass}
-                  >
-                    developers.facebook.com/apps
-                  </a>{" "}
-                  → <strong>Create App</strong> → type <strong>Business</strong>.
-                </li>
-                <li>
-                  In the left sidebar, click <strong>Add Product</strong> and
-                  add both <strong>Instagram</strong> (Instagram Graph API) and{" "}
-                  <strong>Facebook Login for Business</strong>. They only appear
-                  under <strong>Products</strong> in the sidebar{" "}
-                  <em>after</em> you add them here — that&apos;s why a brand-new
-                  app has no &ldquo;Facebook Login&rdquo; entry yet.
-                </li>
-                <li>
-                  Now go to <strong>Products → Facebook Login for Business →
-                  Settings</strong> (left sidebar). In the{" "}
-                  <strong>Client OAuth settings</strong> section, make sure{" "}
-                  <strong>Client OAuth login</strong> and{" "}
-                  <strong>Web OAuth login</strong> are <strong>On</strong>, then
-                  paste this into <strong>Valid OAuth Redirect URIs</strong> and{" "}
-                  <strong>Save changes</strong>:
-                </li>
-              </ol>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 min-w-0 text-[11px] font-mono bg-gray-50 border border-gray-200 rounded-md px-3 py-2 overflow-x-auto whitespace-nowrap text-gray-800">
-                  http://localhost:8000/api/v1/integrations/instagram/oauth/callback
-                </code>
-                <CopyButton
-                  text="http://localhost:8000/api/v1/integrations/instagram/oauth/callback"
-                  label="Copy"
-                />
-              </div>
-              <p className="text-[12px] text-gray-600">
-                Then put the app&apos;s ID + secret in <code>backend/.env</code>{" "}
-                as <code>META_OAUTH_CLIENT_ID</code> and{" "}
-                <code>META_OAUTH_CLIENT_SECRET</code>, and restart the backend.
-                After that, <strong>Connect with Meta</strong> below handles the
-                token + account ID automatically.
-              </p>
-            </div>
+          {/* Get the access token */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Get your access token
+            </h3>
+            <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
+              <li>
+                Open the{" "}
+                <a
+                  href="https://developers.facebook.com/tools/explorer/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  Graph API Explorer
+                </a>
+                , select your app, and <strong>Generate Access Token</strong>{" "}
+                granting <code>instagram_basic</code>,{" "}
+                <code>instagram_manage_insights</code>,{" "}
+                <code>pages_show_list</code>, and{" "}
+                <code>pages_read_engagement</code>. This is a{" "}
+                <strong>short-lived</strong> token (~1 hour).
+              </li>
+              <li>
+                Exchange it for a <strong>long-lived</strong> (~60-day) token via
+                the{" "}
+                <a
+                  href="https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  token-exchange endpoint
+                </a>
+                . Paste this long-lived token as the <strong>Access Token</strong>{" "}
+                below.
+              </li>
+            </ol>
+          </div>
 
-            {/* Manual fallback: get a token + IG account ID by hand */}
-            <div className="space-y-2 border-t border-gray-100 pt-4">
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
-                Manual fallback: get a token &amp; account ID by hand
-              </h3>
-              <p className="text-[12px] text-gray-600">
-                Only needed if you skip &ldquo;Connect with Meta&rdquo; and paste
-                credentials into the form below.
-              </p>
-              <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
-                <li>
-                  Open the{" "}
-                  <a
-                    href="https://developers.facebook.com/tools/explorer/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={linkClass}
-                  >
-                    Graph API Explorer
-                  </a>
-                  , select your app, and <strong>Generate Access Token</strong>{" "}
-                  granting <code>instagram_basic</code>,{" "}
-                  <code>instagram_manage_insights</code>,{" "}
-                  <code>pages_show_list</code>, and{" "}
-                  <code>pages_read_engagement</code>. This is a{" "}
-                  <strong>short-lived</strong> token (~1 hour).
-                </li>
-                <li>
-                  Exchange it for a <strong>long-lived</strong> (~60-day) token
-                  via the{" "}
-                  <a
-                    href="https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={linkClass}
-                  >
-                    token-exchange endpoint
-                  </a>
-                  . Paste this one as the <strong>Access Token</strong>.
-                </li>
-                <li>
-                  Find your <strong>Instagram Account ID</strong>: call{" "}
-                  <code>GET /me/accounts</code> to get your Page ID, then{" "}
-                  <code>
-                    GET /&lt;page-id&gt;?fields=instagram_business_account
-                  </code>
-                  . The returned numeric{" "}
-                  <code>instagram_business_account.id</code> is your account ID.
-                </li>
-              </ol>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800">
-                Manual tokens expire ~every 60 days and must be re-pasted.
-                &ldquo;Connect with Meta&rdquo; auto-refreshes instead.
-              </div>
-            </div>
-          </CardBody>
-        )}
-      </Card>
+          {/* Get the IG account ID */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Get your Instagram Account ID
+            </h3>
+            <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
+              <li>
+                Call <code>GET /me/accounts</code> (in the Graph API Explorer) to
+                get your Page ID.
+              </li>
+              <li>
+                Then call{" "}
+                <code>GET /&lt;page-id&gt;?fields=instagram_business_account</code>
+                . The returned numeric{" "}
+                <code>instagram_business_account.id</code> is your{" "}
+                <strong>Instagram Account ID</strong> — paste it below.
+              </li>
+            </ol>
+          </div>
 
-      {/* Connect card */}
-      <Card>
-        <CardHeader title="Connect with Meta" />
-        <CardBody className="space-y-4">
-          {detail.connected ? (
-            <>
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
-                <p className="text-[13px] text-emerald-800">
-                  <span className="font-semibold">Connected.</span> Instagram
-                  metrics sync automatically; the access token is refreshed
-                  before it expires.
-                </p>
-              </div>
-              <Button
-                variant="danger"
-                onClick={handleDisconnect}
-                disabled={isDisconnecting}
-              >
-                {isDisconnecting ? "Disconnecting…" : "Disconnect"}
-              </Button>
-            </>
-          ) : (
-            <>
-              <p className="text-sm text-gray-700">
-                Connect one Instagram <strong>Business</strong> or{" "}
-                <strong>Creator</strong> account (linked to a Facebook Page) for
-                the whole workspace. We&apos;ll pull followers, reach,
-                impressions, and engagement — and keep the token fresh
-                automatically.
-              </p>
-              <Button onClick={handleConnect} disabled={isConnecting}>
-                {isConnecting ? "Redirecting…" : "Connect with Meta"}
-              </Button>
-              <p className="text-[11px] text-gray-400">
-                Prefer to paste a token manually? Use the credentials form below.
-              </p>
-            </>
-          )}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800">
+            Long-lived tokens expire ~every 60 days — re-paste a fresh one here
+            when that happens.
+          </div>
         </CardBody>
-      </Card>
-    </div>
+      )}
+    </Card>
   );
 }
 
@@ -1040,8 +888,8 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
           {slug === "google_workspace" && detail.oauth_per_user && (
             <GoogleWorkspaceConnectCard />
           )}
-          {slug === "instagram" && detail.meta_oauth && (
-            <MetaInstagramConnectCard detail={detail} onChanged={load} />
+          {slug === "instagram" && (
+            <InstagramSetupStepsCard />
           )}
           {slug === "ghl" && detail.values.webhook_url && (
             <Card>

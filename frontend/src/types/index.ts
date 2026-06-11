@@ -310,10 +310,6 @@ export interface IntegrationSummary {
   // The detail page renders a "Connect Gmail" button instead of the
   // credentials form.
   oauth_per_user: boolean;
-  // True for Instagram's "Connect with Meta" OAuth (single shared business
-  // account). The detail page renders a Meta connect button; the manual
-  // token form stays available as a fallback.
-  meta_oauth?: boolean;
 }
 
 export interface IntegrationDetail extends IntegrationSummary {

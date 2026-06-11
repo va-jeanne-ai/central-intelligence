@@ -33,10 +33,7 @@ from app.models.audit import SyncLog
 from app.models.integration import Integration
 from app.models.marketing import SocialStats
 from app.services import instagram_client
-from app.services.instagram_credentials import (
-    ensure_fresh_token,
-    load_instagram_credentials,
-)
+from app.services.instagram_credentials import load_instagram_credentials
 from app.tasks.celery_app import celery_app
 from app.tasks.db import make_sync_session
 
@@ -96,10 +93,6 @@ def _sync_instagram(db, period_start: datetime, period_end: datetime) -> str:
     if row is None or row.status != "connected":
         logger.info("Instagram not connected — skipping live sync")
         return "skipped"
-
-    # Re-extend an OAuth long-lived token if it's near expiry (no-op for
-    # manual-token rows). Done before loading creds so we use the fresh one.
-    ensure_fresh_token(db, row)
 
     creds = load_instagram_credentials(row)
     if creds is None:
