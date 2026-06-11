@@ -6,6 +6,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Facebook Page Insights metric churn handled gracefully
+
+Meta is deprecating the bare `page_impressions` Page-insights metric through mid-2026 (it now returns `(#100) The value must be a valid insights metric`). `facebook_client.fetch_facebook_stats` now tries `page_impressions_unique` then `page_impressions`, uses whichever the API accepts, and logs Meta's actual error message (via a new `_error_message` helper, also used by `verify()`) instead of a raw traceback. Insights stay best-effort — followers/posts still sync when the impressions metric is rejected or absent (e.g. a low-activity Page returns no insights). `reach` remains null (no comparable Page metric).
+
 ### Fixed — Social credential loaders read the account ID from `config`, not the blob
 
 The Instagram/Facebook sync reported "credentials unusable" even with a valid token saved, because the save route stores the **secret** field (`access_token`) in the encrypted blob but the **non-secret** ID field (`ig_user_id` / `page_id`) in the `config` JSONB column — and the loaders only read both from the blob. `load_instagram_credentials` / `load_facebook_credentials` now read the token from the decrypted blob and the ID from `integration.config` (with a blob fallback for older rows). With this fix, a saved Facebook Page token syncs live.

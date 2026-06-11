@@ -111,6 +111,14 @@ def _get(path: str, access_token: str, params: dict[str, Any] | None = None) -> 
         return resp.json()
 
 
+def _error_message(exc: httpx.HTTPStatusError) -> str:
+    """Pull Meta's human-readable error message out of an HTTP error response."""
+    try:
+        return exc.response.json().get("error", {}).get("message", "") or str(exc)
+    except Exception:  # noqa: BLE001
+        return exc.response.text[:200] or str(exc)
+
+
 def _sum_insight_values(entry: dict[str, Any]) -> int:
     """Sum the time-series ``values`` of one Page Insights metric entry."""
     total = 0
@@ -163,18 +171,32 @@ def fetch_facebook_stats(access_token: str, page_id: str) -> FacebookStats:
     followers = int(profile.get("followers_count") or profile.get("fan_count") or 0)
     name = profile.get("name")
 
+    # Page Insights are best-effort and Meta is mid-deprecation (the bare
+    # `page_impressions` metric is being retired through mid-2026 in favour of
+    # `page_views`/unique variants). Try the still-valid candidates in order
+    # and use whichever the API accepts; null is fine if none do.
     impressions: int | None = None
-    try:
-        insights = _get(
-            f"{page_id}/insights",
-            access_token,
-            {"metric": "page_impressions", "period": "days_28"},
-        )
-        for entry in insights.get("data", []):
-            if entry.get("name") == "page_impressions":
-                impressions = _sum_insight_values(entry)
-    except Exception as exc:  # noqa: BLE001 — insights are optional
-        logger.warning("Facebook insights fetch failed for %s: %s", page_id, exc)
+    for metric in ("page_impressions_unique", "page_impressions"):
+        try:
+            insights = _get(
+                f"{page_id}/insights",
+                access_token,
+                {"metric": metric, "period": "days_28"},
+            )
+            for entry in insights.get("data", []):
+                if entry.get("name") == metric:
+                    impressions = _sum_insight_values(entry)
+            break  # this metric name was accepted — stop trying others
+        except httpx.HTTPStatusError as exc:
+            detail = _error_message(exc)
+            logger.warning(
+                "Facebook insights metric %r rejected for %s: %s",
+                metric, page_id, detail,
+            )
+            continue  # try the next candidate metric
+        except Exception as exc:  # noqa: BLE001 — insights are optional
+            logger.warning("Facebook insights fetch failed for %s: %s", page_id, exc)
+            break
 
     posts_count = 0
     engagement_rate: float | None = None
@@ -222,11 +244,6 @@ def verify() -> tuple[bool, str]:
         who = f"“{name}”" if name else f"page {page_id}"
         return True, f"Connected to {who} ({followers} followers)."
     except httpx.HTTPStatusError as exc:
-        detail = ""
-        try:
-            detail = exc.response.json().get("error", {}).get("message", "")
-        except Exception:  # noqa: BLE001
-            detail = exc.response.text[:200]
-        return False, f"Facebook API rejected the request: {detail or exc}"
+        return False, f"Facebook API rejected the request: {_error_message(exc)}"
     except Exception as exc:  # noqa: BLE001
         return False, f"Could not reach Facebook: {exc}"
