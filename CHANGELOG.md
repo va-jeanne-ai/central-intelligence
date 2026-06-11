@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Connect buttons on the /marketing/social Platform Breakdown
+
+Each platform row now reflects real connection state. Connected platforms show live metrics; an **unconnected** platform that has a connect form shows a **Connect →** button linking to `/integrations/{slug}`; platforms not yet wired (TikTok, LinkedIn) show a muted **Coming soon** tag instead of a dead button.
+
+- `app/schemas/social.py` + `app/routes/social.py` — `SocialPlatformMetric` gains `connected` (from the `integrations` table, not merely a seed `social_stats` row) + `provider_status` (registry available/coming_soon); metric fields are now nullable and only populated when connected. The endpoint returns a row for all four display platforms.
+- `frontend/.../marketing/social/page.tsx` — the breakdown card renders three states per row: connected → metrics; available + not connected → Connect button; coming_soon → disabled tag.
+
 ### Fixed — /marketing/social Platform Breakdown shows live per-platform data
 
 The "Platform Breakdown" card rendered a **hardcoded** `PLATFORMS` array of `"—"` literals and never read any data — so Facebook (and every platform) always showed "—" no matter what synced. The `/social` endpoint also only returned summed totals, with no per-platform rows.

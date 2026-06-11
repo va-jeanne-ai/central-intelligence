@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
@@ -13,8 +14,10 @@ import { Button } from "@/components/ui/button";
 
 interface PlatformMetricData {
   platform: string; // "instagram" | "facebook" | "tiktok" | "linkedin"
-  followers: number;
-  posts_count: number;
+  connected: boolean;
+  provider_status: string; // "available" | "coming_soon"
+  followers: number | null;
+  posts_count: number | null;
   engagement_rate: number | null;
 }
 
@@ -61,50 +64,69 @@ function PlatformMetricsCard({ data }: { data: SocialData | null }) {
         <div className="divide-y divide-gray-100">
           {PLATFORMS.map((platform) => {
             const live = byPlatform.get(platform.slug);
-            const followers = live ? live.followers.toLocaleString() : "—";
-            const posts = live ? live.posts_count.toLocaleString() : "—";
-            const engagement =
-              live && live.engagement_rate != null
-                ? `${live.engagement_rate.toFixed(1)}%`
-                : "—";
+            const connected = live?.connected ?? false;
+            const comingSoon = live?.provider_status === "coming_soon";
+
             return (
-            <div
-              key={platform.name}
-              className="flex items-center gap-4 px-5 py-3"
-            >
-              <span className="text-xl leading-none flex-shrink-0" aria-hidden="true">
-                {platform.icon}
-              </span>
-              <span className="text-sm font-medium text-gray-800 w-24 flex-shrink-0">
-                {platform.name}
-              </span>
-              <div className="flex flex-1 gap-6">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    Followers
-                  </span>
-                  <span className="text-sm font-semibold text-gray-700 tabular-nums">
-                    {followers}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    Posts
-                  </span>
-                  <span className="text-sm font-semibold text-gray-700 tabular-nums">
-                    {posts}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    Engagement
-                  </span>
-                  <span className="text-sm font-semibold text-gray-700 tabular-nums">
-                    {engagement}
-                  </span>
-                </div>
+              <div
+                key={platform.name}
+                className="flex items-center gap-4 px-5 py-3"
+              >
+                <span className="text-xl leading-none flex-shrink-0" aria-hidden="true">
+                  {platform.icon}
+                </span>
+                <span className="text-sm font-medium text-gray-800 w-24 flex-shrink-0">
+                  {platform.name}
+                </span>
+
+                {connected ? (
+                  // Connected → live metrics
+                  <div className="flex flex-1 gap-6">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                        Followers
+                      </span>
+                      <span className="text-sm font-semibold text-gray-700 tabular-nums">
+                        {live?.followers != null ? live.followers.toLocaleString() : "—"}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                        Posts
+                      </span>
+                      <span className="text-sm font-semibold text-gray-700 tabular-nums">
+                        {live?.posts_count != null ? live.posts_count.toLocaleString() : "—"}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                        Engagement
+                      </span>
+                      <span className="text-sm font-semibold text-gray-700 tabular-nums">
+                        {live?.engagement_rate != null
+                          ? `${live.engagement_rate.toFixed(1)}%`
+                          : "—"}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  // Not connected → Connect button (available) or Coming-soon tag
+                  <div className="flex flex-1 items-center justify-end">
+                    {comingSoon ? (
+                      <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded-full px-3 py-1">
+                        Coming soon
+                      </span>
+                    ) : (
+                      <Link
+                        href={`/integrations/${platform.slug}`}
+                        className="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-full px-3 py-1 transition-colors"
+                      >
+                        Connect →
+                      </Link>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
             );
           })}
         </div>

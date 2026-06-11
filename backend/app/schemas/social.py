@@ -32,11 +32,20 @@ class SocialAnalyzeResponse(BaseModel):
 
 
 class SocialPlatformMetric(BaseModel):
-    """Latest metrics for one platform — drives the per-platform breakdown."""
+    """Per-platform row for the breakdown card.
+
+    ``connected`` reflects the integrations table (an actual connection),
+    not merely the presence of a (possibly seed) social_stats row.
+    ``provider_status`` is the registry status ('available' = has a connect
+    form; 'coming_soon' = not wired yet → show a disabled tag, no button).
+    Metric fields are null until the platform is connected + synced.
+    """
 
     platform: str  # "instagram" | "facebook" | "linkedin" | "tiktok"
-    followers: int
-    posts_count: int
+    connected: bool = False
+    provider_status: str = "available"  # "available" | "coming_soon"
+    followers: int | None = None
+    posts_count: int | None = None
     engagement_rate: float | None = None
 
 
