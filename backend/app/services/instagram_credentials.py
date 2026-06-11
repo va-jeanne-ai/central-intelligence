@@ -19,7 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 def load_instagram_credentials(integration: Integration) -> tuple[str, str] | None:
-    """Decrypt + extract ``(access_token, ig_user_id)`` from the blob.
+    """Extract ``(access_token, ig_user_id)`` for the Instagram integration.
+
+    The save route stores the SECRET ``access_token`` in the encrypted blob and
+    the NON-SECRET ``ig_user_id`` in the ``config`` JSONB column. We read each
+    from its home, with a blob fallback for ``ig_user_id`` (older rows).
 
     Returns ``None`` on any of: empty blob, decrypt failure, JSON parse
     failure, missing fields. The caller decides whether to set
@@ -33,7 +37,8 @@ def load_instagram_credentials(integration: Integration) -> tuple[str, str] | No
         logger.warning("load_instagram_credentials: decrypt failed — %s", exc)
         return None
     access_token = blob.get("access_token")
-    ig_user_id = blob.get("ig_user_id")
+    config = integration.config or {}
+    ig_user_id = config.get("ig_user_id") or blob.get("ig_user_id")
     if not access_token or not ig_user_id:
         return None
     return str(access_token), str(ig_user_id)

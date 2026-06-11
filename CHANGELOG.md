@@ -6,6 +6,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Social credential loaders read the account ID from `config`, not the blob
+
+The Instagram/Facebook sync reported "credentials unusable" even with a valid token saved, because the save route stores the **secret** field (`access_token`) in the encrypted blob but the **non-secret** ID field (`ig_user_id` / `page_id`) in the `config` JSONB column — and the loaders only read both from the blob. `load_instagram_credentials` / `load_facebook_credentials` now read the token from the decrypted blob and the ID from `integration.config` (with a blob fallback for older rows). With this fix, a saved Facebook Page token syncs live.
+
 ### Added — Manual "Sync now" button for social + email connectors
 
 The on-demand sync button on the integration detail page (previously GHL-only) now renders for every connector with a backing sync task — **Mailchimp, Instagram, Facebook**, and GHL. The backend `POST /integrations/{slug}/sync` was already generic (routes through `_trigger_sync`); this just surfaces the button with per-provider labels ("Sync metrics now" / "Sync campaigns now" / "Sync contacts now"). Lets an admin pull fresh data immediately after saving credentials instead of waiting for the next beat tick.

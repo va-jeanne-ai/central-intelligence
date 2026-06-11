@@ -20,7 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 def load_facebook_credentials(integration: Integration) -> tuple[str, str] | None:
-    """Decrypt + extract ``(access_token, page_id)`` from the blob.
+    """Extract ``(access_token, page_id)`` for the Facebook integration.
+
+    The save route stores the SECRET ``access_token`` in the encrypted blob
+    and the NON-SECRET ``page_id`` in the ``config`` JSONB column. We read each
+    from its home, with a blob fallback for ``page_id`` (older rows / the OAuth
+    path wrote it into the blob).
 
     Returns ``None`` on any of: empty blob, decrypt failure, JSON parse
     failure, missing fields. The caller decides whether to set
@@ -34,7 +39,8 @@ def load_facebook_credentials(integration: Integration) -> tuple[str, str] | Non
         logger.warning("load_facebook_credentials: decrypt failed — %s", exc)
         return None
     access_token = blob.get("access_token")
-    page_id = blob.get("page_id")
+    config = integration.config or {}
+    page_id = config.get("page_id") or blob.get("page_id")
     if not access_token or not page_id:
         return None
     return str(access_token), str(page_id)
