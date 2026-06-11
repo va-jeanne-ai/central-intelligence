@@ -920,8 +920,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/layout.tsx": {
-    "mtime": 1774867741.0,
-    "ast_hash": "c535ff7ea1bc538ab2e1b96bb328df3e",
+    "mtime": 1781195760.6245868,
+    "ast_hash": "d140392455266dd47675796fa2fd4ac6",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/leads/[lead_id]/page.tsx": {
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "frontend/src/contexts/auth-context.tsx": {
-    "mtime": 1779347180.647194,
-    "ast_hash": "09988437e5ca4559c103414796abe922",
+    "mtime": 1781195737.3713644,
+    "ast_hash": "dc53fba86eb45a219332d4d47a58d4d2",
     "semantic_hash": ""
   },
   "frontend/src/hooks/use-auth.ts": {
@@ -1842,6 +1842,11 @@
   "backend/app/services/facebook_client.py": {
     "mtime": 1781193014.5515316,
     "ast_hash": "e29bb3b7709165f830c4c78403883a27",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/layout/auth-guard.tsx": {
+    "mtime": 1781195750.9466085,
+    "ast_hash": "bb70f940326bb1949e48bb9a1234a4fa",
     "semantic_hash": ""
   }
 }
