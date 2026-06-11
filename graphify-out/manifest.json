@@ -910,8 +910,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/integrations/[slug]/page.tsx": {
-    "mtime": 1781177430.1728559,
-    "ast_hash": "9c60372dbeeed6eeac41984e1d18fe20",
+    "mtime": 1781177856.7573848,
+    "ast_hash": "c4aeb3686aa04804ac38a79a81736333",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/integrations/page.tsx": {
