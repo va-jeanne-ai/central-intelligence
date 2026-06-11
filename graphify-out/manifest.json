@@ -480,8 +480,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/integrations.py": {
-    "mtime": 1781181972.9921854,
-    "ast_hash": "e9bfa4fd209475db3cf6e5e88026184a",
+    "mtime": 1781189025.3382869,
+    "ast_hash": "68da2a00510297947d778ae76f4d2ea1",
     "semantic_hash": ""
   },
   "backend/app/routes/leads.py": {
@@ -685,8 +685,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/integrations_registry.py": {
-    "mtime": 1781181944.4990847,
-    "ast_hash": "1694ae9840130998175939a3aaa440cc",
+    "mtime": 1781188995.0388837,
+    "ast_hash": "001eff7cf1705320958c53be2c9a6c07",
     "semantic_hash": ""
   },
   "backend/app/services/local_whisper.py": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "backend/app/tasks/social_stats.py": {
-    "mtime": 1781181916.0582397,
-    "ast_hash": "96a816aa61e1ea848bd7ee94103dc2a4",
+    "mtime": 1781188980.6541882,
+    "ast_hash": "24a5bef4deff2b555cd1f877c38f4b1d",
     "semantic_hash": ""
   },
   "backend/app/tasks/transcriber.py": {
@@ -910,8 +910,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/integrations/[slug]/page.tsx": {
-    "mtime": 1781181843.123372,
-    "ast_hash": "2dbc506c354a0c263b2da81476489f01",
+    "mtime": 1781189124.0700495,
+    "ast_hash": "7c1a11b59096b3012511cd51c84c0ceb",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/integrations/page.tsx": {
@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1781182182.363549,
-    "ast_hash": "ed50d5ff912d0cee3375b9d4a10531f4",
+    "mtime": 1781189624.3387356,
+    "ast_hash": "60eb4b33bfa84132a721938bdb745237",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1445,8 +1445,8 @@
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1781182200.1055422,
-    "ast_hash": "0988a65dae518615cd0bb934e0085454",
+    "mtime": 1781189647.8486478,
+    "ast_hash": "548127250772f1c1d896a23d9a446cbf",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
@@ -1837,6 +1837,11 @@
   "backend/app/services/instagram_client.py": {
     "mtime": 1781172567.4608614,
     "ast_hash": "70e05bcbf89570843982c309206e924b",
+    "semantic_hash": ""
+  },
+  "backend/app/services/facebook_client.py": {
+    "mtime": 1781188920.0293639,
+    "ast_hash": "bbe3149ad5a8815299701c609d533fa0",
     "semantic_hash": ""
   }
 }
