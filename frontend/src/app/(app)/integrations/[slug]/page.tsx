@@ -57,6 +57,9 @@ function MetaInstagramConnectCard({
 }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  // Setup steps: expanded by default until connected (they stop being the
+  // primary content once the account is linked).
+  const [showSetupSteps, setShowSetupSteps] = useState(!detail.connected);
 
   useEffect(() => {
     // Surface the OAuth callback result (?connected=ok|err) as a toast.
@@ -123,46 +126,193 @@ function MetaInstagramConnectCard({
     }
   }
 
+  const linkClass =
+    "text-indigo-600 hover:text-indigo-700 underline underline-offset-2";
+
   return (
-    <Card>
-      <CardHeader title="Connect with Meta" />
-      <CardBody className="space-y-4">
-        {detail.connected ? (
-          <>
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
-              <p className="text-[13px] text-emerald-800">
-                <span className="font-semibold">Connected.</span> Instagram
-                metrics sync automatically; the access token is refreshed before
-                it expires.
+    <div className="space-y-6">
+      {/* Setup steps — how to get the Meta app credentials, the manual
+          token, and the IG account ID. */}
+      <Card>
+        <CardHeader
+          title="Setup steps"
+          action={
+            <button
+              type="button"
+              onClick={() => setShowSetupSteps((v) => !v)}
+              className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              {showSetupSteps ? "Hide" : "Show"}
+            </button>
+          }
+        />
+        {showSetupSteps && (
+          <CardBody className="space-y-5">
+            {/* Prerequisites */}
+            <div className="space-y-2">
+              <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+                Before you start
+              </h3>
+              <ul className="list-disc list-inside space-y-1 text-[13px] text-gray-700">
+                <li>
+                  Your Instagram account must be a{" "}
+                  <strong>Business</strong> or <strong>Creator</strong> account
+                  (Instagram app → Settings → Account type).
+                </li>
+                <li>
+                  That account must be <strong>linked to a Facebook Page</strong>{" "}
+                  (Instagram app → Settings → Linked accounts, or the Page&apos;s
+                  settings). The Graph API reaches Instagram through the Page.
+                </li>
+              </ul>
+            </div>
+
+            {/* One-time: create the Meta app */}
+            <div className="space-y-2">
+              <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+                One-time: create a Meta app
+              </h3>
+              <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
+                <li>
+                  Open{" "}
+                  <a
+                    href="https://developers.facebook.com/apps"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkClass}
+                  >
+                    developers.facebook.com/apps
+                  </a>{" "}
+                  → <strong>Create App</strong> → type <strong>Business</strong>.
+                </li>
+                <li>
+                  Add the <strong>Instagram Graph API</strong> product (and{" "}
+                  <strong>Facebook Login</strong> for the &ldquo;Connect with
+                  Meta&rdquo; button).
+                </li>
+                <li>
+                  Under Facebook Login → Settings, add this <strong>Valid OAuth
+                  Redirect URI</strong>:
+                </li>
+              </ol>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 min-w-0 text-[11px] font-mono bg-gray-50 border border-gray-200 rounded-md px-3 py-2 overflow-x-auto whitespace-nowrap text-gray-800">
+                  http://localhost:8000/api/v1/integrations/instagram/oauth/callback
+                </code>
+                <CopyButton
+                  text="http://localhost:8000/api/v1/integrations/instagram/oauth/callback"
+                  label="Copy"
+                />
+              </div>
+              <p className="text-[12px] text-gray-600">
+                Then put the app&apos;s ID + secret in <code>backend/.env</code>{" "}
+                as <code>META_OAUTH_CLIENT_ID</code> and{" "}
+                <code>META_OAUTH_CLIENT_SECRET</code>, and restart the backend.
+                After that, <strong>Connect with Meta</strong> below handles the
+                token + account ID automatically.
               </p>
             </div>
-            <Button
-              variant="danger"
-              onClick={handleDisconnect}
-              disabled={isDisconnecting}
-            >
-              {isDisconnecting ? "Disconnecting…" : "Disconnect"}
-            </Button>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-gray-700">
-              Connect one Instagram <strong>Business</strong> or{" "}
-              <strong>Creator</strong> account (linked to a Facebook Page) for
-              the whole workspace. We&apos;ll pull followers, reach,
-              impressions, and engagement — and keep the token fresh
-              automatically.
-            </p>
-            <Button onClick={handleConnect} disabled={isConnecting}>
-              {isConnecting ? "Redirecting…" : "Connect with Meta"}
-            </Button>
-            <p className="text-[11px] text-gray-400">
-              Prefer to paste a token manually? Use the credentials form below.
-            </p>
-          </>
+
+            {/* Manual fallback: get a token + IG account ID by hand */}
+            <div className="space-y-2 border-t border-gray-100 pt-4">
+              <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+                Manual fallback: get a token &amp; account ID by hand
+              </h3>
+              <p className="text-[12px] text-gray-600">
+                Only needed if you skip &ldquo;Connect with Meta&rdquo; and paste
+                credentials into the form below.
+              </p>
+              <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
+                <li>
+                  Open the{" "}
+                  <a
+                    href="https://developers.facebook.com/tools/explorer/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkClass}
+                  >
+                    Graph API Explorer
+                  </a>
+                  , select your app, and <strong>Generate Access Token</strong>{" "}
+                  granting <code>instagram_basic</code>,{" "}
+                  <code>instagram_manage_insights</code>,{" "}
+                  <code>pages_show_list</code>, and{" "}
+                  <code>pages_read_engagement</code>. This is a{" "}
+                  <strong>short-lived</strong> token (~1 hour).
+                </li>
+                <li>
+                  Exchange it for a <strong>long-lived</strong> (~60-day) token
+                  via the{" "}
+                  <a
+                    href="https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkClass}
+                  >
+                    token-exchange endpoint
+                  </a>
+                  . Paste this one as the <strong>Access Token</strong>.
+                </li>
+                <li>
+                  Find your <strong>Instagram Account ID</strong>: call{" "}
+                  <code>GET /me/accounts</code> to get your Page ID, then{" "}
+                  <code>
+                    GET /&lt;page-id&gt;?fields=instagram_business_account
+                  </code>
+                  . The returned numeric{" "}
+                  <code>instagram_business_account.id</code> is your account ID.
+                </li>
+              </ol>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800">
+                Manual tokens expire ~every 60 days and must be re-pasted.
+                &ldquo;Connect with Meta&rdquo; auto-refreshes instead.
+              </div>
+            </div>
+          </CardBody>
         )}
-      </CardBody>
-    </Card>
+      </Card>
+
+      {/* Connect card */}
+      <Card>
+        <CardHeader title="Connect with Meta" />
+        <CardBody className="space-y-4">
+          {detail.connected ? (
+            <>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+                <p className="text-[13px] text-emerald-800">
+                  <span className="font-semibold">Connected.</span> Instagram
+                  metrics sync automatically; the access token is refreshed
+                  before it expires.
+                </p>
+              </div>
+              <Button
+                variant="danger"
+                onClick={handleDisconnect}
+                disabled={isDisconnecting}
+              >
+                {isDisconnecting ? "Disconnecting…" : "Disconnect"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-gray-700">
+                Connect one Instagram <strong>Business</strong> or{" "}
+                <strong>Creator</strong> account (linked to a Facebook Page) for
+                the whole workspace. We&apos;ll pull followers, reach,
+                impressions, and engagement — and keep the token fresh
+                automatically.
+              </p>
+              <Button onClick={handleConnect} disabled={isConnecting}>
+                {isConnecting ? "Redirecting…" : "Connect with Meta"}
+              </Button>
+              <p className="text-[11px] text-gray-400">
+                Prefer to paste a token manually? Use the credentials form below.
+              </p>
+            </>
+          )}
+        </CardBody>
+      </Card>
+    </div>
   );
 }
 
