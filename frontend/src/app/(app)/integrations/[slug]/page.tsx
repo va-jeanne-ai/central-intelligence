@@ -186,13 +186,21 @@ function MetaInstagramConnectCard({
                   → <strong>Create App</strong> → type <strong>Business</strong>.
                 </li>
                 <li>
-                  Add the <strong>Instagram Graph API</strong> product (and{" "}
-                  <strong>Facebook Login</strong> for the &ldquo;Connect with
-                  Meta&rdquo; button).
+                  In the left sidebar, click <strong>Add Product</strong> and
+                  add both <strong>Instagram</strong> (Instagram Graph API) and{" "}
+                  <strong>Facebook Login for Business</strong>. They only appear
+                  under <strong>Products</strong> in the sidebar{" "}
+                  <em>after</em> you add them here — that&apos;s why a brand-new
+                  app has no &ldquo;Facebook Login&rdquo; entry yet.
                 </li>
                 <li>
-                  Under Facebook Login → Settings, add this <strong>Valid OAuth
-                  Redirect URI</strong>:
+                  Now go to <strong>Products → Facebook Login for Business →
+                  Settings</strong> (left sidebar). In the{" "}
+                  <strong>Client OAuth settings</strong> section, make sure{" "}
+                  <strong>Client OAuth login</strong> and{" "}
+                  <strong>Web OAuth login</strong> are <strong>On</strong>, then
+                  paste this into <strong>Valid OAuth Redirect URIs</strong> and{" "}
+                  <strong>Save changes</strong>:
                 </li>
               </ol>
               <div className="flex items-center gap-2">
