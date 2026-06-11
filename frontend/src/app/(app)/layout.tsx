@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/layout/sidebar";
+import { AuthGuard } from "@/components/layout/auth-guard";
 
 // ─── Authenticated App Layout ────────────────────────────────────────────────
 // Wraps all authenticated pages with sidebar + main content area.
@@ -11,6 +12,9 @@ export default function AppLayout({
 }>) {
   return (
     <div className="grid grid-cols-[228px_1fr] h-screen overflow-hidden">
+      {/* Redirects to /login if the session goes invalid mid-page. */}
+      <AuthGuard />
+
       {/* Left — Sidebar */}
       <Sidebar />
 

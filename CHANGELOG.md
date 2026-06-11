@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Logout works (and stale sessions no longer strand you on the dashboard)
+
+Clicking sign-out did nothing when the session was already invalid (expired JWT / missing user). `signOut` `await`ed `supabase.auth.signOut()` *before* clearing local state, so when that call threw/hung on an invalid session, execution never reached the token-clear + `setUser(null)` + redirect — the button silently no-op'd.
+
+- `frontend/src/contexts/auth-context.tsx` — wrapped the Supabase sign-out in try/catch; local cleanup (clear token, clear cached user, null the user) + `router.push("/login")` now always run, so logout succeeds regardless of server-side session state.
+- `frontend/src/components/layout/auth-guard.tsx` (new) + `frontend/src/app/(app)/layout.tsx` — added a client-side `AuthGuard` that redirects to `/login` once auth finishes loading and the user is null. The Next middleware only guards on navigation; this catches a session going invalid while you're already sitting on a protected page (the "stuck on dashboard" symptom).
+
 ### Fixed — Facebook Page Insights metric churn handled gracefully
 
 Meta is deprecating the bare `page_impressions` Page-insights metric through mid-2026 (it now returns `(#100) The value must be a valid insights metric`). `facebook_client.fetch_facebook_stats` now tries `page_impressions_unique` then `page_impressions`, uses whichever the API accepts, and logs Meta's actual error message (via a new `_error_message` helper, also used by `verify()`) instead of a raw traceback. Insights stay best-effort — followers/posts still sync when the impressions metric is rejected or absent (e.g. a low-activity Page returns no insights). `reach` remains null (no comparable Page metric).
