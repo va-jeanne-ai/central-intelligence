@@ -13,12 +13,36 @@ import type { ChatMessage, WebSocketMessage } from "@/types";
 // messages list, and the streaming WebSocket connection.
 //
 // Persistence:
-//   - sessionId is generated client-side and held in this hook.
+//   - sessionId is generated client-side and held in this hook, AND mirrored
+//     to localStorage so a page reload resumes the same conversation instead
+//     of starting a blank one. On mount we restore the stored id and reload
+//     its transcript (history itself lives in the DB; this just re-opens it).
 //   - When the user picks a session from the sidebar, the parent calls
 //     loadSession(id): we fetch the transcript, swap messages, switch
 //     the WebSocket connection to the new sessionId so subsequent
 //     turns hit the right backend agent.
 //   - startNewChat() mints a fresh UUID + clears messages.
+
+const _SESSION_STORAGE_KEY = "ci-chat-session-id";
+
+function _readStoredSessionId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(_SESSION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function _writeStoredSessionId(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(_SESSION_STORAGE_KEY, id);
+  } catch {
+    // localStorage unavailable (private mode / quota) — non-fatal; the
+    // session still works for this page load, it just won't survive reload.
+  }
+}
 
 export function useChat() {
   const { isLoading: authLoading, user } = useAuth();
@@ -27,10 +51,24 @@ export function useChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionFailed, setConnectionFailed] = useState(false);
-  const [sessionId, setSessionId] = useState<string>(() => crypto.randomUUID());
+  // Restore the prior session id on mount so a reload resumes that chat;
+  // fall back to a fresh UUID for a true first visit. The transcript for a
+  // restored id is loaded by the mount effect below.
+  const restoredOnMountRef = useRef<boolean>(false);
+  const [sessionId, setSessionId] = useState<string>(() => {
+    const stored = _readStoredSessionId();
+    restoredOnMountRef.current = stored !== null;
+    return stored ?? crypto.randomUUID();
+  });
 
   // Keep a stable ref to the current ws instance so callbacks always see it.
   const wsRef = useRef<CentralIntelligenceWebSocket | null>(null);
+
+  // Mirror sessionId → localStorage on every change (initial, loadSession,
+  // startNewChat) so the latest active session is always what we resume to.
+  useEffect(() => {
+    _writeStoredSessionId(sessionId);
+  }, [sessionId]);
 
   // ─── WebSocket lifecycle ────────────────────────────────────────────────────
   // Gated on auth: the WS constructor reads the token from apiClient
@@ -107,6 +145,46 @@ export function useChat() {
       setIsConnected(false);
     };
   }, [sessionId, authLoading, user]);
+
+  // ─── Restore transcript for the resumed session (once, on mount) ────────────
+  // The WS effect reconnects the socket to the restored sessionId (so the
+  // backend re-hydrates the agent's memory), but the on-screen bubbles start
+  // empty. Fetch the persisted transcript once so the conversation reappears.
+  // Skipped for a brand-new session (nothing to load) and degrades silently if
+  // the stored session was deleted server-side.
+  const didRestoreRef = useRef(false);
+  useEffect(() => {
+    if (authLoading || !user) return;
+    if (didRestoreRef.current) return;
+    didRestoreRef.current = true;
+
+    // Only attempt restore if the id was resumed from a prior visit. A
+    // freshly-minted first-visit id has no persisted transcript to fetch.
+    if (!restoredOnMountRef.current) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const detail = await chatSessionsClient.get(sessionId);
+        if (cancelled) return;
+        setMessages(
+          detail.messages.map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            timestamp: new Date(m.created_at),
+          })),
+        );
+      } catch {
+        // Session not found (deleted) or fetch failed — leave the blank
+        // canvas; the user can start typing or pick a session from the sidebar.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user, sessionId]);
 
   // ─── Public actions ─────────────────────────────────────────────────────────
 

@@ -6,6 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — CI chat resumes your last conversation on reload
+
+Chat history was already persisted (DB-backed `chat_sessions`/`chat_messages` + a history sidebar; the agent re-hydrates full context on session resume), but the frontend minted a fresh session UUID on every mount — so a page reload dropped you onto a blank "New chat" and you had to re-pick the conversation from the sidebar.
+
+- `frontend/src/hooks/use-chat.ts` — the active `sessionId` is now mirrored to `localStorage` (`ci-chat-session-id`) on every change and restored on mount, so a reload reconnects the WebSocket to the same session (backend re-hydrates the agent's memory). A one-time mount effect re-fetches that session's transcript so the on-screen bubbles reappear too. Guards: only restores when the id came from storage (a true first visit still starts blank, no needless fetch), degrades silently if the stored session was deleted server-side, and doesn't interfere with `startNewChat`/`loadSession`.
+
+No backend changes — the persistence layer was already complete.
+
 ### Added — Connect buttons on the /marketing/social Platform Breakdown
 
 Each platform row now reflects real connection state. Connected platforms show live metrics; an **unconnected** platform that has a connect form shows a **Connect →** button linking to `/integrations/{slug}`; platforms not yet wired (TikTok, LinkedIn) show a muted **Coming soon** tag instead of a dead button.
