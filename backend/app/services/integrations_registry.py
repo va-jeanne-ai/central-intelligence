@@ -155,9 +155,76 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "name": "Instagram",
         "icon": "📷",
         "category": "social",
-        "status": "coming_soon",
-        "description": "Organic post metrics, follower growth, story stats.",
-        "fields": [],
+        "status": "available",
+        "description": "Organic post metrics, follower growth, reach & impressions via the Meta Graph API.",
+        "trigger_task": "instagram",  # mapped in routes/_trigger_sync
+        "fields": [
+            _field(
+                "access_token",
+                "Access Token",
+                type="password",
+                secret=True,
+                required=True,
+                placeholder="EAAG... (long-lived token)",
+                help=(
+                    "Long-lived Meta access token with instagram_basic + "
+                    "instagram_manage_insights + pages_read_engagement scopes. "
+                    "Generate in the Meta Graph API Explorer, then exchange for a "
+                    "long-lived (~60-day) token. Re-paste when it expires."
+                ),
+            ),
+            _field(
+                "ig_user_id",
+                "Instagram Account ID",
+                type="text",
+                secret=False,
+                required=True,
+                placeholder="17841400000000000",
+                help=(
+                    "Numeric Instagram Business account ID. Find it via "
+                    "GET /me/accounts -> your Page -> "
+                    "GET /{page-id}?fields=instagram_business_account."
+                ),
+            ),
+        ],
+    },
+    "facebook": {
+        "slug": "facebook",
+        "name": "Facebook",
+        "icon": "📘",
+        "category": "social",
+        "status": "available",
+        "description": "Page followers, impressions, and post engagement via the Meta Graph API.",
+        "trigger_task": "facebook",  # mapped in routes/_trigger_sync
+        "fields": [
+            _field(
+                "access_token",
+                "Page Access Token",
+                type="password",
+                secret=True,
+                required=True,
+                placeholder="EAAG... (long-lived Page token)",
+                help=(
+                    "Long-lived Facebook PAGE access token with "
+                    "pages_read_engagement + read_insights scopes. Generate in "
+                    "the Meta Graph API Explorer (select your Page under 'User or "
+                    "Page'), then exchange for a long-lived (~60-day) token. "
+                    "Re-paste when it expires."
+                ),
+            ),
+            _field(
+                "page_id",
+                "Facebook Page ID",
+                type="text",
+                secret=False,
+                required=True,
+                placeholder="1234567890",
+                help=(
+                    "Numeric Facebook Page ID. Find it via GET /me/accounts — "
+                    "each entry's 'id' is a Page you manage."
+                ),
+            ),
+        ],
     },
     "linkedin": {
         "slug": "linkedin",

@@ -200,7 +200,7 @@
     "semantic_hash": ""
   },
   "backend/app/config.py": {
-    "mtime": 1779710054.9974449,
+    "mtime": 1781181931.7135897,
     "ast_hash": "1013ce2ee963390302b7e98552195b46",
     "semantic_hash": ""
   },
@@ -220,7 +220,7 @@
     "semantic_hash": ""
   },
   "backend/app/main.py": {
-    "mtime": 1781097170.7868512,
+    "mtime": 1781181882.2704284,
     "ast_hash": "c8efde0e48b6b7c3d21d0a0b7a647df7",
     "semantic_hash": ""
   },
@@ -230,7 +230,7 @@
     "semantic_hash": ""
   },
   "backend/app/middleware/auth.py": {
-    "mtime": 1781097170.787298,
+    "mtime": 1781181937.9693825,
     "ast_hash": "dace99f38e63ed580c11199338c95807",
     "semantic_hash": ""
   },
@@ -445,8 +445,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/dashboard.py": {
-    "mtime": 1781107160.3882532,
-    "ast_hash": "db300544103fb3b00de5f987d838f36d",
+    "mtime": 1781172567.4586778,
+    "ast_hash": "d2a7e400fbb8bdcc285bcf7cd88e3725",
     "semantic_hash": ""
   },
   "backend/app/routes/directors.py": {
@@ -480,8 +480,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/integrations.py": {
-    "mtime": 1781107084.596179,
-    "ast_hash": "45a10bc4bc0fe40bdde39583e2b8d864",
+    "mtime": 1781539832.1926942,
+    "ast_hash": "68da2a00510297947d778ae76f4d2ea1",
     "semantic_hash": ""
   },
   "backend/app/routes/leads.py": {
@@ -515,8 +515,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/social.py": {
-    "mtime": 1779262291.3375967,
-    "ast_hash": "a001ee6cc357868f3dfdd5096ca8d1ec",
+    "mtime": 1781539832.1933098,
+    "ast_hash": "fb81b2e4fef42afc1e3e8c4c0570bc3c",
     "semantic_hash": ""
   },
   "backend/app/routes/transcribe.py": {
@@ -565,8 +565,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/dashboard.py": {
-    "mtime": 1781107122.3566716,
-    "ast_hash": "5ab1ba3989cc7df723ef256cd6b162f6",
+    "mtime": 1781172567.4603436,
+    "ast_hash": "ce0e8c03659cdb4c1d9044f8b10b24c1",
     "semantic_hash": ""
   },
   "backend/app/schemas/dm.py": {
@@ -585,7 +585,7 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/integrations.py": {
-    "mtime": 1779703601.2288191,
+    "mtime": 1781181963.8306668,
     "ast_hash": "f6617f789a30766ea53c5b3d325d14d9",
     "semantic_hash": ""
   },
@@ -605,8 +605,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/social.py": {
-    "mtime": 1779262264.5128152,
-    "ast_hash": "70fb69ce606fb2e6ba2f09dd701b8eed",
+    "mtime": 1781539832.193641,
+    "ast_hash": "f9b45a970dad811348167e4db19974e6",
     "semantic_hash": ""
   },
   "backend/app/schemas/transcribe.py": {
@@ -685,8 +685,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/integrations_registry.py": {
-    "mtime": 1781107084.5970147,
-    "ast_hash": "6510e07f67693bae7ab5e1266f90d61d",
+    "mtime": 1781539832.195983,
+    "ast_hash": "001eff7cf1705320958c53be2c9a6c07",
     "semantic_hash": ""
   },
   "backend/app/services/local_whisper.py": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "backend/app/tasks/social_stats.py": {
-    "mtime": 1781107084.5977442,
-    "ast_hash": "74bdc61122c389156433514ae674d72b",
+    "mtime": 1781539832.1963394,
+    "ast_hash": "44247e8a6c441c16f31af4480b7e7433",
     "semantic_hash": ""
   },
   "backend/app/tasks/transcriber.py": {
@@ -900,8 +900,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/dashboard/page.tsx": {
-    "mtime": 1781107349.2734706,
-    "ast_hash": "559acc766e92bcda6c59de568d6bff31",
+    "mtime": 1781172567.4634163,
+    "ast_hash": "4038d6c675aff47af0b61ee6c5143953",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/error.tsx": {
@@ -910,8 +910,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/integrations/[slug]/page.tsx": {
-    "mtime": 1781097170.8019755,
-    "ast_hash": "944b6cd087049ed297025e27d87a5696",
+    "mtime": 1781539832.1968706,
+    "ast_hash": "b6ec8e22c4d465bff0201aeea1334dc1",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/integrations/page.tsx": {
@@ -920,8 +920,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/layout.tsx": {
-    "mtime": 1774867741.0,
-    "ast_hash": "c535ff7ea1bc538ab2e1b96bb328df3e",
+    "mtime": 1781539832.1975799,
+    "ast_hash": "d140392455266dd47675796fa2fd4ac6",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/leads/[lead_id]/page.tsx": {
@@ -1000,8 +1000,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/social/page.tsx": {
-    "mtime": 1775650413.0,
-    "ast_hash": "e76ed5f1de2c499ff9ffa1f98be52f6a",
+    "mtime": 1781539832.1979759,
+    "ast_hash": "80c92e1513a1cd909bced163202d4b62",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/social/scripts/page.tsx": {
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "frontend/src/contexts/auth-context.tsx": {
-    "mtime": 1779347180.647194,
-    "ast_hash": "09988437e5ca4559c103414796abe922",
+    "mtime": 1781539832.198594,
+    "ast_hash": "dc53fba86eb45a219332d4d47a58d4d2",
     "semantic_hash": ""
   },
   "frontend/src/hooks/use-auth.ts": {
@@ -1300,8 +1300,8 @@
     "semantic_hash": ""
   },
   "frontend/src/hooks/use-chat.ts": {
-    "mtime": 1779905220.5190864,
-    "ast_hash": "b831d4f9e06ceaa1dc77cf5fb1bfded9",
+    "mtime": 1781543644.1528566,
+    "ast_hash": "eb4f960a1d5cdd6cbce112a41bc76d20",
     "semantic_hash": ""
   },
   "frontend/src/hooks/use-director-chat.ts": {
@@ -1380,7 +1380,7 @@
     "semantic_hash": ""
   },
   "frontend/src/types/index.ts": {
-    "mtime": 1781097170.808976,
+    "mtime": 1781181849.0674114,
     "ast_hash": "a2861d5d0789c5e8599c6c753758e0c3",
     "semantic_hash": ""
   },
@@ -1430,8 +1430,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1781107510.591493,
-    "ast_hash": "c91bd094563b0ff22f40aea674551231",
+    "mtime": 1781543837.2606397,
+    "ast_hash": "cf7a4d205a1af3a1d2026471eb49bdeb",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1445,8 +1445,8 @@
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1781107084.595288,
-    "ast_hash": "9a2c99d32ef2df2f97f8904547652b48",
+    "mtime": 1781539832.1920984,
+    "ast_hash": "548127250772f1c1d896a23d9a446cbf",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
@@ -1834,9 +1834,19 @@
     "ast_hash": "1f11c5f807e209e10ab2342fec4149b4",
     "semantic_hash": ""
   },
-  "frontend/src/components/dashboard/schedule-brief.tsx": {
-    "mtime": 1781107315.4836297,
-    "ast_hash": "cfef4dbf6d75ee8371950e52ac2335ce",
+  "backend/app/services/instagram_client.py": {
+    "mtime": 1781539832.195226,
+    "ast_hash": "70e05bcbf89570843982c309206e924b",
+    "semantic_hash": ""
+  },
+  "backend/app/services/facebook_client.py": {
+    "mtime": 1781539832.1940167,
+    "ast_hash": "e29bb3b7709165f830c4c78403883a27",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/layout/auth-guard.tsx": {
+    "mtime": 1781539832.1982224,
+    "ast_hash": "bb70f940326bb1949e48bb9a1234a4fa",
     "semantic_hash": ""
   }
 }

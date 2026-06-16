@@ -12,12 +12,22 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.repositories.marketing import SocialStatsRepository
-from app.schemas.social import SocialAnalyzeRequest, SocialAnalyzeResponse, SocialDataResponse
+from app.services.integrations_registry import get_provider
+from app.schemas.social import (
+    SocialAnalyzeRequest,
+    SocialAnalyzeResponse,
+    SocialDataResponse,
+    SocialPlatformMetric,
+)
+
+# Platforms shown in the per-platform breakdown, in display order.
+_BREAKDOWN_PLATFORMS = ["instagram", "facebook", "tiktok", "linkedin"]
 
 logger = logging.getLogger(__name__)
 
@@ -112,10 +122,45 @@ async def get_social_data(
     repo = SocialStatsRepository(session)
     totals = await repo.aggregate_totals()
 
+    # Which social providers are actually connected (integrations table) +
+    # their registry status (available vs coming_soon). Connection drives
+    # whether the breakdown shows metrics or a "Connect" button.
+    connected_rows = (
+        await session.execute(
+            text(
+                "SELECT provider FROM integrations "
+                "WHERE provider = ANY(:slugs) AND status = 'connected'"
+            ),
+            {"slugs": _BREAKDOWN_PLATFORMS},
+        )
+    ).scalars().all()
+    connected = set(connected_rows)
+
+    # One row per display platform (always all four). Metrics only when the
+    # platform is connected AND has a synced row — otherwise the frontend
+    # shows a Connect button (available) or a Coming-soon tag (coming_soon).
+    by_platform: list[SocialPlatformMetric] = []
+    for platform in _BREAKDOWN_PLATFORMS:
+        provider = get_provider(platform)
+        provider_status = provider["status"] if provider else "available"
+        is_connected = platform in connected
+        row = await repo.find_latest_by_platform(platform) if is_connected else None
+        by_platform.append(
+            SocialPlatformMetric(
+                platform=platform,
+                connected=is_connected,
+                provider_status=provider_status,
+                followers=row.followers if row else None,
+                posts_count=row.posts_count if row else None,
+                engagement_rate=row.engagement_rate if row else None,
+            )
+        )
+
     return SocialDataResponse(
         posts=totals["total_posts"],
         engagement=totals["avg_engagement"],
         followers=totals["total_followers"],
+        by_platform=by_platform,
         top_content=[],
         generated_at=datetime.now(timezone.utc).isoformat(),
     )

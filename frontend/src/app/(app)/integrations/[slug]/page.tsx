@@ -29,6 +29,18 @@ function isMaskedValue(value: string): boolean {
   return value.startsWith("********");
 }
 
+// Providers that expose an on-demand "Sync now" button on the detail page.
+// Each maps to a backing Celery task in the backend's _trigger_sync(slug).
+const SYNCABLE_SLUGS = new Set(["ghl", "mailchimp", "instagram", "facebook"]);
+
+// Per-provider label for the sync button (falls back to "Sync now").
+const SYNC_BUTTON_LABEL: Record<string, string> = {
+  ghl: "Sync contacts now",
+  mailchimp: "Sync campaigns now",
+  instagram: "Sync metrics now",
+  facebook: "Sync metrics now",
+};
+
 // ─── Connected-users payload (per-user OAuth) ────────────────────────────────
 
 interface ConnectedUser {
@@ -41,6 +53,254 @@ interface ConnectedUser {
 
 interface ConnectedUsersResponse {
   users: ConnectedUser[];
+}
+
+// ─── Instagram setup-steps card ───────────────────────────────────────────────
+// Renders for slug='instagram'. Walks the admin through getting a long-lived
+// access token + the IG Business account ID to paste into the credentials
+// form below. (OAuth "Connect with Meta" is deferred to a later sprint.)
+
+function InstagramSetupStepsCard() {
+  const [showSetupSteps, setShowSetupSteps] = useState(true);
+
+  const linkClass =
+    "text-indigo-600 hover:text-indigo-700 underline underline-offset-2";
+
+  return (
+    <Card>
+      <CardHeader
+        title="Setup steps"
+        action={
+          <button
+            type="button"
+            onClick={() => setShowSetupSteps((v) => !v)}
+            className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            {showSetupSteps ? "Hide" : "Show"}
+          </button>
+        }
+      />
+      {showSetupSteps && (
+        <CardBody className="space-y-5">
+          {/* Prerequisites */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Before you start
+            </h3>
+            <ul className="list-disc list-inside space-y-1 text-[13px] text-gray-700">
+              <li>
+                Your Instagram account must be a <strong>Business</strong> or{" "}
+                <strong>Creator</strong> account (Instagram app → Settings →
+                Account type).
+              </li>
+              <li>
+                That account must be <strong>linked to a Facebook Page</strong>{" "}
+                (Instagram app → Settings → Linked accounts, or the Page&apos;s
+                settings). The Graph API reaches Instagram through the Page.
+              </li>
+              <li>
+                You need a Meta app with the <strong>Instagram Graph API</strong>{" "}
+                product added (
+                <a
+                  href="https://developers.facebook.com/apps"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  developers.facebook.com/apps
+                </a>{" "}
+                → Create App → Business).
+              </li>
+            </ul>
+          </div>
+
+          {/* Get the access token */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Get your access token
+            </h3>
+            <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
+              <li>
+                Open the{" "}
+                <a
+                  href="https://developers.facebook.com/tools/explorer/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  Graph API Explorer
+                </a>
+                , select your app, and <strong>Generate Access Token</strong>{" "}
+                granting <code>instagram_basic</code>,{" "}
+                <code>instagram_manage_insights</code>,{" "}
+                <code>pages_show_list</code>, and{" "}
+                <code>pages_read_engagement</code>. This is a{" "}
+                <strong>short-lived</strong> token (~1 hour).
+              </li>
+              <li>
+                Exchange it for a <strong>long-lived</strong> (~60-day) token via
+                the{" "}
+                <a
+                  href="https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  token-exchange endpoint
+                </a>
+                . Paste this long-lived token as the <strong>Access Token</strong>{" "}
+                below.
+              </li>
+            </ol>
+          </div>
+
+          {/* Get the IG account ID */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Get your Instagram Account ID
+            </h3>
+            <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
+              <li>
+                Call <code>GET /me/accounts</code> (in the Graph API Explorer) to
+                get your Page ID.
+              </li>
+              <li>
+                Then call{" "}
+                <code>GET /&lt;page-id&gt;?fields=instagram_business_account</code>
+                . The returned numeric{" "}
+                <code>instagram_business_account.id</code> is your{" "}
+                <strong>Instagram Account ID</strong> — paste it below.
+              </li>
+            </ol>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800">
+            Long-lived tokens expire ~every 60 days — re-paste a fresh one here
+            when that happens.
+          </div>
+        </CardBody>
+      )}
+    </Card>
+  );
+}
+
+// ─── Facebook setup-steps card ────────────────────────────────────────────────
+// Renders for slug='facebook'. Walks the admin through getting a long-lived
+// Page access token + the Page ID to paste into the credentials form below.
+
+function FacebookSetupStepsCard() {
+  const [showSetupSteps, setShowSetupSteps] = useState(true);
+
+  const linkClass =
+    "text-indigo-600 hover:text-indigo-700 underline underline-offset-2";
+
+  return (
+    <Card>
+      <CardHeader
+        title="Setup steps"
+        action={
+          <button
+            type="button"
+            onClick={() => setShowSetupSteps((v) => !v)}
+            className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            {showSetupSteps ? "Hide" : "Show"}
+          </button>
+        }
+      />
+      {showSetupSteps && (
+        <CardBody className="space-y-5">
+          {/* Prerequisites */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Before you start
+            </h3>
+            <ul className="list-disc list-inside space-y-1 text-[13px] text-gray-700">
+              <li>
+                You must be an <strong>admin</strong> of the Facebook Page you
+                want to track. (No personal-account conversion needed — unlike
+                Instagram, Pages work directly.)
+              </li>
+              <li>
+                You need a Meta app with the <strong>Facebook Login</strong>{" "}
+                product added (
+                <a
+                  href="https://developers.facebook.com/apps"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  developers.facebook.com/apps
+                </a>{" "}
+                → Create App → Business).
+              </li>
+            </ul>
+          </div>
+
+          {/* Get the Page access token */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Get your Page access token
+            </h3>
+            <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
+              <li>
+                Open the{" "}
+                <a
+                  href="https://developers.facebook.com/tools/explorer/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  Graph API Explorer
+                </a>
+                , select your app, and under <strong>User or Page</strong> pick{" "}
+                <strong>your Page</strong> (this issues a <em>Page</em> token,
+                not a user token).
+              </li>
+              <li>
+                <strong>Generate Access Token</strong> granting{" "}
+                <code>pages_read_engagement</code>, <code>pages_show_list</code>,
+                and <code>read_insights</code>. This is a{" "}
+                <strong>short-lived</strong> token (~1 hour).
+              </li>
+              <li>
+                Exchange it for a <strong>long-lived</strong> (~60-day) token via
+                the{" "}
+                <a
+                  href="https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  token-exchange endpoint
+                </a>
+                . Paste it as the <strong>Page Access Token</strong> below.
+              </li>
+            </ol>
+          </div>
+
+          {/* Get the Page ID */}
+          <div className="space-y-2">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-gray-500">
+              Get your Facebook Page ID
+            </h3>
+            <ol className="list-decimal list-inside space-y-2 text-[13px] text-gray-700">
+              <li>
+                Call <code>GET /me/accounts</code> (in the Graph API Explorer).
+                Each entry is a Page you manage — its numeric <code>id</code> is
+                the <strong>Page ID</strong>. Paste it below.
+              </li>
+            </ol>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800">
+            Long-lived tokens expire ~every 60 days — re-paste a fresh one here
+            when that happens.
+          </div>
+        </CardBody>
+      )}
+    </Card>
+  );
 }
 
 // ─── Google Workspace connect card ────────────────────────────────────────────
@@ -759,6 +1019,12 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
           {slug === "google_workspace" && detail.oauth_per_user && (
             <GoogleWorkspaceConnectCard />
           )}
+          {slug === "instagram" && (
+            <InstagramSetupStepsCard />
+          )}
+          {slug === "facebook" && (
+            <FacebookSetupStepsCard />
+          )}
           {slug === "ghl" && detail.values.webhook_url && (
             <Card>
               <CardHeader title="Webhook URL" />
@@ -847,9 +1113,9 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
                     {isTesting ? "Testing…" : "Test"}
                   </Button>
                 )}
-                {detail.connected && slug === "ghl" && (
+                {detail.connected && SYNCABLE_SLUGS.has(slug) && (
                   <Button variant="ghost" onClick={handleSync} disabled={isSyncing}>
-                    {isSyncing ? "Queueing…" : "Sync contacts now"}
+                    {isSyncing ? "Queueing…" : SYNC_BUTTON_LABEL[slug] ?? "Sync now"}
                   </Button>
                 )}
                 {detail.connected && (

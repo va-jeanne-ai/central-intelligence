@@ -17,6 +17,77 @@ A new "Today's Schedule" panel on the dashboard showing the logged-in user's cal
 
 Verified with zero API cost: endpoint registered, scoped query against live data (cancelled excluded, connected flag correct), empty-state path, tsc clean + next build green.
 
+### Added — CI chat resumes your last conversation on reload
+
+Chat history was already persisted (DB-backed `chat_sessions`/`chat_messages` + a history sidebar; the agent re-hydrates full context on session resume), but the frontend minted a fresh session UUID on every mount — so a page reload dropped you onto a blank "New chat" and you had to re-pick the conversation from the sidebar.
+
+- `frontend/src/hooks/use-chat.ts` — the active `sessionId` is now mirrored to `localStorage` (`ci-chat-session-id`) on every change and restored on mount, so a reload reconnects the WebSocket to the same session (backend re-hydrates the agent's memory). A one-time mount effect re-fetches that session's transcript so the on-screen bubbles reappear too. Guards: only restores when the id came from storage (a true first visit still starts blank, no needless fetch), degrades silently if the stored session was deleted server-side, and doesn't interfere with `startNewChat`/`loadSession`.
+
+No backend changes — the persistence layer was already complete.
+
+### Added — Connect buttons on the /marketing/social Platform Breakdown
+
+Each platform row now reflects real connection state. Connected platforms show live metrics; an **unconnected** platform that has a connect form shows a **Connect →** button linking to `/integrations/{slug}`; platforms not yet wired (TikTok, LinkedIn) show a muted **Coming soon** tag instead of a dead button.
+
+- `app/schemas/social.py` + `app/routes/social.py` — `SocialPlatformMetric` gains `connected` (from the `integrations` table, not merely a seed `social_stats` row) + `provider_status` (registry available/coming_soon); metric fields are now nullable and only populated when connected. The endpoint returns a row for all four display platforms.
+- `frontend/.../marketing/social/page.tsx` — the breakdown card renders three states per row: connected → metrics; available + not connected → Connect button; coming_soon → disabled tag.
+
+### Fixed — /marketing/social Platform Breakdown shows live per-platform data
+
+The "Platform Breakdown" card rendered a **hardcoded** `PLATFORMS` array of `"—"` literals and never read any data — so Facebook (and every platform) always showed "—" no matter what synced. The `/social` endpoint also only returned summed totals, with no per-platform rows.
+
+- `app/schemas/social.py` + `app/routes/social.py` — `SocialDataResponse` gains a `by_platform` list of `SocialPlatformMetric` (platform, followers, posts_count, engagement_rate); the GET handler populates it via `repo.find_latest_by_platform` for instagram/facebook/tiktok/linkedin (omitting platforms with no row).
+- `frontend/.../marketing/social/page.tsx` — `PlatformMetricsCard` now takes `data` and merges live `by_platform` values onto the display scaffold (icons + order), formatting followers/posts/engagement; falls back to "—" only when a platform has no synced row. The top KPI tiles were already live; this fixes the per-platform breakdown beneath them.
+
+### Fixed — Logout works (and stale sessions no longer strand you on the dashboard)
+
+Clicking sign-out did nothing when the session was already invalid (expired JWT / missing user). `signOut` `await`ed `supabase.auth.signOut()` *before* clearing local state, so when that call threw/hung on an invalid session, execution never reached the token-clear + `setUser(null)` + redirect — the button silently no-op'd.
+
+- `frontend/src/contexts/auth-context.tsx` — wrapped the Supabase sign-out in try/catch; local cleanup (clear token, clear cached user, null the user) + `router.push("/login")` now always run, so logout succeeds regardless of server-side session state.
+- `frontend/src/components/layout/auth-guard.tsx` (new) + `frontend/src/app/(app)/layout.tsx` — added a client-side `AuthGuard` that redirects to `/login` once auth finishes loading and the user is null. The Next middleware only guards on navigation; this catches a session going invalid while you're already sitting on a protected page (the "stuck on dashboard" symptom).
+
+### Fixed — Facebook Page Insights metric churn handled gracefully
+
+Meta is deprecating the bare `page_impressions` Page-insights metric through mid-2026 (it now returns `(#100) The value must be a valid insights metric`). `facebook_client.fetch_facebook_stats` now tries `page_impressions_unique` then `page_impressions`, uses whichever the API accepts, and logs Meta's actual error message (via a new `_error_message` helper, also used by `verify()`) instead of a raw traceback. Insights stay best-effort — followers/posts still sync when the impressions metric is rejected or absent (e.g. a low-activity Page returns no insights). `reach` remains null (no comparable Page metric).
+
+### Fixed — Social credential loaders read the account ID from `config`, not the blob
+
+The Instagram/Facebook sync reported "credentials unusable" even with a valid token saved, because the save route stores the **secret** field (`access_token`) in the encrypted blob but the **non-secret** ID field (`ig_user_id` / `page_id`) in the `config` JSONB column — and the loaders only read both from the blob. `load_instagram_credentials` / `load_facebook_credentials` now read the token from the decrypted blob and the ID from `integration.config` (with a blob fallback for older rows). With this fix, a saved Facebook Page token syncs live.
+
+### Added — Manual "Sync now" button for social + email connectors
+
+The on-demand sync button on the integration detail page (previously GHL-only) now renders for every connector with a backing sync task — **Mailchimp, Instagram, Facebook**, and GHL. The backend `POST /integrations/{slug}/sync` was already generic (routes through `_trigger_sync`); this just surfaces the button with per-provider labels ("Sync metrics now" / "Sync campaigns now" / "Sync contacts now"). Lets an admin pull fresh data immediately after saving credentials instead of waiting for the next beat tick.
+
+- `frontend/.../integrations/[slug]/page.tsx` — `SYNCABLE_SLUGS` set + `SYNC_BUTTON_LABEL` map drive the button's visibility/label; removed the `slug === "ghl"` gate.
+
+### Added — Facebook Page integration (Meta Graph API)
+
+Makes the `/marketing/social` **Facebook** column live, mirroring the Instagram connector. Manual long-lived **Page** token + Page ID; no migration. Unlike Instagram, Facebook needs no account-type conversion — any Page admin can read Page insights.
+
+- `app/services/facebook_client.py` (new) — Graph API v19 wrapper: Page profile (`followers_count`/`fan_count`, `name`), Page Insights (`page_impressions` over `days_28`, summed across the window), and recent `/posts` (likes+comments summary) for an engagement-rate estimate. Profile required; insights + posts best-effort. `reach` left null (no Page metric comparable to IG reach). `verify()` powers the Test button.
+- `app/services/facebook_credentials.py` (new) — decrypts `(access_token, page_id)` from the integration blob (mirrors `instagram_credentials.py`).
+- `app/tasks/social_stats.py` — refactored the per-platform live sync into a generic `_sync_live_platform(db, platform, …)` driven by a `_LIVE_PLATFORMS` map `{instagram, facebook}` (each → its creds-loader + fetch fn). Facebook syncs live when connected, **skips** (no fake-data overwrite) when not connected or on error, stamping `last_sync_status`/`last_sync_error` + a `sync_log` row. Removed `facebook` from `_SEED_DATA` (linkedin/tiktok stay seeded). The task result dict now reports per-platform sync results.
+- `app/services/integrations_registry.py` — new `facebook` provider (icon 📘, category social, `available`, fields `access_token` + `page_id`, `trigger_task: "facebook"`).
+- `app/routes/integrations.py` — `_trigger_sync` enqueues the shared `update_social_stats` for both `instagram`/`facebook`; `test_integration` facebook branch calls `facebook_client.verify()`.
+- `frontend/.../integrations/[slug]/page.tsx` — `FacebookSetupStepsCard`: collapsible steps for getting a long-lived Page token (Graph API Explorer → select Page → token-exchange) and the Page ID (`/me/accounts`).
+
+No `/marketing/social` change — it already renders a Facebook row; it lights up once a sync writes real data. Verified structurally with zero API cost (registry/fields, creds-None-on-empty, engagement-rate math, insight-value summing, `verify()` not-connected message, task syncs both live platforms + skips gracefully with no rows). Live Graph test needs a user-provided long-lived Page token + Page ID.
+
+### Added — Instagram social integration (Meta Graph API)
+
+Makes the `/marketing/social` Instagram column **live**. Previously `update_social_stats` wrote hardcoded seed data for all platforms; now Instagram pulls real organic metrics from the Meta Graph API. Manual-token connector following the GHL/Mailchimp pattern — no migration (the `integrations` table already has every column needed).
+
+- `app/services/integrations_registry.py` — Instagram flipped `coming_soon` → `available` with two fields (`access_token` secret, `ig_user_id`) and `trigger_task: "instagram"`. This is what makes the card clickable on `/integrations` and renders the connect form at `/integrations/instagram`.
+- `app/services/instagram_client.py` (new) — Graph API v19 httpx wrapper: profile (`followers_count`, `media_count`), account insights (`reach`/`impressions`, `days_28`), recent-media engagement-rate estimate. Insights + media are best-effort; profile is required. `verify()` powers the Test button; `is_configured()`/`_resolve_creds()` read the DB.
+- `app/services/instagram_credentials.py` (new) — decrypts `(access_token, ig_user_id)` from the integration blob (mirrors `ghl_credentials.py`); returns None on any failure.
+- `app/tasks/social_stats.py` — `update_social_stats` syncs Instagram live when connected; **skips** it (no fake-data overwrite) when not connected or on error, stamping `last_sync_status`/`last_sync_error` + a `sync_log` row. facebook/linkedin/tiktok stay on seed values (clearly marked) so the dashboard stays populated.
+- `app/routes/integrations.py` — `_trigger_sync("instagram")` enqueues `update_social_stats` (Sync button); `test_integration` instagram branch calls `instagram_client.verify()`.
+- `INTEGRATIONS.md` — Instagram entry rewritten from ⬜ to ✅.
+
+No frontend change to `/marketing/social` — it renders from the DB and lights up once credentials are saved and a sync runs. The `/integrations/instagram` detail page has a collapsible **Setup steps** panel walking through getting a long-lived access token (Graph API Explorer → token-exchange endpoint) and the IG Business account ID (`/me/accounts` → `instagram_business_account`). Verified structurally with zero API cost (registry/fields, creds-None-on-empty, engagement-rate math, `verify()` not-connected message, task skips IG gracefully with no row). Live Graph API test requires a user-provided Meta long-lived token + IG account ID (the user's token, not app-key spend).
+
+> **Deferred:** a "Connect with Meta" OAuth button (single shared business account, long-lived-token auto-refresh) was built and then removed in favor of shipping the manual-token connector first. The implementation lives in git history (branch `feat/instagram-social-integration`, commits `1566abc`/`65b6e1b`/`22c36af`) for a future sprint.
+
 ### Added — Central Intelligence cross-department delegation (Sprint 8)
 
 Connects the top-level Central Intelligence chat agent to the three department Directors so it can finally answer cross-department questions ("what should we focus on this week?") with real Sales/Marketing/Fulfillment intelligence. Previously CI's only tools were `query_database`/`search_knowledge_base`/`query_calendar`, and its prompt admitted Directors weren't connected.
