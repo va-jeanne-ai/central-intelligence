@@ -6,6 +6,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Today's Schedule dashboard brief
+
+A new "Today's Schedule" panel on the dashboard showing the logged-in user's calendar events for today, read deterministically from the already-synced `google_calendar_events` table. No AI, no cache, no migration, no new sync.
+
+- `app/schemas/dashboard.py` — `ScheduleBriefItem` (title, start/end, is_all_day, location, attendees_count, status) + `ScheduleBriefResponse` (items, summary, event_count, calendar_connected, generated_at).
+- `app/routes/dashboard.py` — `GET /dashboard/schedule-brief`. Auth-scoped to `current_user` (like `/calendar/events`): queries `google_calendar_events WHERE connected_via_user_id = <user>`, within the `start`/`end` window (default now → +24h), **excludes cancelled events**, capped at 50, ordered by start. `calendar_connected` is derived from the user's `user_integration_credentials` row so the empty state can distinguish "nothing today" from "you haven't connected a calendar." Builds a deterministic one-line summary (count + next event). No cache — the query is cheap and per-user (caching a per-user payload in a shared module dict would leak across users).
+- `frontend/src/components/dashboard/schedule-brief.tsx` (new) — sky-accented panel mirroring the weekly-focus pattern (`apiClient.get(..., {silent:true})` + `authLoading`, skeleton, empty, populated). **Timezone-correct:** computes the browser's local day bounds and passes them as `start`/`end`, and renders each event time in the browser's locale, so "today" matches the user's wall clock even though events are stored in UTC.
+- `frontend/src/app/(app)/dashboard/page.tsx` — `ScheduleBrief` placed in a 2-column row beside `WeeklyFocus`, with a matching 2-column skeleton.
+
+Verified with zero API cost: endpoint registered, scoped query against live data (cancelled excluded, connected flag correct), empty-state path, tsc clean + next build green.
+
 ### Added — CI chat resumes your last conversation on reload
 
 Chat history was already persisted (DB-backed `chat_sessions`/`chat_messages` + a history sidebar; the agent re-hydrates full context on session resume), but the frontend minted a fresh session UUID on every mount — so a page reload dropped you onto a blank "New chat" and you had to re-pick the conversation from the sidebar.
