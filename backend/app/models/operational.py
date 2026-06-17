@@ -129,6 +129,12 @@ class Call(Base, SoftDeleteMixin):
     __tablename__ = "calls"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    # Provenance of the call record itself (distinct from transcript_source, which
+    # records where the *transcript text* came from). 'wgr' for calls synced from
+    # the client's WGR mirror; 'manual'/'ci_upload' for CI-native. external_id holds
+    # the upstream id (WGR call_id) so the WGR sync upserts idempotently.
+    source: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     call_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     call_result: Mapped[str | None] = mapped_column(String(128), nullable=True)

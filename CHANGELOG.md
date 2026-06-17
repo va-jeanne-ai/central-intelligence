@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — WGR subsystem models + migration (Phase 3)
+
+New CI tables for the WGR subsystems CI never modelled, so Greg's sales/coaching/revenue/funnel data has somewhere to land.
+
+- `backend/app/models/sales.py` (new) — `SalesRep`, `ScorecardCategory`, `CallScore`, `StrikeRule`, `CoachingStrike`, `StrikeAction`, `StrikeEvidence`, `EodReport`, `ClosedSale`, `SalesActivity`. These hold WGR-only data, so they keep WGR's native text PKs (rep_id, score_id, strike_id, …) — sync upserts are idempotent on the natural key. `rep_id` FKs stay within the module; `business_id` is a plain Integer (no cross-table FK to CI's business_profile).
+- `backend/app/models/marketing.py` — added `WebinarEngagement` and `OptInEvent` (WGR top-of-funnel).
+- `backend/app/models/operational.py` — added `source` + `external_id` to `Call` (provenance + idempotent dedup for WGR-sourced calls; distinct from `transcript_source`).
+- Migration `aa7e787e302d` — creates the 12 tables + Call columns. **Hand-edited** to strip ~13 spurious autogenerate ops (it wanted to drop existing hand-crafted partial/GIN/composite indexes and the `uq_leads/uq_email_campaigns` dedup constraints, which the ORM metadata doesn't model). Verified: 12 tables created, existing indexes intact, downgrade/upgrade round-trips cleanly.
+- Lock note: had to terminate orphaned `idle in transaction` sessions (from earlier failed pg_dump COPYs) that were blocking `ALTER TABLE calls`. The pooler's short `statement_timeout` makes lock contention fatal to migrations.
+
 ### Changed — Re-base CI on the WGR database: clear CI domain data (Phase 1)
 
 First step of making the client's (Greg/WGR) database CI's single upstream. Backed up CI's irreplaceable config/auth tables, then cleared CI's empty/seed-fed domain data so it can be re-sourced from WGR.

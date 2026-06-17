@@ -46,16 +46,32 @@ from app.models.operational import (  # noqa: F401
     Win,
 )
 
-# marketing — Sprint 3/4 social/email/funnel/ads/dm/promo models (no FK dependencies)
+# marketing — Sprint 3/4 social/email/funnel/ads/dm/promo + WGR webinar/opt-in
 from app.models.marketing import (  # noqa: F401
     AdsStats,
     DmStats,
     EmailCampaign,
     FunnelEvent,
     FunnelStats,
+    OptInEvent,
     Promotion,
     SocialComment,
     SocialStats,
+    WebinarEngagement,
+)
+
+# sales — WGR-sourced rep/coaching/revenue/activity subsystems (rep_id self-FKs)
+from app.models.sales import (  # noqa: F401
+    CallScore,
+    ClosedSale,
+    CoachingStrike,
+    EodReport,
+    SalesActivity,
+    SalesRep,
+    ScorecardCategory,
+    StrikeAction,
+    StrikeEvidence,
+    StrikeRule,
 )
 
 # audit — depends on User (user_id FK)
@@ -118,6 +134,19 @@ __all__ = [
     "AdsStats",
     "DmStats",
     "Promotion",
+    "WebinarEngagement",
+    "OptInEvent",
+    # sales (WGR)
+    "SalesRep",
+    "ScorecardCategory",
+    "CallScore",
+    "StrikeRule",
+    "CoachingStrike",
+    "StrikeAction",
+    "StrikeEvidence",
+    "EodReport",
+    "ClosedSale",
+    "SalesActivity",
     # audit
     "AuditLog",
     "ErrorLog",
