@@ -36,6 +36,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_session
 from app.models.integration import Integration
 from app.services import secrets as app_secrets
@@ -109,8 +110,15 @@ async def ghl_lead_webhook(
     integration row but still return 200 — GHL retries aggressively on
     non-2xx and we don't want a malformed payload to retry-storm us.
     """
-    # 1. Find the GHL integration row, validate the path token.
+    # 0. Direct GHL ingestion is disabled in favour of the WGR mirror upstream.
+    #    Validate the token first (so a bad token still 404s and reveals nothing),
+    #    then refuse with 410 Gone.
     row = await _resolve_ghl_integration(session, webhook_token)
+    if not settings.ghl_inbound_enabled:
+        raise HTTPException(
+            status_code=410,
+            detail="Direct GHL ingestion is disabled; CI sources this data from the WGR mirror.",
+        )
 
     # 2. Upsert the lead, swallow errors so GHL doesn't retry-storm.
     now = datetime.now(timezone.utc)
@@ -151,6 +159,11 @@ async def ghl_appointment_webhook(
     ``last_sync_error`` but still return 200 to avoid GHL retry-storms.
     """
     row = await _resolve_ghl_integration(session, webhook_token)
+    if not settings.ghl_inbound_enabled:
+        raise HTTPException(
+            status_code=410,
+            detail="Direct GHL ingestion is disabled; CI sources this data from the WGR mirror.",
+        )
 
     now = datetime.now(timezone.utc)
     try:

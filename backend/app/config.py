@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     client_supabase_service_key: str = ""
     client_sync_enabled: bool = False
 
+    # Direct GHL ingestion master switch. CI used to pull leads/appointments
+    # straight from GoHighLevel (nightly sync + live webhooks). As of the WGR
+    # rebase, the client's WGR mirror is the single upstream for that domain,
+    # so direct GHL ingestion is OFF by default to avoid double-writing the same
+    # contacts under a different `source`. The webhook routes return 410 and the
+    # nightly task is unscheduled while this is False. Flip to True only to
+    # restore CI's own direct GHL path.
+    ghl_inbound_enabled: bool = False
+
     # Direct Postgres connection to the client's project (session pooler).
     # Gives full-schema visibility and reliable bulk reads that the anon key
     # cannot. SAFETY: this credential is the `postgres` role and CAN WRITE —

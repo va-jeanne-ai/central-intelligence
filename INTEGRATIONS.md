@@ -64,9 +64,11 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 
 ---
 
-## Go High Level (GHL) ✅
+## Go High Level (GHL) 🟡 superseded by the WGR mirror
 
-**What it does today**
+> **Status update (2026-06-18, WGR rebase):** CI no longer ingests contacts **directly** from GoHighLevel. The client's WGR Supabase (a GHL mirror) is now CI's single upstream for leads/appointments/calls — see "WGR client database" below and [`backend/app/tasks/wgr_sync.py`](backend/app/tasks/wgr_sync.py). Concretely: the inbound lead/appointment webhooks return **410 Gone** while `ghl_inbound_enabled=False` (default), and the `ghl-contacts-sync-nightly` beat entry was removed. The code paths below remain intact and are re-enabled by setting `ghl_inbound_enabled=True` and restoring the beat entry. The **reverse-sync push (CI → GHL)** is unaffected — CI can still write enrichments back to GHL.
+
+**What it did (direct path, now disabled)**
 
 Genuinely two-way GHL link:
 
