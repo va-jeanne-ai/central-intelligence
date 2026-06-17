@@ -20,6 +20,27 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str = ""
 
     # ------------------------------------------------------------------
+    # Client's GHL-mirror Supabase — a separate, READ-ONLY data source
+    # (project mntsbmuxbdnnlnheuwqk). Kept fully distinct from the auth
+    # settings above so the client's DB is never used to verify logins and
+    # is never written to. Consumed by the client-data sync task (see
+    # docs/client-supabase-pull-plan.md). Prefer client_supabase_service_key
+    # once the client provides it; anon key is the read-only fallback.
+    # client_sync_enabled is the master switch for the sync task.
+    # ------------------------------------------------------------------
+    client_supabase_url: str = ""
+    client_supabase_anon_key: str = ""
+    client_supabase_service_key: str = ""
+    client_sync_enabled: bool = False
+
+    # Direct Postgres connection to the client's project (session pooler).
+    # Gives full-schema visibility and reliable bulk reads that the anon key
+    # cannot. SAFETY: this credential is the `postgres` role and CAN WRITE —
+    # all access MUST be opened READ ONLY. Prefer a dedicated read-only role
+    # once the client provides one. Empty in environments without DB access.
+    wgr_database_url: str = ""
+
+    # ------------------------------------------------------------------
     # Mailchimp — F28 connector for email stats. When mailchimp_api_key is
     # empty, the email_stats Celery task falls back to its seed data so
     # local/dev environments still produce a populated dashboard.

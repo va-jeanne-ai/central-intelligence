@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Greg's Database × Central Intelligence — Data Analysis & Opportunity Report</title>
+<style>
+  :root{
+    --mkt:#10B981; --sales:#3B82F6; --ful:#F97316; --gold:#F59E0B;
+    --ink:#111827; --muted:#6B7280; --line:#E5E7EB; --bg:#F9FAFB; --card:#FFFFFF;
+    --green-bg:#D1FAE5; --green-ink:#065F46; --amber-bg:#FEF3C7; --amber-ink:#92400E;
+    --blue-bg:#DBEAFE; --blue-ink:#1D4ED8; --red-bg:#FEE2E2; --red-ink:#991B1B;
+    --purple-bg:#EDE9FE; --purple-ink:#5B21B6; --gray-bg:#F3F4F6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       color:var(--ink);background:var(--bg);line-height:1.55;font-size:15px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+  header.hero{background:linear-gradient(135deg,#0F172A 0%,#1E293B 60%,#334155 100%);color:#fff;padding:54px 0 46px}
+  header.hero .wrap{display:block}
+  .kicker{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#FBBF24;font-weight:700;margin-bottom:10px}
+  header.hero h1{font-size:38px;line-height:1.12;margin:0 0 14px;font-weight:800;max-width:880px}
+  header.hero p.sub{font-size:17px;color:#CBD5E1;max-width:760px;margin:0 0 26px}
+  .meta-row{display:flex;gap:28px;flex-wrap:wrap;font-size:13px;color:#94A3B8}
+  .meta-row b{color:#E2E8F0}
+  /* nav */
+  nav.toc{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);
+          border-bottom:1px solid var(--line);padding:11px 0}
+  nav.toc .wrap{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  nav.toc a{font-size:12.5px;color:var(--muted);text-decoration:none;padding:5px 11px;border-radius:7px;font-weight:600;white-space:nowrap}
+  nav.toc a:hover{background:var(--gray-bg);color:var(--ink)}
+  section{padding:44px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:27px;font-weight:800;margin:0 0 6px;letter-spacing:-.01em}
+  h2 .num{color:var(--gold);font-weight:800;margin-right:10px}
+  .lead{color:var(--muted);font-size:16px;max-width:820px;margin:0 0 26px}
+  h3{font-size:19px;font-weight:700;margin:30px 0 12px}
+  p{margin:0 0 14px}
+  /* stat cards */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:8px 0 6px}
+  .stat{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:12px;padding:18px 18px 16px}
+  .stat .n{font-size:30px;font-weight:800;line-height:1}
+  .stat .l{font-size:12.5px;color:var(--muted);margin-top:7px;font-weight:600}
+  .stat.b{border-top-color:var(--sales)} .stat.g{border-top-color:var(--mkt)} .stat.o{border-top-color:var(--ful)}
+  /* cards & grids */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px}
+  .card h4{margin:0 0 8px;font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .card .desc{font-size:13.5px;color:var(--muted);margin-bottom:12px}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.02em}
+  .p-green{background:var(--green-bg);color:var(--green-ink)} .p-amber{background:var(--amber-bg);color:var(--amber-ink)}
+  .p-red{background:var(--red-bg);color:var(--red-ink)} .p-blue{background:var(--blue-bg);color:var(--blue-ink)}
+  .p-purple{background:var(--purple-bg);color:var(--purple-ink)} .p-gray{background:var(--gray-bg);color:var(--muted)}
+  /* subsystem card */
+  .sub{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;border-left:5px solid var(--muted)}
+  .sub.crm{border-left-color:var(--sales)} .sub.sales{border-left-color:var(--sales)}
+  .sub.mkt{border-left-color:var(--mkt)} .sub.intel{border-left-color:var(--purple-ink)}
+  .sub.ops{border-left-color:var(--muted)} .sub.content{border-left-color:var(--gold)}
+  .sub h4{margin:0 0 4px;font-size:16.5px;font-weight:700}
+  .sub .one{font-size:13px;color:var(--muted);margin-bottom:12px}
+  .sub .tbls{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .tbl-chip{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--gray-bg);
+            border:1px solid var(--line);border-radius:6px;padding:3px 8px}
+  .tbl-chip b{color:var(--ink)} .tbl-chip.empty{opacity:.5;text-decoration:line-through}
+  .sub .flow{font-size:13px;color:#374151;background:var(--bg);border-radius:8px;padding:11px 13px;border:1px solid var(--line)}
+  .sub .flow .k{color:var(--muted)}
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th{background:#F8FAFC;text-align:left;padding:10px 13px;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;border-bottom:1px solid var(--line)}
+  td{padding:10px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:var(--gray-bg);padding:1px 5px;border-radius:4px}
+  .num-cell{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+  /* flow diagram */
+  .pipeline{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:18px 0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 18px}
+  .node{background:var(--bg);border:2px solid var(--line);border-radius:10px;padding:10px 13px;text-align:center;min-width:96px}
+  .node .t{font-weight:700;font-size:13px}
+  .node .c{font-size:11px;color:var(--muted);margin-top:2px}
+  .node.hub{border-color:var(--sales);background:var(--blue-bg)}
+  .node.rag{border-color:var(--gold);background:var(--amber-bg)}
+  .arrow{color:var(--muted);font-size:20px;padding:0 9px;font-weight:700}
+  /* ER hub diagram */
+  .er{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px;text-align:center}
+  .er svg{max-width:100%;height:auto}
+  /* callouts */
+  .callout{border-radius:12px;padding:16px 18px;margin:16px 0;font-size:14px;border:1px solid}
+  .callout.warn{background:var(--amber-bg);border-color:#FCD34D;color:#78350F}
+  .callout.danger{background:var(--red-bg);border-color:#FCA5A5;color:var(--red-ink)}
+  .callout.key{background:var(--blue-bg);border-color:#93C5FD;color:#1E3A8A}
+  .callout.win{background:var(--green-bg);border-color:#6EE7B7;color:var(--green-ink)}
+  .callout b{font-weight:800}
+  /* opportunity cards */
+  .opp{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden}
+  .opp::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px}
+  .opp.high::before{background:var(--mkt)} .opp.med::before{background:var(--gold)} .opp.fut::before{background:var(--muted)}
+  .opp h4{margin:0 0 4px;font-size:16px;font-weight:700}
+  .opp .tag-row{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 10px}
+  .opp p{font-size:13.5px;color:#374151;margin:0 0 8px}
+  .opp .data{font-size:12.5px;color:var(--muted)}
+  .opp .data b{color:var(--ink)}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 22px;font-size:13px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+  ul.clean{margin:6px 0 14px;padding-left:20px}
+  ul.clean li{margin-bottom:7px;font-size:14px}
+  .ex{font-size:12px;color:var(--muted);font-style:italic;border-left:3px solid var(--line);padding-left:10px;margin-top:6px}
+  footer{padding:34px 0;color:var(--muted);font-size:13px;text-align:center}
+  .matrix td:first-child{font-weight:600}
+  .check{color:var(--mkt);font-weight:800} .cross{color:#DC2626;font-weight:800} .partial{color:var(--ful);font-weight:800}
+  @media(max-width:880px){.stats,.grid2,.grid3{grid-template-columns:1fr}.pipeline{justify-content:center}header.hero h1{font-size:29px}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">Data Intelligence Report · Central Intelligence</div>
+    <h1>Inside Greg's Database — and what it means for Central Intelligence</h1>
+    <p class="sub">A deep read of the client's 74-table sales-and-marketing platform, mapped against what Central Intelligence already has, with the feature opportunities that data unlocks.</p>
+    <div class="meta-row">
+      <div><b>Source:</b> WGR Supabase <code style="color:#cbd5e1">mntsbmuxbdnnlnheuwqk</code> (read-only)</div>
+      <div><b>Snapshot:</b> 2026-06-17</div>
+      <div><b>Scope:</b> 74 tables · 54 populated</div>
+      <div><b>Access:</b> <code style="color:#cbd5e1">wgr_client.py</code> (forced read-only)</div>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#tldr">TL;DR</a>
+    <a href="#what">What it is</a>
+    <a href="#flow">Data flow</a>
+    <a href="#er">Entity hubs</a>
+    <a href="#subsystems">Subsystems</a>
+    <a href="#rag">RAG goldmine</a>
+    <a href="#compare">CI vs Greg</a>
+    <a href="#gaps">Gap analysis</a>
+    <a href="#opps">Opportunities</a>
+    <a href="#quality">Data quality</a>
+    <a href="#next">Recommendations</a>
+  </div>
+</nav>
+
+<!-- ───────────────────────── TL;DR ───────────────────────── -->
+<section id="tldr">
+  <div class="wrap">
+    <h2><span class="num">01</span>The one-paragraph version</h2>
+    <p class="lead">Greg's database isn't a CRM export — it's a full <b>sales-and-marketing intelligence platform</b> that has been quietly accumulating exactly the data Central Intelligence was designed to consume. CI's own schema mirrors Greg's domain almost table-for-table, but CI's tables are empty or seed-fed while Greg's are full of real, AI-enriched data.</p>
+
+    <div class="callout key" style="margin-top:0">
+      <b>The headline:</b> Central Intelligence is a well-built engine running on an empty tank. Greg's database is the fuel — 11,561 real leads, 103 scored call transcripts, 280 customer-psychology insights, 2,390 email campaigns, 7,566 webinar engagements, and 18,932 logged sales activities. The work ahead isn't mostly building features; it's <b>wiring the engine to the fuel</b> and then building the handful of net-new things Greg's data makes possible.
+    </div>
+
+    <div class="stats">
+      <div class="stat b"><div class="n">11,561</div><div class="l">Real leads (CI table: empty)</div></div>
+      <div class="stat"><div class="n">103</div><div class="l">Scored call transcripts · 67K words</div></div>
+      <div class="stat g"><div class="n">280</div><div class="l">Customer-psychology insights</div></div>
+      <div class="stat o"><div class="n">$393K</div><div class="l">Collected revenue across 74 closes</div></div>
+    </div>
+
+    <div class="grid3" style="margin-top:22px">
+      <div class="card"><h4>✅ The good news</h4><div class="desc">CI's CRM / calls / insights / RAG / integrations spine is genuinely built and wired to real services. The architecture matches Greg's data shape.</div></div>
+      <div class="card"><h4>⚡ The opportunity</h4><div class="desc">A rich <b>sales-call intelligence stack</b> (transcripts → scores → analyses → insights → content) sits ready for RAG and for surfaces CI hasn't built yet.</div></div>
+      <div class="card"><h4>⚠️ The catch</h4><div class="desc">Some domains (Meta ads, email creative, DM, voice, b-roll) are <b>empty scaffolding on both sides</b> — schema exists, no data. Don't mistake them for quick wins.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── WHAT IT IS ───────────────────────── -->
+<section id="what">
+  <div class="wrap">
+    <h2><span class="num">02</span>What this database actually is</h2>
+    <p class="lead">It began life as a GoHighLevel CRM mirror — but it has grown into the operational brain of Greg's coaching business.</p>
+
+    <div class="grid2">
+      <div class="card">
+        <h4>🏢 Two businesses, one tenant root</h4>
+        <p class="desc"><code>business_profile</code> holds two brands. Nearly all live data is the first.</p>
+        <ul class="clean">
+          <li><b>"The WGR"</b> (<code>business_id=1</code>) — coaching for mid-career real estate agents (ages 28–48, $200–300K, 8–20 yrs experience). The primary org; all reps belong here.</li>
+          <li><b>"AI Growth Engine"</b> (<code>business_id=2</code>) — a second brand for coaches / consultants / agencies. Minimal data.</li>
+        </ul>
+        <p class="ex">Product line: the "Agent Infopreneur" coaching ladder — Jumpstart / Accelerator / Mastery, priced $2K–$15K.</p>
+      </div>
+      <div class="card">
+        <h4>🔌 How data gets in</h4>
+        <p class="desc">External sync jobs (not ours) populate it from several sources:</p>
+        <ul class="clean">
+          <li><b>GoHighLevel</b> → leads, appointments, calls, conversations</li>
+          <li><b>EverWebinar</b> → webinar engagements + opt-ins (dominant top-of-funnel)</li>
+          <li><b>Instagram / Facebook</b> → posts, comment-keyword automation</li>
+          <li><b>ESP (ActiveCampaign-style)</b> → email campaign performance</li>
+          <li><b>An AI scoring pipeline</b> → transcripts → scores → analyses → insights</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <b>Two clocks to keep in mind.</b> The CRM / webinar / opt-in / email layers go back to <b>2016–2024</b>. The <b>call-intelligence layer is brand-new</b> — <code>calls</code>, <code>sales_call_*</code>, <code>sales_activities</code>, <code>insights</code> and EOD reports all start around <b>2026-05-26</b>. The mirror itself was (re)built starting 2026-05-11. So you have years of funnel history but only weeks of deep call intelligence.
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── DATA FLOW ───────────────────────── -->
+<section id="flow">
+  <div class="wrap">
+    <h2><span class="num">03</span>The data flow — one story, end to end</h2>
+    <p class="lead">Strip away the 74 tables and a single narrative emerges: a person becomes a lead, gets on a call, the call gets transcribed and scored, and that score becomes insight, content, and coaching action.</p>
+
+    <div class="pipeline">
+      <div class="node"><div class="t">Opt-in</div><div class="c">webinar · IG comment</div></div>
+      <div class="arrow">→</div>
+      <div class="node hub"><div class="t">Lead</div><div class="c">11,561</div></div>
+      <div class="arrow">→</div>
+      <div class="node"><div class="t">Appointment</div><div class="c">1,786</div></div>
+      <div class="arrow">→</div>
+      <div class="node hub"><div class="t">Call</div><div class="c">145</div></div>
+      <div class="arrow">→</div>
+      <div class="node rag"><div class="t">Transcript</div><div class="c">103</div></div>
+      <div class="arrow">→</div>
+      <div class="node rag"><div class="t">Score + Analysis</div><div class="c">220 / 55</div></div>
+      <div class="arrow">→</div>
+      <div class="node rag"><div class="t">Insight</div><div class="c">280</div></div>
+      <div class="arrow">→</div>
+      <div class="node rag"><div class="t">Content idea</div><div class="c">220</div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h4>↘ Branches off the call</h4>
+        <ul class="clean">
+          <li><b>Coaching:</b> low scores breach <code>sales_strike_rules</code> → auto <code>sales_coaching_strikes</code> + evidence + actions</li>
+          <li><b>Revenue:</b> a won deal becomes a <code>sales</code> row mapped to an <code>offer</code></li>
+          <li><b>Market signals:</b> recurring insights aggregate into <code>market_signals</code> with mention counts</li>
+          <li><b>EOD:</b> daily activity rolls up into <code>sales_eod_reports</code>, delivered to Slack</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>↗ Parallel marketing streams</h4>
+        <ul class="clean">
+          <li><b>Email:</b> 2,390 campaigns of performance metrics (2016→2026, 10.3M sends)</li>
+          <li><b>Social:</b> 1,000 IG posts (17.1M reach) + 9,881 comment-automation events</li>
+          <li><b>Webinar:</b> 7,566 engagements feeding the opt-in funnel</li>
+          <li><b>Activities:</b> 18,932 logged touchpoints (IG DMs, SMS, calls, email)</li>
+        </ul>
+      </div>
+    </div>
+    <p class="ex">Gold-bordered nodes are the highest-value content for a vector store — see §06.</p>
+  </div>
+</section>
+
+<!-- ───────────────────────── ER HUBS ───────────────────────── -->
+<section id="er">
+  <div class="wrap">
+    <h2><span class="num">04</span>The entity hubs — five tables everything hangs off</h2>
+    <p class="lead">The 70-edge foreign-key graph collapses to five "god" tables. Understand these and you understand the whole schema.</p>
+
+    <div class="er">
+      <svg viewBox="0 0 760 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,sans-serif">
+        <!-- edges -->
+        <g stroke="#CBD5E1" stroke-width="2">
+          <line x1="380" y1="210" x2="180" y2="90"/>
+          <line x1="380" y1="210" x2="580" y2="90"/>
+          <line x1="380" y1="210" x2="180" y2="330"/>
+          <line x1="380" y1="210" x2="580" y2="330"/>
+          <line x1="380" y1="210" x2="380" y2="60"/>
+          <line x1="380" y1="210" x2="380" y2="360"/>
+        </g>
+        <!-- center: business_profile -->
+        <g>
+          <rect x="300" y="180" width="160" height="60" rx="12" fill="#1E293B"/>
+          <text x="380" y="205" fill="#fff" font-size="14" font-weight="700" text-anchor="middle">business_profile</text>
+          <text x="380" y="224" fill="#94A3B8" font-size="11" text-anchor="middle">tenant root · 2 brands</text>
+        </g>
+        <!-- leads -->
+        <g>
+          <rect x="100" y="60" width="160" height="58" rx="12" fill="#DBEAFE" stroke="#3B82F6" stroke-width="2"/>
+          <text x="180" y="84" fill="#1D4ED8" font-size="14" font-weight="700" text-anchor="middle">leads</text>
+          <text x="180" y="103" fill="#1E40AF" font-size="11" text-anchor="middle">11,561 · the person hub</text>
+        </g>
+        <!-- calls -->
+        <g>
+          <rect x="500" y="60" width="160" height="58" rx="12" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+          <text x="580" y="84" fill="#5B21B6" font-size="14" font-weight="700" text-anchor="middle">calls</text>
+          <text x="580" y="103" fill="#5B21B6" font-size="11" text-anchor="middle">145 · the intelligence hub</text>
+        </g>
+        <!-- sales_reps -->
+        <g>
+          <rect x="100" y="302" width="160" height="58" rx="12" fill="#DBEAFE" stroke="#3B82F6" stroke-width="2"/>
+          <text x="180" y="326" fill="#1D4ED8" font-size="14" font-weight="700" text-anchor="middle">sales_reps</text>
+          <text x="180" y="345" fill="#1E40AF" font-size="11" text-anchor="middle">7 · the people hub</text>
+        </g>
+        <!-- offers -->
+        <g>
+          <rect x="500" y="302" width="160" height="58" rx="12" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2"/>
+          <text x="580" y="326" fill="#92400E" font-size="14" font-weight="700" text-anchor="middle">offers</text>
+          <text x="580" y="345" fill="#92400E" font-size="11" text-anchor="middle">11 · the money dimension</text>
+        </g>
+        <!-- appointments (top) -->
+        <g>
+          <rect x="310" y="32" width="140" height="50" rx="10" fill="#fff" stroke="#CBD5E1" stroke-width="1.5"/>
+          <text x="380" y="53" fill="#374151" font-size="12.5" font-weight="600" text-anchor="middle">appointments</text>
+          <text x="380" y="70" fill="#9CA3AF" font-size="10.5" text-anchor="middle">1,786</text>
+        </g>
+        <!-- sales (bottom) -->
+        <g>
+          <rect x="310" y="340" width="140" height="50" rx="10" fill="#fff" stroke="#CBD5E1" stroke-width="1.5"/>
+          <text x="380" y="361" fill="#374151" font-size="12.5" font-weight="600" text-anchor="middle">sales</text>
+          <text x="380" y="378" fill="#9CA3AF" font-size="10.5" text-anchor="middle">74 closes</text>
+        </g>
+      </svg>
+    </div>
+
+    <table style="margin-top:20px">
+      <thead><tr><th>Hub</th><th>Rows</th><th>Role</th><th>What references it</th></tr></thead>
+      <tbody>
+        <tr><td><code>leads</code></td><td class="num-cell">11,561</td><td>Master person hub</td><td>appointments, applications, sales, sales_activities, lead_opt_in_events, webinar_engagements, conversation flags</td></tr>
+        <tr><td><code>calls</code></td><td class="num-cell">145</td><td>Intelligence hub</td><td>transcripts, scores, analyses, insights, content_ideas, market_signals, appointments</td></tr>
+        <tr><td><code>sales_reps</code></td><td class="num-cell">7</td><td>People hub</td><td>~12 <code>sales_*</code> tables + appointments, calls, sales</td></tr>
+        <tr><td><code>business_profile</code></td><td class="num-cell">2</td><td>Tenant root</td><td>Nearly every operational table (multi-brand scoping)</td></tr>
+        <tr><td><code>offers</code></td><td class="num-cell">11</td><td>Money dimension</td><td>sales, email_campaigns, meta_ads, calendar_entries, offer_mappings</td></tr>
+      </tbody>
+    </table>
+    <div class="callout danger">
+      <b>Join discipline:</b> always group/join on <code>rep_id</code> (clean <code>REP_&lt;NAME&gt;</code> keys), never on the name strings — <code>call_owner</code>/<code>appointment_owner</code> are dirty ("Colton&nbsp;&nbsp;Lindsay" with double-spaces, partial names). Display the name only as a label.
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── SUBSYSTEMS ───────────────────────── -->
+<section id="subsystems">
+  <div class="wrap">
+    <h2><span class="num">05</span>The 13 subsystems</h2>
+    <p class="lead">Grouped by domain. Struck-through chips are <span style="text-decoration:line-through;opacity:.6">empty scaffolding</span> — schema exists, no data yet.</p>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--sales)"></span>CRM / Sales</span>
+      <span><span class="dot" style="background:var(--purple-ink)"></span>Intelligence</span>
+      <span><span class="dot" style="background:var(--mkt)"></span>Marketing</span>
+      <span><span class="dot" style="background:var(--gold)"></span>Content</span>
+      <span><span class="dot" style="background:var(--muted)"></span>Ops / infra</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <div class="sub crm">
+        <h4>1 · CRM Core <span class="pill p-blue">spine</span></h4>
+        <div class="one">The contact/booking backbone. Everything funnels through <code>leads</code>.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>leads</b> 11,561</span>
+          <span class="tbl-chip"><b>appointments</b> 1,786</span>
+          <span class="tbl-chip"><b>applications</b> 467</span>
+          <span class="tbl-chip">application_appointments 927</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> GHL contacts → <code>leads</code> (<code>LEAD_&lt;ghl_id&gt;</code>). Lead books → <code>appointments</code>; submits qualification form → <code>applications</code> (avg score 19.0). <span class="k">Keys:</span> lead_id, ghl_contact_id, rep_id.</div>
+      </div>
+
+      <div class="sub intel">
+        <h4>2 · Sales-Call Intelligence <span class="pill p-purple">crown jewel</span></h4>
+        <div class="one">Transcribes, scores, and analyzes calls against an 11-category rubric.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>calls</b> 145</span>
+          <span class="tbl-chip"><b>sales_call_transcripts</b> 103</span>
+          <span class="tbl-chip"><b>sales_call_scores</b> 220</span>
+          <span class="tbl-chip"><b>sales_call_analyses</b> 55</span>
+          <span class="tbl-chip">sales_scorecard_categories 11</span>
+          <span class="tbl-chip">pending_transcripts 264</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> raw transcript → <code>pending_transcripts</code> (193 processed / 54 failed) → matched → <code>calls</code> + <code>sales_call_transcripts</code> → scoring pipeline → per-category <code>sales_call_scores</code> + holistic <code>sales_call_analyses</code>. <span class="k">Coverage:</span> 145 calls, 103 transcribed, 55 fully scored.</div>
+      </div>
+
+      <div class="sub sales">
+        <h4>3 · Coaching / Accountability <span class="pill p-blue">manager layer</span></h4>
+        <div class="one">Turns low call scores into rep-management actions.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>sales_eod_reports</b> 102</span>
+          <span class="tbl-chip">sales_strike_rules 16</span>
+          <span class="tbl-chip">sales_strike_actions 34</span>
+          <span class="tbl-chip">sales_strike_evidence 28</span>
+          <span class="tbl-chip">sales_coaching_strikes 10</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> strike rules evaluated vs scores → breaches create <code>sales_coaching_strikes</code> (<code>created_by='ai_auto'</code>) with evidence pointing at the offending score. EOD reports (89 rep + 13 admin) roll up dials/texts/meaningful-convos/strikes as JSONB → Slack.</div>
+      </div>
+
+      <div class="sub sales">
+        <h4>4 · Sales Activity &amp; Conversation Tracking <span class="pill p-blue">largest dataset</span></h4>
+        <div class="one">Every rep touchpoint — the behavioral firehose.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>sales_activities</b> 18,932</span>
+          <span class="tbl-chip"><b>sales_poll_conversation_state</b> 6,868</span>
+          <span class="tbl-chip">meaningful_conversation_flags 123</span>
+          <span class="tbl-chip">proactive_flag_prompts 134</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> poller pulls GHL conversations → <code>sales_activities</code> (IG DMs 13.2K, SMS 2.4K, calls 1.7K, email 474). Patterns trigger Slack prompts → confirmed ones become meaningful-conversation flags (69 verified / 54 rejected). <span class="k">⚠</span> ~83% have null <code>rep_id</code>.</div>
+      </div>
+
+      <div class="sub sales">
+        <h4>5 · Revenue / Offers <span class="pill p-amber">money</span></h4>
+        <div class="one">Closed deals + the product catalog.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>sales</b> 74</span>
+          <span class="tbl-chip"><b>offers</b> 11</span>
+          <span class="tbl-chip">offer_mappings 15</span>
+          <span class="tbl-chip">offer_tag_programs 3</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> <code>sales</code> records closes ($393,250 collected / $600,000 projected lifetime, 2025-05→2026-06). <code>offer_mappings</code> translates program + payment level → offer_id + expected revenue. Colton Lindsay closed 44 of 74.</div>
+      </div>
+
+      <div class="sub intel">
+        <h4>6 · Insights / Voice-of-Customer <span class="pill p-purple">marketing fuel</span></h4>
+        <div class="one">Mines transcripts into structured customer psychology.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>insights</b> 280</span>
+          <span class="tbl-chip"><b>market_signals</b> 294</span>
+          <span class="tbl-chip">insight_tags 661</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> each scored call yields ~6 insight rows tagged by type (Pain/Goal/Objection/Trigger) and signal family (Income, Time & Freedom, Skills, Identity). <code>market_signals</code> aggregates recurring signals with mention counts + best marketing angle.</div>
+      </div>
+
+      <div class="sub mkt">
+        <h4>7 · Marketing — Email <span class="pill p-green">10.3M sends</span></h4>
+        <div class="one">A decade of email performance metrics.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>email_campaigns</b> 2,390</span>
+          <span class="tbl-chip">email_types 17</span>
+          <span class="tbl-chip">email_best_practices 41</span>
+          <span class="tbl-chip empty">emails 0</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> ESP sync pulls campaign <b>performance</b> 2016-07→2026-06 (open/click rates). <span class="k">⚠</span> <code>body_copy</code> is null on all 2,390 rows — metrics only, no creative text. The content-generation <code>emails</code> table is empty.</div>
+      </div>
+
+      <div class="sub mkt">
+        <h4>8 · Marketing — Social / Instagram <span class="pill p-green">17.1M reach</span></h4>
+        <div class="one">High-reach social copy + comment automation.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>instagram_posts</b> 1,000</span>
+          <span class="tbl-chip"><b>comment_events</b> 9,881</span>
+          <span class="tbl-chip">video_analyses 1</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> <code>instagram_posts</code> (2025-08→2026-06, 17.1M reach; top post 458K) hold captions + metrics. <code>comment_events</code> capture keyword-comment automation (keywords "agent"/"info", 8,218 distinct contacts) feeding the DM/opt-in funnel.</div>
+      </div>
+
+      <div class="sub mkt">
+        <h4>9 · Webinar <span class="pill p-green">top of funnel</span></h4>
+        <div class="one">The dominant lead source.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>webinar_engagements</b> 7,566</span>
+          <span class="tbl-chip">everwebinar_webinars 3</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> EverWebinar registrations/attendance 2024-09→2026-05: 3,570 watched live, 1,350 replay, 7,549 linked to a lead.</div>
+      </div>
+
+      <div class="sub mkt">
+        <h4>10 · Opt-in / Engagement Tracking <span class="pill p-green">funnel events</span></h4>
+        <div class="one">Where leads entered and how.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>lead_opt_in_events</b> 13,973</span>
+          <span class="tbl-chip">unmatched_opt_ins 314</span>
+          <span class="tbl-chip">webhook_logs 1,005</span>
+          <span class="tbl-chip empty">lead_engagements 0</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> opt-in events 2024-08→2026-06 (10,519 distinct leads) from everwebinar (8,983) + CSV backfill (4,990). Unmatched ones land in <code>unmatched_opt_ins</code>.</div>
+      </div>
+
+      <div class="sub mkt">
+        <h4>11 · Marketing — Meta Ads <span class="pill p-gray">scaffolding</span></h4>
+        <div class="one">Designed, barely fed.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>meta_campaigns</b> 29</span>
+          <span class="tbl-chip">meta_ad_settings 1</span>
+          <span class="tbl-chip empty">meta_ads 0</span>
+          <span class="tbl-chip empty">meta_ad_performance 0</span>
+          <span class="tbl-chip empty">meta_creative_tests 0</span>
+        </div>
+        <div class="flow"><span class="k">State:</span> 29 campaigns defined; individual ads, performance, and creative tests have no data. The ad layer exists in schema only.</div>
+      </div>
+
+      <div class="sub content">
+        <h4>12 · Content / Creator / Voice <span class="pill p-amber">partial</span></h4>
+        <div class="one">Generates content from insights; defines brand voice.</div>
+        <div class="tbls">
+          <span class="tbl-chip"><b>content_ideas</b> 220</span>
+          <span class="tbl-chip">voice_channels 6</span>
+          <span class="tbl-chip">creator_vision 1</span>
+          <span class="tbl-chip empty">voice_core / variations 0</span>
+          <span class="tbl-chip empty">broll_* 0</span>
+        </div>
+        <div class="flow"><span class="k">Flow:</span> <code>content_ideas</code> (all status "Idea", top score 10) link back to a call/insight and carry hooks, premises, CTAs. Voice channels define per-channel tone. The entire <code>broll_*</code> video pipeline (with pgvector embeddings) is never ingested.</div>
+      </div>
+
+      <div class="sub ops">
+        <h4>13 · Sync / Ops Infrastructure <span class="pill p-gray">plumbing</span></h4>
+        <div class="one">Freshness tracking for the external sync jobs — not domain data.</div>
+        <div class="tbls">
+          <span class="tbl-chip">backfill_state 4</span>
+          <span class="tbl-chip">sync_meta 1</span>
+          <span class="tbl-chip">email_sync_log 15</span>
+          <span class="tbl-chip">sales_poll_state 2</span>
+          <span class="tbl-chip">webhook_logs 1,005</span>
+        </div>
+        <div class="flow"><span class="k">Use:</span> watermark / freshness checks for incremental pulls — useful for sync orchestration, not for surfacing.</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── RAG ───────────────────────── -->
+<section id="rag">
+  <div class="wrap">
+    <h2><span class="num">06</span>The RAG goldmine</h2>
+    <p class="lead">Project policy is "RAG everything." Greg's database holds an enormous, unique corpus of AI-generated and verbatim text that CI's vector store currently has none of. This is the single highest-leverage ingestion target.</p>
+
+    <table>
+      <thead><tr><th>Table</th><th>Rich text columns</th><th>Rows</th><th>Why it's valuable</th></tr></thead>
+      <tbody>
+        <tr><td><code>sales_call_transcripts</code></td><td>transcript_raw, transcript_labeled <span class="p-gray pill">67K words</span></td><td class="num-cell">103</td><td>Full human sales conversations — the richest verbatim source available</td></tr>
+        <tr><td><code>sales_call_analyses</code></td><td>call_summary, performance_notes + JSONB missed_opportunities / action_steps / red_flags</td><td class="num-cell">55</td><td>AI-distilled coaching gold; structured + prose</td></tr>
+        <tr><td><code>sales_call_scores</code></td><td>notes (per-category rationale)</td><td class="num-cell">220</td><td>Granular "why this score" reasoning per rubric category</td></tr>
+        <tr><td><code>insights</code></td><td>raw_quote, the_real_problem, emotional_driver, core_fear, marketing_translation</td><td class="num-cell">280</td><td>Customer-psychology corpus, already marketing-ready</td></tr>
+        <tr><td><code>content_ideas</code></td><td>content_premise, hook_opening_line, teaching_point, cta_idea</td><td class="num-cell">220</td><td>Ready-to-use content concepts with hooks</td></tr>
+        <tr><td><code>calls</code></td><td>notes (AI summaries)</td><td class="num-cell">145</td><td>Short summary for every call</td></tr>
+        <tr><td><code>market_signals</code></td><td>example_quote, best_marketing_angle</td><td class="num-cell">294</td><td>Aggregated demand signals with mention counts</td></tr>
+        <tr><td><code>instagram_posts</code></td><td>caption</td><td class="num-cell">1,000</td><td>High-reach social copy that actually converted</td></tr>
+        <tr><td><code>sales_eod_reports</code></td><td>content (JSONB narratives)</td><td class="num-cell">102</td><td>Daily performance narratives</td></tr>
+        <tr><td><code>business_profile</code> / <code>creator_vision</code></td><td>mission, brand_voice, ICP, origin story</td><td class="num-cell">4</td><td>Brand grounding for every agent's system prompt</td></tr>
+        <tr><td><code>sales_activities</code></td><td>body (DM / SMS / email bodies)</td><td class="num-cell">18,930</td><td>Huge real conversational corpus (noisy — mostly templated reminders; chunk selectively)</td></tr>
+      </tbody>
+    </table>
+    <div class="callout win">
+      <b>Why this matters:</b> CI already has a working embed pipeline (chunker → Voyage <code>voyage-3</code> → pgvector). It currently embeds only Google Drive files and calendar events. Pointing it at Greg's transcripts, analyses, insights, and content ideas would, in one move, give the CI chat assistant and every specialist agent <b>grounded, business-specific knowledge they completely lack today.</b>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── COMPARE ───────────────────────── -->
+<section id="compare">
+  <div class="wrap">
+    <h2><span class="num">07</span>Central Intelligence vs. Greg's data — side by side</h2>
+    <p class="lead">The striking finding: CI's own schema was clearly designed against this exact domain. The tables match. The difference is that CI's are empty and Greg's are full.</p>
+
+    <table class="matrix">
+      <thead><tr><th>Domain</th><th>CI today (its own DB)</th><th>Greg's DB has</th><th>Match?</th></tr></thead>
+      <tbody>
+        <tr><td>Leads / CRM</td><td><code>leads</code> model + full CRUD route, <b>empty table</b></td><td>11,561 real leads, full history</td><td class="check">✓ direct</td></tr>
+        <tr><td>Calls</td><td><code>calls</code> model, transcribe + analyzer pipeline, <b>empty</b></td><td>145 calls, 103 transcripts</td><td class="check">✓ direct</td></tr>
+        <tr><td>Insights</td><td><code>insights</code> model with deep VoC fields, <b>empty</b></td><td>280 insights, same field shape</td><td class="check">✓ direct</td></tr>
+        <tr><td>Content ideas</td><td><code>content_ideas</code> model + page, <b>empty</b></td><td>220 ideas with hooks</td><td class="check">✓ direct</td></tr>
+        <tr><td>Market signals</td><td><code>market_signals</code> recomputed hourly, <b>0 rows</b></td><td>294 aggregated signals</td><td class="check">✓ direct</td></tr>
+        <tr><td>Offers</td><td><code>offers</code> model + builder, real but sparse</td><td>11 offers + mapping logic</td><td class="check">✓ direct</td></tr>
+        <tr><td>Appointments</td><td><code>appointments</code> + GHL webhook</td><td>1,786 appointments</td><td class="check">✓ direct</td></tr>
+        <tr><td>Email</td><td><code>email_campaigns</code> (Mailchimp sync, can store body/blocks)</td><td>2,390 campaigns — <b>metrics only, no body</b></td><td class="partial">≈ partial</td></tr>
+        <tr><td>Social</td><td><code>social_stats</code> (IG/FB live)</td><td>1,000 IG posts + 9,881 comment events</td><td class="partial">≈ richer in Greg</td></tr>
+        <tr><td>Sales reps / coaching</td><td>Coaching specialist agent; <b>no rep / strike tables</b></td><td>7 reps, full strike + EOD system</td><td class="cross">✗ CI gap</td></tr>
+        <tr><td>Sales activities</td><td><b>none</b></td><td>18,932 logged touchpoints</td><td class="cross">✗ CI gap</td></tr>
+        <tr><td>Webinar</td><td><b>none</b></td><td>7,566 engagements</td><td class="cross">✗ CI gap</td></tr>
+        <tr><td>Opt-in events</td><td><code>funnel_events</code> (seed)</td><td>13,973 real opt-ins</td><td class="partial">≈ approximate</td></tr>
+        <tr><td>Revenue / closed sales</td><td><b>no sales table</b></td><td>74 closes, $393K collected</td><td class="cross">✗ CI gap</td></tr>
+        <tr><td>Meta ads</td><td><code>ads_stats</code> seed, no connector</td><td>29 campaigns, no ad data</td><td class="cross">✗ both empty</td></tr>
+        <tr><td>Voice / b-roll</td><td><b>none</b></td><td>scaffolding only</td><td class="cross">✗ both empty</td></tr>
+      </tbody>
+    </table>
+    <div class="legend" style="margin-top:18px">
+      <span><span class="check">✓</span> CI model exists &amp; matches — just needs Greg's data</span>
+      <span><span class="partial">≈</span> Partial / shape differs</span>
+      <span><span class="cross">✗</span> Real gap in CI (or empty on both sides)</span>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── GAPS ───────────────────────── -->
+<section id="gaps">
+  <div class="wrap">
+    <h2><span class="num">08</span>Where Central Intelligence stands — honest maturity</h2>
+    <p class="lead">CI is more built than it looks. The spine is real. The soft spots are concentrated in marketing-creative sub-pages, paid ads, and the fact that nearly every data table is waiting to be fed.</p>
+
+    <div class="grid3">
+      <div class="card"><h4><span class="pill p-green">Built &amp; real</span></h4><ul class="clean" style="margin-top:10px">
+        <li>Auth (Supabase JWT)</li><li>Agent hierarchy: CI → 3 Directors → 11 Specialists</li>
+        <li>Leads / Members / Appointments CRUD</li><li>Call transcribe + analyzer pipeline</li>
+        <li>RAG embed pipeline (Voyage + pgvector)</li><li>Integrations framework (encrypted creds)</li>
+        <li>Dashboard, Chat (SSE + WS), Accountability</li>
+      </ul></div>
+      <div class="card"><h4><span class="pill p-amber">Built but mock / seed</span></h4><ul class="clean" style="margin-top:10px">
+        <li>CI chat falls back to <b>mock</b> agent without API key</li>
+        <li>Funnels, Offers, DM — real shell, seed/hardcoded display data</li>
+        <li>Market signals / insights pages — wired but <b>0 rows</b></li>
+        <li>Ad generator — <code>MOCK_VARIANTS</code></li>
+        <li>DM templates &amp; conversations — hardcoded constants</li>
+      </ul></div>
+      <div class="card"><h4><span class="pill p-red">Stub / absent</span></h4><ul class="clean" style="margin-top:10px">
+        <li>Meta / Google Ads connector — none</li>
+        <li>Sales reps + coaching-strike system — none</li>
+        <li>Closed-sales / revenue tracking — none</li>
+        <li>Webinar + opt-in ingestion — none</li>
+        <li>Org-tier rollups (CEO→Director→Manager→Agent)</li>
+        <li>Multi-tenancy (tenant_id hooks only)</li>
+      </ul></div>
+    </div>
+
+    <div class="callout key">
+      <b>Read this carefully:</b> most of CI's "empty" surfaces aren't unbuilt — they're <b>unfed</b>. The leads page, insights page, market-signals page, content-ideas page, and call-analysis pipeline are all wired to real endpoints that return nothing because their tables are empty. Greg's database is precisely the missing input.
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── OPPORTUNITIES ───────────────────────── -->
+<section id="opps">
+  <div class="wrap">
+    <h2><span class="num">09</span>Feature opportunities — ranked by value × readiness</h2>
+    <p class="lead">What Greg's data makes possible, sorted by how much it's worth and how ready CI is to deliver it.</p>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--mkt)"></span>High value · CI mostly ready</span>
+      <span><span class="dot" style="background:var(--gold)"></span>High value · needs new build</span>
+      <span><span class="dot" style="background:var(--muted)"></span>Future · data not ready yet</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <div class="opp high">
+        <h4>① Ingest the call-intelligence stack into RAG</h4>
+        <div class="tag-row"><span class="pill p-green">Highest leverage</span><span class="pill p-blue">CI pipeline exists</span><span class="pill p-purple">RAG-everything policy</span></div>
+        <p>Pipe transcripts (103), analyses (55), scores (220), insights (280), content ideas (220), and brand profile into CI's existing Voyage→pgvector pipeline. Instantly gives the CI assistant and every specialist grounded, business-specific knowledge.</p>
+        <div class="data"><b>Data ready:</b> ~990 rich text records · <b>Build:</b> map tables → chunker (pipeline already built) · <b>Why now:</b> the single biggest capability jump for the least net-new code.</div>
+      </div>
+
+      <div class="opp high">
+        <h4>② Backfill CI's empty CRM/calls/insights from Greg's DB</h4>
+        <div class="tag-row"><span class="pill p-green">Unblocks ~6 pages</span><span class="pill p-blue">Models already match</span></div>
+        <p>One-way sync Greg's <code>leads</code>, <code>calls</code>, <code>insights</code>, <code>content_ideas</code>, <code>market_signals</code>, <code>appointments</code> into CI's matching tables (with a <code>source</code> provenance marker). The leads page, insights page, market-signals page and content-ideas page light up with real data — no UI work needed.</p>
+        <div class="data"><b>Data ready:</b> 11,561 leads + 145 calls + 280 insights + 220 ideas · <b>Build:</b> mapping functions + idempotent upsert keyed on GHL ids · <b>Risk:</b> reconcile with CI's own GHL sync via provenance.</div>
+      </div>
+
+      <div class="opp med">
+        <h4>③ Sales-rep scorecards &amp; coaching dashboard <span class="pill p-amber">net-new surface</span></h4>
+        <div class="tag-row"><span class="pill p-amber">New build</span><span class="pill p-purple">Coaching agent exists</span></div>
+        <p>Greg has a full rep-accountability system CI doesn't model: 7 reps, an 11-category scorecard, 16 strike rules, auto-generated strikes with evidence, and 102 EOD reports. Build rep-level scorecards, a strike review queue, and EOD digests. CI's coaching specialist agent is the natural brain for it.</p>
+        <div class="data"><b>Data ready:</b> 220 scores, 10 strikes, 102 EOD reports, 7 reps · <b>Build:</b> rep + strike + scorecard models, a coaching dashboard page, surface the coaching agent here.</div>
+      </div>
+
+      <div class="opp med">
+        <h4>④ Revenue / closed-sales analytics <span class="pill p-amber">net-new surface</span></h4>
+        <div class="tag-row"><span class="pill p-amber">New build</span></div>
+        <p>CI has no concept of a closed sale. Greg has 74 closes ($393K collected, $600K projected) mapped to offers and reps. Build a revenue dashboard: collected vs projected, per-rep close rate, per-offer revenue, attribution.</p>
+        <div class="data"><b>Data ready:</b> 74 sales + 11 offers + offer_mappings · <b>Build:</b> sales model + revenue route + dashboard widgets · <b>Note:</b> 30 of 74 sales unattributed — flag attribution gap.</div>
+      </div>
+
+      <div class="opp med">
+        <h4>⑤ Webinar &amp; opt-in funnel analytics <span class="pill p-amber">net-new</span></h4>
+        <div class="tag-row"><span class="pill p-amber">New build</span><span class="pill p-green">richest funnel data</span></div>
+        <p>The dominant top-of-funnel that CI doesn't model at all: 7,566 webinar engagements + 13,973 opt-in events. Build a true funnel view: opt-in → webinar (live vs replay) → lead → appointment → call → close, with real conversion rates replacing CI's current seed funnel data.</p>
+        <div class="data"><b>Data ready:</b> 7,566 + 13,973 events with lead links · <b>Build:</b> ingest into funnel_events, real conversion math on the existing /funnels page.</div>
+      </div>
+
+      <div class="opp med">
+        <h4>⑥ VoC-grounded content &amp; campaign generation</h4>
+        <div class="tag-row"><span class="pill p-amber">Upgrade existing</span><span class="pill p-green">specialists exist</span></div>
+        <p>CI's marketing specialists generate content today, but ungrounded. Feed them Greg's 280 insights, 294 market signals, 220 content ideas, and 1,000 high-reach IG captions so generated hooks/emails/scripts are grounded in what actually resonated with this audience.</p>
+        <div class="data"><b>Data ready:</b> insights + signals + winning captions · <b>Build:</b> retrieval step in the email/social/DM specialists referencing the new RAG corpus.</div>
+      </div>
+
+      <div class="opp med">
+        <h4>⑦ Sales-activity attribution &amp; conversation intelligence</h4>
+        <div class="tag-row"><span class="pill p-amber">New build</span><span class="pill p-red">data-quality work first</span></div>
+        <p>18,932 logged touchpoints + 6,868 conversation states are a goldmine for response-time, channel-mix, and meaningful-conversation analytics — but ~83% lack <code>rep_id</code>. Worth it, but attribution cleanup is a prerequisite.</p>
+        <div class="data"><b>Data ready:</b> 18,932 activities (noisy) · <b>Build:</b> attribution backfill, then activity analytics · <b>Caveat:</b> dirty rep attribution.</div>
+      </div>
+
+      <div class="opp fut">
+        <h4>⑧ Meta-ads intelligence <span class="pill p-gray">blocked on data</span></h4>
+        <div class="tag-row"><span class="pill p-gray">Not ready</span></div>
+        <p>Tempting because CI's ads page is a known stub — but Greg's ad tables (<code>meta_ads</code>, <code>meta_ad_performance</code>, <code>meta_creative_tests</code>) are <b>empty</b>. There's no ad data to surface on either side. Defer until a Meta Ads connector exists and data flows.</p>
+        <div class="data"><b>Data ready:</b> 29 campaign rows only — no ads, no performance · <b>Build:</b> requires a real Meta Ads connector first (separate effort).</div>
+      </div>
+
+      <div class="opp fut">
+        <h4>⑨ Voice / b-roll content pipeline <span class="pill p-gray">scaffolding only</span></h4>
+        <div class="tag-row"><span class="pill p-gray">Not ready</span></div>
+        <p>The <code>voice_*</code> and <code>broll_*</code> tables (with a pgvector embedding column) describe an ambitious video pipeline — but they're empty on Greg's side and absent on CI's. Interesting roadmap signal, nothing to build against today.</p>
+        <div class="data"><b>Data ready:</b> none · <b>Build:</b> roadmap item, revisit when Greg's pipeline produces data.</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── QUALITY ───────────────────────── -->
+<section id="quality">
+  <div class="wrap">
+    <h2><span class="num">10</span>Data quality &amp; freshness — read before ingesting</h2>
+    <p class="lead">Anything we sync inherits these characteristics. Plan mappings around them.</p>
+    <div class="grid2">
+      <div class="card">
+        <h4>⚠️ Attribution &amp; key hygiene</h4>
+        <ul class="clean">
+          <li><b>rep_id is the clean key</b> — name strings are dirty (double-spaces, partials). Always join on <code>rep_id</code>.</li>
+          <li><b><code>sales_activities.rep_id</code> ~83% null</b> (15,743 of 18,932) — major attribution gap.</li>
+          <li><b>30 of 74 sales unattributed</b> to a rep.</li>
+          <li><b><code>pipeline_stage</code> 94% null</b> — derive funnel from appointment outcome + call result instead.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>⚠️ Coverage &amp; missing content</h4>
+        <ul class="clean">
+          <li><b><code>email_campaigns.body_copy</code> null on all 2,390</b> — metrics only, no creative for RAG.</li>
+          <li><b><code>appointments.call_id</code> FK declared but 0 populated</b> — appointments not yet linked to calls.</li>
+          <li><b>Transcript pipeline:</b> 264 pending — 193 processed, 54 failed, 15 pending. <code>transcript_labeled</code> null on a large share.</li>
+          <li><b>Test data in <code>calls</code>:</b> "TEST_T1_Alice" / voicemail rows from Greg inflate the recent count — filter on ingest.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>⏱️ Two clocks</h4>
+        <ul class="clean">
+          <li>CRM / webinar / opt-in / email: <b>2016–2024 → present</b>.</li>
+          <li>Call intelligence / activities / insights / EOD: <b>only since ~2026-05-26</b>.</li>
+          <li>Mirror (re)built starting <b>2026-05-11</b>; counts still growing (calls 109→145 since first look).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>🟦 20 empty tables = forward scaffolding</h4>
+        <ul class="clean">
+          <li>Entire <code>broll_*</code> video pipeline (with pgvector).</li>
+          <li>Most <code>voice_*</code> and <code>creator_*</code> (except vision/stories).</li>
+          <li>All DM tables, <code>lead_engagements</code>.</li>
+          <li><code>meta_ads</code> / <code>meta_ad_performance</code> / <code>meta_creative_tests</code>.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout danger">
+      <b>Safety reminder:</b> <code>WGR_DATABASE_URL</code> is the write-capable <code>postgres</code> role. All access goes through <code>wgr_client.py</code> which forces read-only sessions. We never write to Greg's database. A dedicated read-only role has been requested from the client to remove the footgun entirely.
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── NEXT ───────────────────────── -->
+<section id="next">
+  <div class="wrap">
+    <h2><span class="num">11</span>Recommended sequence</h2>
+    <p class="lead">Highest value, lowest net-new code, lowest risk — first.</p>
+    <table>
+      <thead><tr><th>#</th><th>Move</th><th>Why first</th><th>Effort</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><b>RAG-ingest the call-intelligence stack</b> (transcripts, analyses, insights, content ideas, brand profile)</td><td>Pipeline already exists; biggest capability jump per line of code; satisfies RAG-everything policy</td><td><span class="pill p-green">Low</span></td></tr>
+        <tr><td>2</td><td><b>Backfill CI's matching tables</b> (leads, calls, insights, content_ideas, market_signals, appointments)</td><td>Models already match; lights up ~6 existing pages with zero UI work</td><td><span class="pill p-amber">Medium</span></td></tr>
+        <tr><td>3</td><td><b>Build the rep scorecard + coaching dashboard</b></td><td>High-value net-new surface; CI's coaching agent is ready to drive it; data is rich</td><td><span class="pill p-amber">Medium</span></td></tr>
+        <tr><td>4</td><td><b>Revenue / closed-sales analytics</b></td><td>CI has no revenue concept today; Greg's sales+offers data is clean enough</td><td><span class="pill p-amber">Medium</span></td></tr>
+        <tr><td>5</td><td><b>Webinar + opt-in funnel analytics</b></td><td>Replaces seed funnel data with the real dominant top-of-funnel</td><td><span class="pill p-amber">Medium</span></td></tr>
+        <tr><td>6</td><td><b>Ground marketing generators in VoC</b> (insights + winning captions)</td><td>Upgrades existing specialists; depends on #1</td><td><span class="pill p-green">Low</span></td></tr>
+        <tr><td>7+</td><td>Activity attribution → Meta ads → voice/b-roll</td><td>Blocked on data quality or missing source data — defer</td><td><span class="pill p-gray">Later</span></td></tr>
+      </tbody>
+    </table>
+    <div class="callout win">
+      <b>Bottom line:</b> Greg's database is the missing input Central Intelligence was built to consume. Moves #1 and #2 turn a demo into a working product almost entirely through wiring, not building. Moves #3–#6 are the genuinely net-new features the data unlocks. Everything past that is roadmap waiting on data that doesn't exist yet — on either side.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Generated 2026-06-17 · Source: WGR Supabase <code>mntsbmuxbdnnlnheuwqk</code> (read-only) &amp; Central Intelligence codebase ·
+    Companion docs: <code>docs/client-supabase-schema.md</code>, <code>docs/client-supabase-connection.md</code>, <code>docs/client-supabase-pull-plan.md</code>
+  </div>
+</footer>
+
+</body>
+</html>

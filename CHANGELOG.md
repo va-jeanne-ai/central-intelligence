@@ -6,6 +6,38 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Re-base CI on the WGR database: clear CI domain data (Phase 1)
+
+First step of making the client's (Greg/WGR) database CI's single upstream. Backed up CI's irreplaceable config/auth tables, then cleared CI's empty/seed-fed domain data so it can be re-sourced from WGR.
+
+- `backend/scripts/clear_domain_data.py` (new) — clears 33 domain/synced/derived tables (leads, calls, insights, content_ideas, market_signals, appointments, social/email/funnel stats, embeddings, google sync, etc.) via **batched DELETE** while preserving config/auth (integrations + encrypted creds, users, business_profile, offers, chat history, audit_log, embedding_budget, tag_dictionary). Explicit CLEAR/PRESERVE allow-lists with a guard that refuses to run if any public table is unclassified; `--yes` required, idempotent.
+- Batched DELETE (not TRUNCATE) because CI's Supabase is reachable only via the transaction pooler, which enforces a short `statement_timeout` and ignores per-session `SET` — TRUNCATE's ACCESS EXCLUSIVE lock consistently timed out; 500-row DELETE chunks stay under it.
+- Phase 0 backup of the preserve-list tables lives at `backend/.tmp/ci-preserve-backup-*.sql` (gitignored).
+- Result verified: all 33 domain tables at 0 rows; integrations (5), offers (7), chat history, audit log intact. Login unaffected (auth is Supabase-side, not app-table-dependent).
+
+### Added — Greg's database × CI analysis report (HTML)
+
+`docs/greg-database-analysis.html` — a self-contained, graphical report analyzing the client's 74-table WGR database (subsystem map, FK-hub ER diagram, end-to-end data-flow pipeline, RAG-corpus inventory), comparing it table-by-table against Central Intelligence's own schema, and ranking nine feature opportunities by value × readiness. Key finding: CI's schema mirrors Greg's domain almost exactly but CI's tables are empty/seed-fed while Greg's are full of real, AI-enriched data — so the highest-leverage moves are RAG-ingesting the call-intelligence stack and backfilling CI's matching tables, not net-new building. Built from parallel read-only data sampling + a full CI codebase inventory.
+
+### Added — Read-only client (WGR) Postgres access + full schema map
+
+The client provided `WGR_DATABASE_URL`, a direct Postgres connection to their project (`mntsbmuxbdnnlnheuwqk`) via the Supabase session pooler. This supersedes the anon key for the client-data sync: full-schema visibility and reliable bulk reads.
+
+- `app/services/wgr_client.py` — strictly read-only Postgres client. Every connection opens with `set_session(readonly=True, autocommit=True)`; only `SELECT`-returning helpers exist (`query`, `iter_rows` paginated, `count`, schema introspection). No write path.
+- `app/config.py` — added `wgr_database_url` field.
+- `scripts/dump_wgr_schema.py` + `scripts/__init__.py` — introspects the full schema and writes `docs/client-supabase-schema.md` (74 tables, 54 non-empty, full FK graph + per-table columns/types/PKs). Re-runnable.
+- **Discovery:** the client DB is **74 tables**, not the 4 the anon key could see — a full sales-and-marketing intelligence platform (CRM, `sales_*` transcripts/analyses/scores, email/Meta/Instagram/webinar marketing, insights). Scope decision: ingest everything non-empty.
+- ⚠️ **SAFETY:** `WGR_DATABASE_URL` is the `postgres` role and is *write-capable*. We force read-only on our side; flagged a request to the client for a dedicated read-only role. Documented in `.env`, `config.py`, and the connection doc.
+
+### Changed — Split Supabase: separate projects for auth vs. client data
+
+The client's GHL-mirror Supabase had been dropped into the primary `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_JWT_SECRET` slots during introspection, which would have made CI verify user logins against the *client's* project. Split them:
+
+- `SUPABASE_*` restored to CI's own project (`iqqobmubutxwhtvpdrnf`) — drives auth (`app/middleware/auth.py`, `app/auth/supabase_client.py`); now agrees with `DATABASE_URL`.
+- Client GHL mirror (`mntsbmuxbdnnlnheuwqk`) moved to dedicated, read-only `CLIENT_SUPABASE_URL` / `CLIENT_SUPABASE_ANON_KEY` / `CLIENT_SUPABASE_SERVICE_KEY` vars + `CLIENT_SYNC_ENABLED` master switch (default `false`).
+- Added matching `client_supabase_*` / `client_sync_enabled` fields to `app/config.py`.
+- Verified: CI auth resolves to its own project (JWKS + GoTrue health `200`), client vars resolve to the mirror, no overlap. Docs updated (`docs/client-supabase-connection.md` §2, `docs/client-supabase-pull-plan.md` §0–1).
+
 ### Added — Today's Schedule dashboard brief
 
 A new "Today's Schedule" panel on the dashboard showing the logged-in user's calendar events for today, read deterministically from the already-synced `google_calendar_events` table. No AI, no cache, no migration, no new sync.
