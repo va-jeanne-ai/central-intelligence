@@ -6,6 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — RAG ingest of WGR call intelligence (Phase 5)
+
+CI's RAG layer, which held zero business-specific knowledge, now contains the WGR call-intelligence corpus — **1,086 embeddings** in pgvector via the existing Voyage pipeline.
+
+- `backend/app/services/wgr_sync/bulk_load.py` — `_enrich_calls()` backfills CI `calls.transcript_text` (from WGR `sales_call_transcripts`) and `calls.summary` (from `sales_call_analyses.call_summary` + `performance_notes`), joined on call_id. 108 calls enriched. Wired into `run_backfill`.
+- `backend/app/tasks/embed_backfill.py` — new `backfill_wgr_embeddings` task enqueues the WGR-sourced text under distinct `source_table` tags (`wgr_call_transcript`, `wgr_call_analysis`, `wgr_call_score`, `wgr_content_idea`, `wgr_business_profile`) so retrieval can filter by kind. Reuses `_enqueue_missing` (content-hash idempotent).
+- Backfilled embeddings: insights 296, wgr_call_score 236, wgr_content_idea 234, wgr_call_transcript 168 (chunked from 108), wgr_call_analysis 150, wgr_business_profile 2. Drained through the real Voyage `voyage-3` worker; `embed_pending` now empty.
+
 ### Added — WGR → CI sync service + backfill (Phase 4)
 
 CI now loads the client's (Greg/WGR) database into its own tables. **56,169 rows backfilled** across 20 tables with verified fidelity (insights/content_ideas/appointments/sales_activities/webinar/opt_in exact; leads 11,555 after email-dedup; calls 150 after TEST_ filtering).

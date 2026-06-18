@@ -161,9 +161,50 @@ def run_backfill(since: Optional[str] = None) -> dict[str, int]:
         # 3. appointments (needs leads), market_signals.
         counts["appointments"] = _load_appointments(conn, since)
         counts["market_signals"] = _load_market_signals(conn)
+        # 4. enrich CI calls with WGR transcripts + analysis prose (for RAG).
+        counts["calls_enriched"] = _enrich_calls(conn)
     finally:
         conn.close()
     return counts
+
+
+def _enrich_calls(conn) -> int:
+    """Backfill CI ``calls.transcript_text`` + ``calls.summary`` from WGR's
+    ``sales_call_transcripts`` and ``sales_call_analyses`` (joined on call_id ==
+    CI call id). These WGR tables aren't imported as CI tables — their rich text
+    lands directly on the matching call so it's embeddable in-DB (Phase 5 RAG).
+    Idempotent: re-running just overwrites with the same text."""
+    transcripts = {
+        r["call_id"]: (r.get("transcript_labeled") or r.get("transcript_raw"))
+        for r in reader.wgr_client.query(
+            "SELECT call_id, transcript_labeled, transcript_raw FROM sales_call_transcripts"
+        )
+        if r.get("call_id")
+    }
+    analyses = {}
+    for r in reader.wgr_client.query(
+        "SELECT call_id, call_summary, performance_notes FROM sales_call_analyses"
+    ):
+        cid = r.get("call_id")
+        if not cid:
+            continue
+        parts = [p for p in (r.get("call_summary"), r.get("performance_notes")) if p]
+        if parts:
+            analyses[cid] = "\n\n".join(parts)
+
+    call_ids = set(transcripts) | set(analyses)
+    n = 0
+    with conn.cursor() as cur:
+        for cid in call_ids:
+            cur.execute(
+                'UPDATE calls SET transcript_text = COALESCE(%s, transcript_text), '
+                'summary = COALESCE(%s, summary) WHERE id = %s',
+                (transcripts.get(cid), analyses.get(cid), cid),
+            )
+            n += cur.rowcount or 0
+    conn.commit()
+    logger.info("bulk_load enrich calls: updated %d", n)
+    return n
 
 
 def _load_native(conn, wgr_table, ci_table, map_fn, pk, since) -> int:
