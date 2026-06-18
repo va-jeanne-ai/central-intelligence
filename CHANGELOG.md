@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — WGR → CI sync service + backfill (Phase 4)
+
+CI now loads the client's (Greg/WGR) database into its own tables. **56,169 rows backfilled** across 20 tables with verified fidelity (insights/content_ideas/appointments/sales_activities/webinar/opt_in exact; leads 11,555 after email-dedup; calls 150 after TEST_ filtering).
+
+- `backend/app/services/wgr_sync/` (new package):
+  - `mapping.py` — 16 pure WGR-row → CI-kwargs functions. Transforms: phone→E.164, appointment outcome→status enum, rep identity on rep_id only, test-call filtering, blank→None. Covered by `backend/tests/test_wgr_mapping.py` (38 checks, all pass).
+  - `reader.py` — read-only WGR reader with per-table watermarks for incremental sync.
+  - `upsert.py` — async idempotent upserts (ON CONFLICT) for the hourly incremental task.
+  - `bulk_load.py` — **synchronous** psycopg2 `execute_values` bulk loader for the one-shot backfill. Sync was required: sustained async (asyncpg) multi-batch writes hang on CI's transaction pooler; the sync path loads ~56k rows in minutes.
+- `backend/app/tasks/wgr_sync.py` + beat entry `wgr-sync-hourly` (gated on `client_sync_enabled`, default off).
+- `backend/scripts/backfill_wgr.py` — `--dry-run` (source vs CI counts) / `--yes` (run). Idempotent.
+- Dedup strategy: shared-domain tables key on `(source='wgr', external_id)`; WGR-only tables keep WGR's native PK. Data-quality handling: WGR's non-unique `leads.email` collapsed to CI's unique-email constraint; appointments delete-then-insert (no unique index for ON CONFLICT); JSONB columns wrapped via `Json()`, ARRAY columns left native.
+
 ### Added — WGR subsystem models + migration (Phase 3)
 
 New CI tables for the WGR subsystems CI never modelled, so Greg's sales/coaching/revenue/funnel data has somewhere to land.

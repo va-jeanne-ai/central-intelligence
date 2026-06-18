@@ -36,6 +36,7 @@ celery_app = Celery(
         "app.tasks.calendar_sync",
         "app.tasks.embed_worker",
         "app.tasks.embed_backfill",
+        "app.tasks.wgr_sync",
     ],
 )
 
@@ -106,5 +107,12 @@ celery_app.conf.beat_schedule = {
         # Every 2 minutes — keeps the RAG corpus close to real-time
         # without long-running tasks. Drains a batch each tick.
         "schedule": crontab(minute="*/2"),
+    },
+    "wgr-sync-hourly": {
+        "task": "app.tasks.wgr_sync.sync_wgr",
+        # :50 every hour — incremental pull from the client's WGR mirror (CI's
+        # single upstream for leads/calls/appointments/etc.). No-op unless
+        # client_sync_enabled=True. Off-peak of the other updaters.
+        "schedule": crontab(minute=50),
     },
 }
