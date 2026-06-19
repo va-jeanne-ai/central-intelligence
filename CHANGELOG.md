@@ -6,6 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — WGR hourly sync watermark persistence (Phase 6)
+
+The hourly `wgr-sync-hourly` task shipped (Phase 4) but its incremental path was plumbed and not wired: the beat entry called `sync_wgr` with no args, so `since` was always `None` → a **full async re-pull of all ~56k rows every hour** through CI's transaction pooler — exactly the workload `bulk_load.py` went synchronous to avoid. The `sync_log` watermark the docstring promised did not exist. This wires it.
+
+- `backend/app/tasks/wgr_sync.py` — `sync_wgr` now reads the watermark from the most recent successful `wgr_sync` `SyncLog` row (`details->>'watermark'`) and pulls only rows changed since it, minus a 5-minute `WATERMARK_LOOKBACK` (catches rows committed mid-run / clock skew; idempotent upserts make the overlap harmless). The next watermark is captured **before** any WGR row is read. A `SyncLog` row is written on every run — `status='ok'` (advances the watermark, records per-table counts) or `status='error'` (does **not** advance, so the next run re-pulls the same window). `since` arg: `None` = incremental (first run = full backfill), `"full"` = force full, ISO string = manual re-sync from a point. Pure `resolve_since()` extracted for testing.
+- `backend/scripts/seed_wgr_watermark.py` (new) — one-time bootstrap seed. Writes a successful `wgr_sync` `SyncLog` row dated `--as-of` (default now), so the first enabled hourly run does a pooler-safe **delta** instead of a full async re-pull. `--show` to inspect; refuses to seed if a watermark already exists.
+- `backend/tests/test_wgr_watermark.py` (new) — 11 checks on `resolve_since` (bootstrap-full / incremental-with-lookback / forced-full / manual override). All pass. Existing `test_wgr_mapping.py` still passes.
+- **Operational sequence to enable:** (1) merge; (2) `python -m scripts.seed_wgr_watermark`; (3) set `CLIENT_SYNC_ENABLED=true` in the worker/beat env; (4) restart worker + beat. Still open follow-up: confirm new synced rows get enqueued for embedding so the RAG corpus doesn't drift stale.
+
 ### Added — RAG ingest of WGR call intelligence (Phase 5)
 
 CI's RAG layer, which held zero business-specific knowledge, now contains the WGR call-intelligence corpus — **1,086 embeddings** in pgvector via the existing Voyage pipeline.
