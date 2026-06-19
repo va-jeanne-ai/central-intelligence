@@ -373,3 +373,113 @@ def reembed_drive_files(self) -> dict[str, Any]:
         "enqueued": enqueued,
         "files_with_text": len(files),
     }
+
+
+@celery_app.task(
+    bind=True, name="app.tasks.embed_backfill.backfill_wgr_embeddings",
+)
+def backfill_wgr_embeddings(self, batch_size: int = _BATCH_SIZE) -> dict[str, Any]:
+    """Enqueue the WGR-sourced call-intelligence corpus for embedding (Phase 5).
+
+    Covers the highest-value RAG content now living in CI (loaded by the WGR
+    backfill): call transcripts + analysis prose (on ``calls``), call-score
+    coaching notes, content ideas, and the business profile. Insights have their
+    own backfill task (``backfill_insights_embeddings``) — run that too.
+
+    Each source gets a distinct ``source_table`` tag so retrieval can filter by
+    kind. Reuses ``_enqueue_missing`` (idempotent — content-hash dedup). The
+    embed worker drains ``embed_pending`` on its 2-minute tick.
+    """
+    enqueued: dict[str, int] = {}
+    with make_sync_session() as session:
+        # 1. Call transcripts (richest verbatim source) — WGR-enriched onto calls.
+        rows = session.execute(
+            text("""
+                SELECT id, transcript_text
+                FROM calls
+                WHERE source = 'wgr'
+                  AND transcript_text IS NOT NULL AND length(transcript_text) > 0
+                ORDER BY date ASC NULLS LAST
+            """),
+        ).fetchall()
+        enqueued["wgr_call_transcript"] = _enqueue_missing(
+            session, source_table="wgr_call_transcript",
+            rows=[(r[0], r[1]) for r in rows],
+        )
+        session.commit()
+
+        # 2. Call analysis summary/notes (on calls.summary) + the AI call notes.
+        rows = session.execute(
+            text("""
+                SELECT id,
+                       concat_ws(E'\\n\\n', coalesce(summary, ''), coalesce(notes, '')) AS body
+                FROM calls
+                WHERE source = 'wgr'
+                  AND (coalesce(summary,'') <> '' OR coalesce(notes,'') <> '')
+                ORDER BY date ASC NULLS LAST
+            """),
+        ).fetchall()
+        enqueued["wgr_call_analysis"] = _enqueue_missing(
+            session, source_table="wgr_call_analysis",
+            rows=[(r[0], r[1]) for r in rows],
+        )
+        session.commit()
+
+        # 3. Per-category call-score coaching rationale.
+        rows = session.execute(
+            text("""
+                SELECT score_id, notes
+                FROM sales_call_scores
+                WHERE notes IS NOT NULL AND length(notes) > 0
+                ORDER BY scored_at ASC NULLS LAST
+            """),
+        ).fetchall()
+        enqueued["wgr_call_score"] = _enqueue_missing(
+            session, source_table="wgr_call_score",
+            rows=[(r[0], r[1]) for r in rows],
+        )
+        session.commit()
+
+        # 4. Content ideas (ready-to-use hooks/premises/CTAs).
+        rows = session.execute(
+            text("""
+                SELECT id,
+                       concat_ws(E'\\n\\n',
+                           coalesce(content_premise, ''),
+                           coalesce(hook_opening_line, ''),
+                           coalesce(teaching_point, ''),
+                           coalesce(cta_idea, '')
+                       ) AS body
+                FROM content_ideas
+                WHERE coalesce(content_premise,'') <> '' OR coalesce(hook_opening_line,'') <> ''
+                ORDER BY created_at ASC
+            """),
+        ).fetchall()
+        enqueued["wgr_content_idea"] = _enqueue_missing(
+            session, source_table="wgr_content_idea",
+            rows=[(r[0], r[1]) for r in rows],
+        )
+        session.commit()
+
+        # 5. Business profile (brand grounding for system prompts).
+        rows = session.execute(
+            text("""
+                SELECT id::text,
+                       concat_ws(E'\\n\\n',
+                           coalesce(business_name, ''), coalesce(mission, ''),
+                           coalesce(target_audience, ''), coalesce(brand_voice, ''),
+                           coalesce(core_values, ''), coalesce(key_differentiators, '')
+                       ) AS body
+                FROM business_profile
+                WHERE coalesce(mission,'') <> '' OR coalesce(brand_voice,'') <> ''
+            """),
+        ).fetchall()
+        enqueued["wgr_business_profile"] = _enqueue_missing(
+            session, source_table="wgr_business_profile",
+            rows=[(r[0], r[1]) for r in rows],
+        )
+        session.commit()
+
+    total = sum(enqueued.values())
+    logger.info("backfill_wgr_embeddings: enqueued=%d %s", total, enqueued)
+    return {"enqueued_total": total, "by_source": enqueued}

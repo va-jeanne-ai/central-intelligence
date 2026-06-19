@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     Integer,
@@ -16,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin
@@ -229,3 +230,55 @@ class Promotion(Base, TimestampMixin, SoftDeleteMixin):
     department: Mapped[str | None] = mapped_column(String(64), nullable=True)
     color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# WGR-sourced top-of-funnel tables (added in the WGR rebase). The webinar +
+# opt-in subsystems are the client's dominant lead source and CI had no model
+# for them. Native WGR ids are kept as the PK (these tables only hold WGR data),
+# so the sync upsert is idempotent on the natural key.
+# ---------------------------------------------------------------------------
+
+
+class WebinarEngagement(Base, TimestampMixin):
+    """EverWebinar registration + attendance for a lead (live and/or replay)."""
+
+    __tablename__ = "webinar_engagements"
+
+    engagement_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    lead_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    ghl_contact_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    registration_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    watched_live: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    time_live_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    watched_replay: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    time_replay_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_watched: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    utm_source: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    utm_medium: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    utm_campaign: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    utm_content: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+
+class OptInEvent(Base):
+    """A lead opt-in event (everwebinar registration, CSV backfill, etc.)."""
+
+    __tablename__ = "opt_in_events"
+
+    opt_in_event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    lead_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    source: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    occurred_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True,
+    )
+    utm_source: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    utm_medium: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    utm_campaign: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    utm_content: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    raw_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )

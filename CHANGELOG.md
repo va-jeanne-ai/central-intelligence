@@ -6,6 +6,69 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — RAG ingest of WGR call intelligence (Phase 5)
+
+CI's RAG layer, which held zero business-specific knowledge, now contains the WGR call-intelligence corpus — **1,086 embeddings** in pgvector via the existing Voyage pipeline.
+
+- `backend/app/services/wgr_sync/bulk_load.py` — `_enrich_calls()` backfills CI `calls.transcript_text` (from WGR `sales_call_transcripts`) and `calls.summary` (from `sales_call_analyses.call_summary` + `performance_notes`), joined on call_id. 108 calls enriched. Wired into `run_backfill`.
+- `backend/app/tasks/embed_backfill.py` — new `backfill_wgr_embeddings` task enqueues the WGR-sourced text under distinct `source_table` tags (`wgr_call_transcript`, `wgr_call_analysis`, `wgr_call_score`, `wgr_content_idea`, `wgr_business_profile`) so retrieval can filter by kind. Reuses `_enqueue_missing` (content-hash idempotent).
+- Backfilled embeddings: insights 296, wgr_call_score 236, wgr_content_idea 234, wgr_call_transcript 168 (chunked from 108), wgr_call_analysis 150, wgr_business_profile 2. Drained through the real Voyage `voyage-3` worker; `embed_pending` now empty.
+
+### Added — WGR → CI sync service + backfill (Phase 4)
+
+CI now loads the client's (Greg/WGR) database into its own tables. **56,169 rows backfilled** across 20 tables with verified fidelity (insights/content_ideas/appointments/sales_activities/webinar/opt_in exact; leads 11,555 after email-dedup; calls 150 after TEST_ filtering).
+
+- `backend/app/services/wgr_sync/` (new package):
+  - `mapping.py` — 16 pure WGR-row → CI-kwargs functions. Transforms: phone→E.164, appointment outcome→status enum, rep identity on rep_id only, test-call filtering, blank→None. Covered by `backend/tests/test_wgr_mapping.py` (38 checks, all pass).
+  - `reader.py` — read-only WGR reader with per-table watermarks for incremental sync.
+  - `upsert.py` — async idempotent upserts (ON CONFLICT) for the hourly incremental task.
+  - `bulk_load.py` — **synchronous** psycopg2 `execute_values` bulk loader for the one-shot backfill. Sync was required: sustained async (asyncpg) multi-batch writes hang on CI's transaction pooler; the sync path loads ~56k rows in minutes.
+- `backend/app/tasks/wgr_sync.py` + beat entry `wgr-sync-hourly` (gated on `client_sync_enabled`, default off).
+- `backend/scripts/backfill_wgr.py` — `--dry-run` (source vs CI counts) / `--yes` (run). Idempotent.
+- Dedup strategy: shared-domain tables key on `(source='wgr', external_id)`; WGR-only tables keep WGR's native PK. Data-quality handling: WGR's non-unique `leads.email` collapsed to CI's unique-email constraint; appointments delete-then-insert (no unique index for ON CONFLICT); JSONB columns wrapped via `Json()`, ARRAY columns left native.
+
+### Added — WGR subsystem models + migration (Phase 3)
+
+New CI tables for the WGR subsystems CI never modelled, so Greg's sales/coaching/revenue/funnel data has somewhere to land.
+
+- `backend/app/models/sales.py` (new) — `SalesRep`, `ScorecardCategory`, `CallScore`, `StrikeRule`, `CoachingStrike`, `StrikeAction`, `StrikeEvidence`, `EodReport`, `ClosedSale`, `SalesActivity`. These hold WGR-only data, so they keep WGR's native text PKs (rep_id, score_id, strike_id, …) — sync upserts are idempotent on the natural key. `rep_id` FKs stay within the module; `business_id` is a plain Integer (no cross-table FK to CI's business_profile).
+- `backend/app/models/marketing.py` — added `WebinarEngagement` and `OptInEvent` (WGR top-of-funnel).
+- `backend/app/models/operational.py` — added `source` + `external_id` to `Call` (provenance + idempotent dedup for WGR-sourced calls; distinct from `transcript_source`).
+- Migration `aa7e787e302d` — creates the 12 tables + Call columns. **Hand-edited** to strip ~13 spurious autogenerate ops (it wanted to drop existing hand-crafted partial/GIN/composite indexes and the `uq_leads/uq_email_campaigns` dedup constraints, which the ORM metadata doesn't model). Verified: 12 tables created, existing indexes intact, downgrade/upgrade round-trips cleanly.
+- Lock note: had to terminate orphaned `idle in transaction` sessions (from earlier failed pg_dump COPYs) that were blocking `ALTER TABLE calls`. The pooler's short `statement_timeout` makes lock contention fatal to migrations.
+
+### Changed — Re-base CI on the WGR database: clear CI domain data (Phase 1)
+
+First step of making the client's (Greg/WGR) database CI's single upstream. Backed up CI's irreplaceable config/auth tables, then cleared CI's empty/seed-fed domain data so it can be re-sourced from WGR.
+
+- `backend/scripts/clear_domain_data.py` (new) — clears 33 domain/synced/derived tables (leads, calls, insights, content_ideas, market_signals, appointments, social/email/funnel stats, embeddings, google sync, etc.) via **batched DELETE** while preserving config/auth (integrations + encrypted creds, users, business_profile, offers, chat history, audit_log, embedding_budget, tag_dictionary). Explicit CLEAR/PRESERVE allow-lists with a guard that refuses to run if any public table is unclassified; `--yes` required, idempotent.
+- Batched DELETE (not TRUNCATE) because CI's Supabase is reachable only via the transaction pooler, which enforces a short `statement_timeout` and ignores per-session `SET` — TRUNCATE's ACCESS EXCLUSIVE lock consistently timed out; 500-row DELETE chunks stay under it.
+- Phase 0 backup of the preserve-list tables lives at `backend/.tmp/ci-preserve-backup-*.sql` (gitignored).
+- Result verified: all 33 domain tables at 0 rows; integrations (5), offers (7), chat history, audit log intact. Login unaffected (auth is Supabase-side, not app-table-dependent).
+
+### Added — Greg's database × CI analysis report (HTML)
+
+`docs/greg-database-analysis.html` — a self-contained, graphical report analyzing the client's 74-table WGR database (subsystem map, FK-hub ER diagram, end-to-end data-flow pipeline, RAG-corpus inventory), comparing it table-by-table against Central Intelligence's own schema, and ranking nine feature opportunities by value × readiness. Key finding: CI's schema mirrors Greg's domain almost exactly but CI's tables are empty/seed-fed while Greg's are full of real, AI-enriched data — so the highest-leverage moves are RAG-ingesting the call-intelligence stack and backfilling CI's matching tables, not net-new building. Built from parallel read-only data sampling + a full CI codebase inventory.
+
+### Added — Read-only client (WGR) Postgres access + full schema map
+
+The client provided `WGR_DATABASE_URL`, a direct Postgres connection to their project (`mntsbmuxbdnnlnheuwqk`) via the Supabase session pooler. This supersedes the anon key for the client-data sync: full-schema visibility and reliable bulk reads.
+
+- `app/services/wgr_client.py` — strictly read-only Postgres client. Every connection opens with `set_session(readonly=True, autocommit=True)`; only `SELECT`-returning helpers exist (`query`, `iter_rows` paginated, `count`, schema introspection). No write path.
+- `app/config.py` — added `wgr_database_url` field.
+- `scripts/dump_wgr_schema.py` + `scripts/__init__.py` — introspects the full schema and writes `docs/client-supabase-schema.md` (74 tables, 54 non-empty, full FK graph + per-table columns/types/PKs). Re-runnable.
+- **Discovery:** the client DB is **74 tables**, not the 4 the anon key could see — a full sales-and-marketing intelligence platform (CRM, `sales_*` transcripts/analyses/scores, email/Meta/Instagram/webinar marketing, insights). Scope decision: ingest everything non-empty.
+- ⚠️ **SAFETY:** `WGR_DATABASE_URL` is the `postgres` role and is *write-capable*. We force read-only on our side; flagged a request to the client for a dedicated read-only role. Documented in `.env`, `config.py`, and the connection doc.
+
+### Changed — Split Supabase: separate projects for auth vs. client data
+
+The client's GHL-mirror Supabase had been dropped into the primary `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_JWT_SECRET` slots during introspection, which would have made CI verify user logins against the *client's* project. Split them:
+
+- `SUPABASE_*` restored to CI's own project (`iqqobmubutxwhtvpdrnf`) — drives auth (`app/middleware/auth.py`, `app/auth/supabase_client.py`); now agrees with `DATABASE_URL`.
+- Client GHL mirror (`mntsbmuxbdnnlnheuwqk`) moved to dedicated, read-only `CLIENT_SUPABASE_URL` / `CLIENT_SUPABASE_ANON_KEY` / `CLIENT_SUPABASE_SERVICE_KEY` vars + `CLIENT_SYNC_ENABLED` master switch (default `false`).
+- Added matching `client_supabase_*` / `client_sync_enabled` fields to `app/config.py`.
+- Verified: CI auth resolves to its own project (JWKS + GoTrue health `200`), client vars resolve to the mirror, no overlap. Docs updated (`docs/client-supabase-connection.md` §2, `docs/client-supabase-pull-plan.md` §0–1).
+
 ### Added — Today's Schedule dashboard brief
 
 A new "Today's Schedule" panel on the dashboard showing the logged-in user's calendar events for today, read deterministically from the already-synced `google_calendar_events` table. No AI, no cache, no migration, no new sync.

@@ -36,6 +36,7 @@ celery_app = Celery(
         "app.tasks.calendar_sync",
         "app.tasks.embed_worker",
         "app.tasks.embed_backfill",
+        "app.tasks.wgr_sync",
     ],
 )
 
@@ -77,12 +78,11 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.comments_collector.collect_social_comments",
         "schedule": crontab(minute=25, hour="*/4"),  # 00:25, 04:25, ... 20:25 UTC
     },
-    "ghl-contacts-sync-nightly": {
-        "task": "app.tasks.ghl_sync.sync_ghl_contacts",
-        # 02:30 UTC — off-peak, away from the :05-:25 stat updaters above.
-        # Daily cadence catches out-of-band GHL edits the webhook doesn't fire on.
-        "schedule": crontab(minute=30, hour=2),
-    },
+    # NOTE: ghl-contacts-sync-nightly was removed in the WGR rebase. CI no longer
+    # pulls contacts directly from GoHighLevel — the client's WGR mirror is the
+    # single upstream for leads/appointments (see app/tasks/wgr_sync.py). The
+    # ghl_sync task module stays importable so the path can be restored by
+    # re-adding this entry and setting ghl_inbound_enabled=True.
     "gmail-thread-sync-nightly": {
         "task": "app.tasks.gmail_sync.sync_gmail_threads",
         # 02:45 UTC — runs after the GHL sync so newly-discovered leads
@@ -107,5 +107,12 @@ celery_app.conf.beat_schedule = {
         # Every 2 minutes — keeps the RAG corpus close to real-time
         # without long-running tasks. Drains a batch each tick.
         "schedule": crontab(minute="*/2"),
+    },
+    "wgr-sync-hourly": {
+        "task": "app.tasks.wgr_sync.sync_wgr",
+        # :50 every hour — incremental pull from the client's WGR mirror (CI's
+        # single upstream for leads/calls/appointments/etc.). No-op unless
+        # client_sync_enabled=True. Off-peak of the other updaters.
+        "schedule": crontab(minute=50),
     },
 }
