@@ -6,6 +6,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added/Fixed — WGR sync feeds RAG + first end-to-end run fixes (Phase 7)
+
+Running the now-enabled hourly sync against live data for the first time surfaced three blockers (the sync had never executed past the backfill). This wires synced rows into the RAG corpus and fixes the bugs that aborted every run.
+
+- **RAG-everything wiring** (`backend/app/tasks/wgr_sync.py`): after a successful `sync_wgr` with rows synced, chains `backfill_wgr_embeddings` + `backfill_insights_embeddings` via `.delay()`. Without this, synced WGR rows were queryable by SQL but invisible to chat — the vector store froze at the Phase 5 snapshot. The backfills full-scan and dedup on `content_hash` (only new/changed rows reach Voyage); skipped entirely when nothing synced. Verified live: an 8-call incremental sync enqueued exactly 8 `wgr_call_analysis` rows, 0 re-embeds.
+- **Fix — orphan FK aborts (Phase 4 latent bug):** WGR child rows reference parents CI filtered out (TEST_ calls) or outside the watermark window, tripping FKs and aborting the whole sync transaction. New `_null_orphan_fks` helper nulls nullable / `ON DELETE SET NULL` columns whose parent isn't in CI (schema's intent), applied to `market_signals.example_call_id` and `sales_strike_evidence.call_score_id`. `sales_strike_evidence.strike_id` (NOT NULL) instead **skips** parentless rows. Live run: 18 + 14 orphan refs nulled, 0 rows wrongly dropped.
+- **Fix — `Unconsumed column names: activity_metadata` (Phase 4 latent bug):** `_on_conflict_upsert` built the INSERT from `model.__table__` (column names) but received ORM-attribute-keyed dicts; `activity_metadata`→`metadata` and any other attr≠column pair failed. Now remaps attribute keys → column names via the mapper before `.values()`.
+- **Fix — masked errors (Phase 6 bug):** the error-`SyncLog` write ran on the already-aborted transaction → `InFailedSQLTransactionError`, hiding the real cause and never recording it. Now `session.rollback()` before writing the error row.
+- `backend/tests/test_wgr_orphan_fks.py` (new) — 7 checks on `_null_orphan_fks`. All pass; `test_wgr_watermark` + `test_wgr_mapping` still pass.
+- **Verified end-to-end:** full incremental `sync_wgr` completes (680 rows), watermark advances, error path records cleanly, embedding chain enqueues. **Note:** the running Celery worker holds pre-fix code — restart it to pick these up before the `:50` beat tick.
+
 ### Added — WGR hourly sync watermark persistence (Phase 6)
 
 The hourly `wgr-sync-hourly` task shipped (Phase 4) but its incremental path was plumbed and not wired: the beat entry called `sync_wgr` with no args, so `since` was always `None` → a **full async re-pull of all ~56k rows every hour** through CI's transaction pooler — exactly the workload `bulk_load.py` went synchronous to avoid. The `sync_log` watermark the docstring promised did not exist. This wires it.

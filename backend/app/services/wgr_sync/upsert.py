@@ -25,7 +25,7 @@ import logging
 import uuid
 from typing import Any, Callable, Iterable, Optional
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import insert, inspect, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,12 +43,69 @@ logger = logging.getLogger(__name__)
 BATCH = 500
 
 
+def _attr_to_column_map(model) -> dict[str, str]:
+    """ORM attribute name → DB column name, for attrs that differ from columns.
+
+    The mapping functions key rows by ORM attribute (e.g. ``activity_metadata``),
+    but ``pg_insert(model.__table__)`` operates on the Table and expects column
+    names (e.g. ``metadata``). Where they differ, translate; otherwise the column
+    name is rejected as an "unconsumed column name". Built from the mapper so any
+    attr≠column pair (not just the known ``metadata`` one) is handled.
+    """
+    out: dict[str, str] = {}
+    for attr in inspect(model).column_attrs:
+        col_name = attr.expression.name
+        if attr.key != col_name:
+            out[attr.key] = col_name
+    return out
+
+
+async def _null_orphan_fks(
+    session: AsyncSession,
+    rows: list[dict[str, Any]],
+    checks: list[tuple[str, Any]],
+) -> dict[str, int]:
+    """NULL nullable-FK columns whose referenced parent isn't present in CI.
+
+    WGR child rows routinely reference a parent that CI filtered out (TEST_ calls)
+    or hasn't synced into the current window. For ``ON DELETE SET NULL`` /
+    nullable FK columns the schema's intent is to tolerate the gap, so we null the
+    orphan rather than let the INSERT abort the whole sync transaction.
+
+    ``checks`` is a list of ``(fk_key, parent_pk_column)`` — e.g.
+    ``[("example_call_id", Call.id)]``. Mutates ``rows`` in place; returns a
+    per-key count of how many references were nulled.
+    """
+    nulled: dict[str, int] = {}
+    for fk_key, parent_pk in checks:
+        ref_ids = {r[fk_key] for r in rows if r.get(fk_key)}
+        if not ref_ids:
+            continue
+        present = set((await session.execute(
+            select(parent_pk).where(parent_pk.in_(ref_ids))
+        )).scalars())
+        n = 0
+        for r in rows:
+            if r.get(fk_key) and r[fk_key] not in present:
+                r[fk_key] = None
+                n += 1
+        if n:
+            nulled[fk_key] = n
+    return nulled
+
+
 async def _on_conflict_upsert(
     session: AsyncSession, model, pk_col: str, rows: list[dict[str, Any]],
 ) -> int:
     """INSERT ... ON CONFLICT (pk) DO UPDATE for a batch. Returns rows written."""
     if not rows:
         return 0
+    remap = _attr_to_column_map(model)
+    if remap:
+        rows = [
+            {remap.get(k, k): v for k, v in row.items()}
+            for row in rows
+        ]
     stmt = pg_insert(model.__table__).values(rows)
     update_cols = {
         c.name: stmt.excluded[c.name]
@@ -198,9 +255,16 @@ async def sync_market_signals(session: AsyncSession) -> int:
     total = 0
     batch: list[dict[str, Any]] = []
 
+    nulled_total = 0
+
     async def flush(maps: list[dict[str, Any]]) -> int:
+        nonlocal nulled_total
         if not maps:
             return 0
+        # example_call_id → calls is nullable / ON DELETE SET NULL: null orphan
+        # refs to calls CI filtered out (e.g. TEST_) so they don't abort the sync.
+        nulled = await _null_orphan_fks(session, maps, [("example_call_id", Call.id)])
+        nulled_total += sum(nulled.values())
         stmt = pg_insert(MarketSignal.__table__).values(maps)
         update_cols = {
             c.name: stmt.excluded[c.name]
@@ -223,7 +287,70 @@ async def sync_market_signals(session: AsyncSession) -> int:
             total += await flush(batch)
             batch = []
     total += await flush(batch)
-    logger.info("wgr_sync market_signals: upserted %d", total)
+    logger.info(
+        "wgr_sync market_signals: upserted %d (nulled %d orphan example_call_id)",
+        total, nulled_total,
+    )
+    return total
+
+
+# ---------------------------------------------------------------------------
+# Strike evidence — FK-safe upsert. WGR's sales_strike_evidence can reference a
+# strike_id / call_score_id that isn't present in CI (e.g. the parent score was
+# filtered out as a TEST_ call, or the strike fell outside a watermark window).
+# The generic native-PK upsert blindly inserts those orphan IDs and trips the
+# FKs, aborting the whole sync transaction. Here we resolve references against
+# what's actually in CI first:
+#   * call_score_id (nullable, ON DELETE SET NULL) → NULL the orphan, matching
+#     the schema's intent that a missing score is tolerated.
+#   * strike_id (NOT NULL, ON DELETE CASCADE) → no parent means the row cannot
+#     exist; SKIP it (and log) rather than fabricate a dangling child.
+# ---------------------------------------------------------------------------
+
+async def sync_strike_evidence(session: AsyncSession, *, since: Optional[str] = None) -> int:
+    total = 0
+    skipped_no_strike = 0
+    nulled_score = 0
+    batch: list[dict[str, Any]] = []
+
+    async def flush(maps: list[dict[str, Any]]) -> int:
+        nonlocal skipped_no_strike, nulled_score
+        if not maps:
+            return 0
+        # strike_id → sales_coaching_strikes is NOT NULL: a missing parent means
+        # the row can't exist, so skip it (can't null a required FK).
+        strike_ids = {m["strike_id"] for m in maps if m.get("strike_id")}
+        present_strikes = set((await session.execute(
+            select(CoachingStrike.strike_id).where(CoachingStrike.strike_id.in_(strike_ids))
+        )).scalars()) if strike_ids else set()
+        clean: list[dict[str, Any]] = []
+        for m in maps:
+            if not m.get("strike_id") or m["strike_id"] not in present_strikes:
+                skipped_no_strike += 1
+                continue
+            clean.append(m)
+        if not clean:
+            return 0
+        # call_score_id → sales_call_scores is nullable / SET NULL: null orphans.
+        nulled = await _null_orphan_fks(session, clean, [("call_score_id", CallScore.score_id)])
+        nulled_score += sum(nulled.values())
+        written = await _on_conflict_upsert(session, StrikeEvidence, "evidence_id", clean)
+        await session.commit()
+        return written
+
+    for raw in reader.read_table("sales_strike_evidence", since=since):
+        mapped = mapping.map_strike_evidence(raw)
+        if mapped is None:
+            continue
+        batch.append(mapped)
+        if len(batch) >= BATCH:
+            total += await flush(batch)
+            batch = []
+    total += await flush(batch)
+    logger.info(
+        "wgr_sync sales_strike_evidence: upserted %d (skipped %d w/o strike, nulled %d orphan scores)",
+        total, skipped_no_strike, nulled_score,
+    )
     return total
 
 
@@ -244,7 +371,7 @@ _NATIVE_PLAN: list[tuple] = [
     ("sales_call_scores", CallScore, "score_id", mapping.map_call_score),
     ("sales_coaching_strikes", CoachingStrike, "strike_id", mapping.map_coaching_strike),
     ("sales_strike_actions", StrikeAction, "action_id", mapping.map_strike_action),
-    ("sales_strike_evidence", StrikeEvidence, "evidence_id", mapping.map_strike_evidence),
+    # sales_strike_evidence handled by sync_strike_evidence (FK-orphan resolution).
     ("sales_eod_reports", EodReport, "report_id", mapping.map_eod_report),
     ("sales", ClosedSale, "sale_id", mapping.map_closed_sale),
     ("sales_activities", SalesActivity, "activity_id", mapping.map_sales_activity),
@@ -266,7 +393,10 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
             session, wgr_table=wgr_table, model=model, pk_col=pk_col,
             map_fn=map_fn, since=since,
         )
-    # 3. appointments (needs leads) + market_signals.
+    # 3. strike evidence (needs strikes + scores from the loop above) — resolves
+    #    orphan FKs against what's actually in CI before inserting.
+    counts["sales_strike_evidence"] = await sync_strike_evidence(session, since=since)
+    # 4. appointments (needs leads) + market_signals.
     counts["appointments"] = await sync_appointments(session, since=since)
     counts["market_signals"] = await sync_market_signals(session)
     return counts
