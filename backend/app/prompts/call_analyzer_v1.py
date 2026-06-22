@@ -41,11 +41,11 @@ You don't extract everything. You extract the **load-bearing moments** — the o
 For each insight, you must produce a JSON object with **exactly** these fields. Fields are nullable (use `null`) when the transcript genuinely doesn't support them — never fabricate.
 
 - **speaker_name** (string | null): Who said it. If the transcript names the speaker (e.g. "Greg:" / "John:"), use that. If only role is clear ("Coach"/"Lead"), use that. Null if unclear.
-- **insight_type** (string): One of `pain_point`, `win`, `objection`, `goal`, `belief`, `identity`, `buying_signal`. Pick the closest fit.
-- **signal_family** (string): A coarse grouping — `pricing_concern`, `time_concern`, `confidence_gap`, `outcome_uncertainty`, `value_clarity`, `team_dynamics`, `lifestyle_fit`, etc. Use whatever family the codebase will accumulate naturally; consistent labels matter more than perfect taxonomy.
+- **insight_type** (string): One of `Pain`, `Win`, `Objection`, `Goal`, `Belief`, `Identity`, `Trigger`. Use these exact Title-Case labels (a `Trigger` is a buying signal / moment of readiness). Pick the closest fit.
+- **signal_family** (string): A coarse grouping in Title Case — e.g. `Pricing Concern`, `Time & Freedom`, `Confidence Gap`, `Outcome Uncertainty`, `Value Clarity`, `Skills & Competency`, `Income & Money`, `Lifestyle Fit`. Use whatever family fits; consistent Title-Case labels matter more than perfect taxonomy. Never use snake_case.
 - **signal** (string): Short, specific label for THIS insight (10 words or fewer). e.g. "Worried about pricing transparency before commit", "Doesn't trust own ability to execute".
-- **signal_strength** (string): One of `strong`, `medium`, `weak`. How clearly the speaker expressed this — was it offhand or load-bearing in the conversation?
-- **pain_layer** (string | null): One of `surface`, `tactical`, `strategic`, `identity`. Surface = "It's expensive." Tactical = "I can't justify it to my partner." Strategic = "I keep starting things I don't finish." Identity = "People like me don't invest in coaches." Null for non-pain insights.
+- **signal_strength** (string): One of `Strong`, `Moderate`, `Weak`. How clearly the speaker expressed this — was it offhand or load-bearing in the conversation?
+- **pain_layer** (string | null): One of `Surface`, `Tactical`, `Strategic`, `Identity`. Surface = "It's expensive." Tactical = "I can't justify it to my partner." Strategic = "I keep starting things I don't finish." Identity = "People like me don't invest in coaches." Null for non-pain insights.
 - **raw_quote** (string): A near-verbatim quote from the transcript that captures this insight. Lightly cleaned up (remove "um", "uh", false starts), but preserve the speaker's actual words. NEVER paraphrase here.
 - **what_they_say** (string): The surface-level version of what they're communicating. The plain-English summary of the quote.
 - **the_real_problem** (string): What's actually going on underneath. The real obstacle, not the stated one. (e.g. they said "it's expensive" but the real problem is "I've failed at programs like this before and can't justify another swing").
@@ -58,8 +58,8 @@ For each insight, you must produce a JSON object with **exactly** these fields. 
 - **objection_created** (string | null): If this insight creates or names a sales objection. "Price", "Time commitment", "Spouse approval". Null otherwise.
 - **marketing_translation** (string): How to translate this insight into marketing copy. NOT a tagline — a strategic prompt for a copywriter. "Lead with 90-day timeline framing; this segment fears slow programs more than expensive ones."
 - **hook_angle_example** (string | null): A short example hook (≤ 15 words) inspired by this insight. e.g. "What if 90 days is enough?" Null if you can't write a strong one.
-- **best_use_case** (string | null): Where this insight is best used downstream. `email_subject`, `ad_copy`, `landing_page_hook`, `sales_objection_handler`, `coaching_curriculum`, etc. Null if uncertain.
-- **quote_confidence** (string): One of `verbatim`, `near_verbatim`, `paraphrased`. How close `raw_quote` is to literal transcript text. Be honest — if the transcript was unclear and you cleaned it up significantly, mark `paraphrased`.
+- **best_use_case** (string | null): Where this insight is best used downstream, in Title Case — e.g. `Email Subject`, `Ad Copy`, `Landing Page Hook`, `Sales Objection Handler`, `Coaching Curriculum`. Null if uncertain.
+- **quote_confidence** (string): One of `Verbatim`, `Near Verbatim`, `Paraphrased`. How close `raw_quote` is to literal transcript text. Be honest — if the transcript was unclear and you cleaned it up significantly, mark `Paraphrased`.
 - **frequency_score** (integer): Always `1` for a single-call extraction. Aggregation across calls is a separate step downstream.
 
 ## Output format
@@ -75,7 +75,7 @@ If the transcript is too short, too noisy, or too generic to yield real insights
 
 - Never extract the same insight twice with slightly different wording. Pick the strongest expression and write it once.
 - Never use generic filler like "they were nervous" or "they wanted to grow". Be specific.
-- Never paraphrase in `raw_quote`. If you can't find a verbatim moment, lower `quote_confidence` to `paraphrased` and be explicit that it's a synthesis.
+- Never paraphrase in `raw_quote`. If you can't find a verbatim moment, lower `quote_confidence` to `Paraphrased` and be explicit that it's a synthesis.
 - Never output prose around the JSON. Never wrap the JSON in markdown code fences. Just the JSON object.
 
 ## Examples of what counts as an insight
@@ -202,11 +202,11 @@ MOCK_CALL_ANALYZER_OUTPUT = json.dumps(
         "insights": [
             {
                 "speaker_name": "Lead",
-                "insight_type": "pain_point",
-                "signal_family": "outcome_uncertainty",
+                "insight_type": "Pain",
+                "signal_family": "Outcome Uncertainty",
                 "signal": "Worried previous coaching didn't stick",
-                "signal_strength": "strong",
-                "pain_layer": "identity",
+                "signal_strength": "Strong",
+                "pain_layer": "Identity",
                 "raw_quote": "I've done programs before and I always start strong and then it just fades out.",
                 "what_they_say": "They lose motivation partway through coaching programs.",
                 "the_real_problem": (
@@ -226,17 +226,17 @@ MOCK_CALL_ANALYZER_OUTPUT = json.dumps(
                     "makes finishing the default outcome."
                 ),
                 "hook_angle_example": "The accountability system finishes what motivation can't.",
-                "best_use_case": "landing_page_hook",
-                "quote_confidence": "near_verbatim",
+                "best_use_case": "Landing Page Hook",
+                "quote_confidence": "Near Verbatim",
                 "frequency_score": 1,
             },
             {
                 "speaker_name": "Lead",
-                "insight_type": "buying_signal",
-                "signal_family": "value_clarity",
+                "insight_type": "Trigger",
+                "signal_family": "Value Clarity",
                 "signal": "Wants timeline certainty before committing",
-                "signal_strength": "medium",
-                "pain_layer": "tactical",
+                "signal_strength": "Moderate",
+                "pain_layer": "Tactical",
                 "raw_quote": "If I knew this would take 90 days I'd start today.",
                 "what_they_say": "They want a clear timeline.",
                 "the_real_problem": (
@@ -255,8 +255,8 @@ MOCK_CALL_ANALYZER_OUTPUT = json.dumps(
                     "outperforms 'transform your business' for this segment."
                 ),
                 "hook_angle_example": "90 days. Then it's done.",
-                "best_use_case": "ad_copy",
-                "quote_confidence": "verbatim",
+                "best_use_case": "Ad Copy",
+                "quote_confidence": "Verbatim",
                 "frequency_score": 1,
             },
         ]

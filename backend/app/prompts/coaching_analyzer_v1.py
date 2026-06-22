@@ -44,11 +44,11 @@ An Insight is one specific moment of signal from the call — a sentence or shor
 For each insight, produce a JSON object with **exactly** these fields. Fields are nullable (use `null`) when the transcript genuinely doesn't support them — never fabricate.
 
 - **speaker_name** (string | null): Who said it. Use the name if given ("Greg:" / "Sarah:"), else role ("Coach"/"Member"). Null if unclear.
-- **insight_type** (string): One of `pain_point`, `win`, `objection`, `goal`, `belief`, `identity`, `buying_signal`. In coaching, `win`, `goal`, `belief`, and `identity` dominate; `pain_point` = a block to progress. `objection`/`buying_signal` are rare (only on upsell/renewal moments).
-- **signal_family** (string): A coarse grouping. Coaching families: `accountability_gap`, `identity_block`, `capability_gap`, `mindset_shift`, `skill_development`, `momentum_win`, `confidence_gain`, `time_management`, `outcome_achieved`, `relationship_dynamics`, etc. Consistent labels matter more than perfect taxonomy.
+- **insight_type** (string): One of `Pain`, `Win`, `Objection`, `Goal`, `Belief`, `Identity`, `Trigger`. Use these exact Title-Case labels. In coaching, `Win`, `Goal`, `Belief`, and `Identity` dominate; `Pain` = a block to progress. `Objection`/`Trigger` are rare (only on upsell/renewal moments).
+- **signal_family** (string): A coarse grouping in Title Case. Coaching families: `Accountability Gap`, `Identity Block`, `Capability Gap`, `Mindset Shift`, `Skill Development`, `Momentum Win`, `Confidence Gain`, `Time Management`, `Outcome Achieved`, `Relationship Dynamics`, etc. Consistent Title-Case labels matter more than perfect taxonomy. Never use snake_case.
 - **signal** (string): Short, specific label for THIS insight (≤10 words). e.g. "Closed first $10k month", "Avoids hard conversations with team".
-- **signal_strength** (string): One of `strong`, `medium`, `weak`. How load-bearing it was in the conversation.
-- **pain_layer** (string | null): For block/pain insights only: `surface`, `tactical`, `strategic`, `identity`. Surface = "I ran out of time." Tactical = "I don't have a system for follow-up." Strategic = "I keep prioritising delivery over growth." Identity = "I'm not the kind of person who delegates." Null for wins/goals.
+- **signal_strength** (string): One of `Strong`, `Moderate`, `Weak`. How load-bearing it was in the conversation.
+- **pain_layer** (string | null): For block/pain insights only: `Surface`, `Tactical`, `Strategic`, `Identity`. Surface = "I ran out of time." Tactical = "I don't have a system for follow-up." Strategic = "I keep prioritising delivery over growth." Identity = "I'm not the kind of person who delegates." Null for wins/goals.
 - **raw_quote** (string): A near-verbatim quote capturing this insight. Lightly cleaned (remove "um"/false starts) but preserve actual words. NEVER paraphrase here.
 - **what_they_say** (string): The surface-level plain-English version of the quote.
 - **the_real_problem** (string): For blocks — what's actually going on underneath. For wins — what made this win possible / what it unlocks. Go beneath the surface.
@@ -61,8 +61,8 @@ For each insight, produce a JSON object with **exactly** these fields. Fields ar
 - **objection_created** (string | null): Rare in coaching. Null unless a renewal/upsell objection surfaced.
 - **marketing_translation** (string): How this insight could inform content/marketing. For wins: a testimonial/case-study angle. For blocks: a content angle that speaks to that struggle. A strategic prompt for a copywriter, not a tagline.
 - **hook_angle_example** (string | null): A short example hook (≤15 words) inspired by this insight. Null if you can't write a strong one.
-- **best_use_case** (string | null): Where this insight is best used downstream. For wins: `testimonial`, `case_study`, `social_proof`. For blocks: `coaching_curriculum`, `email_subject`, `content_idea`. Null if uncertain.
-- **quote_confidence** (string): One of `verbatim`, `near_verbatim`, `paraphrased`. Be honest.
+- **best_use_case** (string | null): Where this insight is best used downstream, in Title Case. For wins: `Testimonial`, `Case Study`, `Social Proof`. For blocks: `Coaching Curriculum`, `Email Subject`, `Content Idea`. Null if uncertain.
+- **quote_confidence** (string): One of `Verbatim`, `Near Verbatim`, `Paraphrased`. Be honest.
 - **frequency_score** (integer): Always `1` for a single-call extraction.
 
 ## Output format
@@ -142,10 +142,10 @@ MOCK_COACHING_ANALYZER_OUTPUT = json.dumps(
         "insights": [
             {
                 "speaker_name": "Member",
-                "insight_type": "win",
-                "signal_family": "outcome_achieved",
+                "insight_type": "Win",
+                "signal_family": "Outcome Achieved",
                 "signal": "Closed first $10k month",
-                "signal_strength": "strong",
+                "signal_strength": "Strong",
                 "pain_layer": None,
                 "raw_quote": "This was my first ten-thousand-dollar month — I actually did it.",
                 "what_they_say": "They hit a $10k revenue month for the first time.",
@@ -165,17 +165,17 @@ MOCK_COACHING_ANALYZER_OUTPUT = json.dumps(
                     "outreach.' Lead with the consistency-beats-talent narrative."
                 ),
                 "hook_angle_example": "Her first $10k month came from one boring habit.",
-                "best_use_case": "case_study",
-                "quote_confidence": "near_verbatim",
+                "best_use_case": "Case Study",
+                "quote_confidence": "Near Verbatim",
                 "frequency_score": 1,
             },
             {
                 "speaker_name": "Member",
-                "insight_type": "pain_point",
-                "signal_family": "identity_block",
+                "insight_type": "Pain",
+                "signal_family": "Identity Block",
                 "signal": "Won't delegate delivery work",
-                "signal_strength": "strong",
-                "pain_layer": "identity",
+                "signal_strength": "Strong",
+                "pain_layer": "Identity",
                 "raw_quote": "I know I should hand this off but no one does it the way I do.",
                 "what_they_say": "They struggle to delegate delivery to anyone else.",
                 "the_real_problem": (
@@ -194,8 +194,8 @@ MOCK_COACHING_ANALYZER_OUTPUT = json.dumps(
                     "Speak to the fear that delegating means losing quality."
                 ),
                 "hook_angle_example": "The work that made you successful is now capping you.",
-                "best_use_case": "coaching_curriculum",
-                "quote_confidence": "near_verbatim",
+                "best_use_case": "Coaching Curriculum",
+                "quote_confidence": "Near Verbatim",
                 "frequency_score": 1,
             },
         ],
