@@ -6,6 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+
+### Added — surface social_comments: Recent Comments card + RAG embedding
+
+The 10,395 synced `social_comments` had no surface. Wired them up — but ~98% are bare GHL keyword triggers ("Info"/"Agent" typed to fire a DM funnel), so both surfaces keep only the **substantive** comments (real voice-of-customer).
+
+- **UI** (`frontend/src/app/(app)/marketing/social/page.tsx`) — new **Recent Comments** card on `/marketing/social` showing recent genuine comments (platform dot + text + date). `SocialCommentRepository.find_recent_substantive()` excludes trigger words (length > 20 AND not a known trigger phrase); served via a new `recent_comments` field on `GET /social`.
+- **RAG** (`backend/app/tasks/embed_backfill.py`) — `backfill_wgr_embeddings` gains a `wgr_social_comment` source using the same substantive filter. **Embedded live: 116 comments** through Voyage (the ~10,279 trigger-word comments are excluded as noise). Now retrievable by the chat agent's knowledge-base search.
+
 ### Added — WGR marketing/social mirror (4 previously-empty CI tables wired to real data)
 
 Four CI tables had models + UI but sat empty (the original seed data was cleared in the Phase 1 rebase). Wired them to WGR's real data via the existing sync — read-only from WGR, write only to CI. **Backfilled live:** email_campaigns **2,394**, social_comments **10,395**, instagram_posts **1,000**, insight_tags **752** (+ tag_dictionary **627**).

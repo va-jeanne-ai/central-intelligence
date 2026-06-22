@@ -17,7 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
-from app.repositories.marketing import InstagramPostRepository, SocialStatsRepository
+from app.repositories.marketing import (
+    InstagramPostRepository,
+    SocialCommentRepository,
+    SocialStatsRepository,
+)
 from app.services.integrations_registry import get_provider
 from app.schemas.social import (
     SocialAnalyzeRequest,
@@ -178,11 +182,25 @@ async def get_social_data(
         for p in recent_posts
     ]
 
+    # Recent substantive comments (real voice-of-customer; trigger words excluded).
+    comment_repo = SocialCommentRepository(session)
+    recent = await comment_repo.find_recent_substantive(limit=15)
+    recent_comments = [
+        {
+            "id": str(c.id),
+            "platform": c.platform,
+            "comment_text": c.comment_text,
+            "commented_at": c.commented_at.isoformat() if c.commented_at else None,
+        }
+        for c in recent
+    ]
+
     return SocialDataResponse(
         posts=totals["total_posts"],
         engagement=totals["avg_engagement"],
         followers=totals["total_followers"],
         by_platform=by_platform,
         top_content=top_content,
+        recent_comments=recent_comments,
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
