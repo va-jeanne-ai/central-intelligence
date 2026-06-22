@@ -2,11 +2,12 @@
 PainPoint, Win, Objection."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -41,6 +42,10 @@ class Lead(Base, TimestampMixin, SoftDeleteMixin):
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # When the lead actually entered the funnel upstream (WGR leads.entry_date).
+    # Distinct from created_at, which records when the row was synced into CI.
+    # The UI shows this as the lead's date; null for leads with no upstream date.
+    entry_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     # Stable upstream identifier from the source provider (e.g. GHL
     # contact_id). When source + external_id are both present, the lead
     # webhook upsert dedups on the pair — surviving email-changes and

@@ -41,7 +41,8 @@ def test_test_call_filter() -> None:
 
 def test_map_lead() -> None:
     row = {"lead_id": "LEAD_abc", "name": " Brian Shatto ", "email": "B@vip.com",
-           "phone": "12143365496", "pipeline_stage": None, "notes": "  "}
+           "phone": "12143365496", "pipeline_stage": None, "notes": "  ",
+           "entry_date": "2026-01-15"}
     out = m.map_lead(row)
     check("lead source=wgr", out["source"] == "wgr")
     check("lead external_id", out["external_id"] == "LEAD_abc")
@@ -49,6 +50,8 @@ def test_map_lead() -> None:
     check("lead phone normalized", out["phone"] == "+12143365496")
     check("lead blank notes → None", out["notes"] is None)
     check("lead null pipeline_stage → None status", out["status"] is None)
+    check("lead entry_date passed through", out["entry_date"] == "2026-01-15")
+    check("lead missing entry_date → None", m.map_lead({"lead_id": "L"})["entry_date"] is None)
     check("lead missing id → None", m.map_lead({"lead_id": ""}) is None)
 
 

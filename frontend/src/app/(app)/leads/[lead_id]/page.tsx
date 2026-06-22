@@ -62,6 +62,7 @@ interface LeadDetailResponse {
   source: string | null;
   score: number;
   external_id: string | null;
+  entry_date: string | null;
   created_at: string | null;
   notes_raw: string | null;
   calls: LeadCallSummary[];
@@ -1016,6 +1017,14 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                     </span>
                   </dd>
                 </div>
+                {detail.entry_date && (
+                  <div className="flex items-baseline gap-2">
+                    <dt className="w-20 text-[11px] font-bold uppercase tracking-wider text-gray-500 shrink-0">
+                      Entered
+                    </dt>
+                    <dd className="text-gray-700">{formatDate(detail.entry_date)}</dd>
+                  </div>
+                )}
                 <div className="flex items-baseline gap-2">
                   <dt className="w-20 text-[11px] font-bold uppercase tracking-wider text-gray-500 shrink-0">
                     Created

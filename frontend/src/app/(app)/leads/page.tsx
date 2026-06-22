@@ -136,9 +136,11 @@ const SOURCE_CONFIG: Record<
 // on `.badgeClasses`. These helpers always return a sane shape so the
 // page renders any string the backend hands us.
 
-function _humanise(value: string): string {
+function _humanise(value: string | null | undefined): string {
   // 'facebook_ads' → 'Facebook Ads'. Best-effort prettifier for unknown
-  // values; falls back to the raw string for anything weird.
+  // values; falls back to the raw string for anything weird. Real WGR leads
+  // can arrive with a null/empty source or status, so guard before .split().
+  if (!value) return "Unknown";
   return value
     .split(/[_\-\s]+/)
     .filter(Boolean)
@@ -146,18 +148,18 @@ function _humanise(value: string): string {
     .join(" ");
 }
 
-function resolveSource(raw: string) {
+function resolveSource(raw: string | null | undefined) {
   return (
-    SOURCE_CONFIG[raw as LeadSource] ?? {
+    (raw ? SOURCE_CONFIG[raw as LeadSource] : undefined) ?? {
       label: _humanise(raw),
       badgeClasses: "bg-gray-100 text-gray-600",
     }
   );
 }
 
-function resolveStatus(raw: string) {
+function resolveStatus(raw: string | null | undefined) {
   return (
-    STATUS_CONFIG[raw as LeadStatus] ?? {
+    (raw ? STATUS_CONFIG[raw as LeadStatus] : undefined) ?? {
       label: _humanise(raw),
       dotColor: "#9CA3AF",
       badgeClasses: "bg-gray-100 text-gray-600",
@@ -676,6 +678,47 @@ function LeadTableRow({ lead }: { lead: Lead }) {
 type FilterStatus = "all" | LeadStatus;
 type FilterSource = "all" | LeadSource;
 
+// ─── Column sort ──────────────────────────────────────────────────────────────
+
+// Backend-whitelisted sort columns. "Date Added" sorts on entry_date (the lead's
+// displayed date); "Score" has no DB column and is derived from status, so the
+// Score header sorts by status — same ordering the score reflects.
+type SortColumn = "name" | "source" | "entry_date" | "status";
+type SortDir = "asc" | "desc";
+
+function SortableHeader({
+  label,
+  column,
+  sortBy,
+  sortDir,
+  onSort,
+}: {
+  label: string;
+  column: SortColumn;
+  sortBy: SortColumn;
+  sortDir: SortDir;
+  onSort: (col: SortColumn) => void;
+}) {
+  const active = sortBy === column;
+  return (
+    <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+        className={`inline-flex items-center gap-1 uppercase tracking-widest transition-colors hover:text-gray-600 ${
+          active ? "text-gray-700" : ""
+        }`}
+      >
+        {label}
+        <span className="text-[9px] leading-none w-2 inline-block" aria-hidden="true">
+          {active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 function FilterBar({
   search,
   onSearchChange,
@@ -683,8 +726,10 @@ function FilterBar({
   onStatusChange,
   sourceFilter,
   onSourceChange,
-  dateRange,
-  onDateRangeChange,
+  entryFrom,
+  onEntryFromChange,
+  entryTo,
+  onEntryToChange,
   onClear,
 }: {
   search: string;
@@ -693,15 +738,18 @@ function FilterBar({
   onStatusChange: (v: FilterStatus) => void;
   sourceFilter: FilterSource;
   onSourceChange: (v: FilterSource) => void;
-  dateRange: string;
-  onDateRangeChange: (v: string) => void;
+  entryFrom: string;
+  onEntryFromChange: (v: string) => void;
+  entryTo: string;
+  onEntryToChange: (v: string) => void;
   onClear: () => void;
 }) {
   const hasFilters =
     search !== "" ||
     statusFilter !== "all" ||
     sourceFilter !== "all" ||
-    dateRange !== "";
+    entryFrom !== "" ||
+    entryTo !== "";
 
   return (
     <div className="flex items-center gap-2.5 flex-wrap">
@@ -757,14 +805,29 @@ function FilterBar({
         ))}
       </select>
 
-      {/* Date range */}
-      <input
-        type="text"
-        placeholder="Date range..."
-        value={dateRange}
-        onChange={(e) => onDateRangeChange(e.target.value)}
-        className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600 w-32"
-      />
+      {/* Entry-date range — filters on the upstream funnel-entry date */}
+      <div className="flex items-center gap-1.5 text-gray-500">
+        <span className="text-[11px] font-semibold uppercase tracking-wide shrink-0">
+          Entered
+        </span>
+        <input
+          type="date"
+          aria-label="Entered on or after"
+          value={entryFrom}
+          max={entryTo || undefined}
+          onChange={(e) => onEntryFromChange(e.target.value)}
+          className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
+        />
+        <span className="text-gray-300">–</span>
+        <input
+          type="date"
+          aria-label="Entered on or before"
+          value={entryTo}
+          min={entryFrom || undefined}
+          onChange={(e) => onEntryToChange(e.target.value)}
+          className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
+        />
+      </div>
 
       {/* Clear */}
       {hasFilters && (
@@ -894,7 +957,22 @@ export default function LeadsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [sourceFilter, setSourceFilter] = useState<FilterSource>("all");
-  const [dateRange, setDateRange] = useState("");
+  // Entry-date range filter (YYYY-MM-DD strings from <input type="date">).
+  const [entryFrom, setEntryFrom] = useState("");
+  const [entryTo, setEntryTo] = useState("");
+  // Column sort. Defaults match the API default (entry-date, newest first).
+  const [sortBy, setSortBy] = useState<SortColumn>("entry_date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  // Toggle sort on a column: same column flips direction, new column starts desc.
+  const handleSort = (col: SortColumn) => {
+    if (col === sortBy) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortDir("desc");
+    }
+  };
 
   // Fetch stats once on mount (after auth hydrates)
   useEffect(() => {
@@ -943,6 +1021,10 @@ export default function LeadsPage() {
         if (statusFilter !== "all") params.set("status", statusFilter);
         if (sourceFilter !== "all") params.set("source", sourceFilter);
         if (search) params.set("search", search);
+        if (entryFrom) params.set("entry_from", entryFrom);
+        if (entryTo) params.set("entry_to", entryTo);
+        params.set("sort_by", sortBy);
+        params.set("sort_dir", sortDir);
         params.set("page", "1");
         params.set("per_page", "50");
 
@@ -977,7 +1059,7 @@ export default function LeadsPage() {
     }
 
     return doFetch();
-  }, [authLoading, statusFilter, sourceFilter, search]);
+  }, [authLoading, statusFilter, sourceFilter, search, entryFrom, entryTo, sortBy, sortDir]);
 
   // Build KPI cards from live stats
   const kpiCards = [
@@ -1019,7 +1101,8 @@ export default function LeadsPage() {
     setSearch("");
     setStatusFilter("all");
     setSourceFilter("all");
-    setDateRange("");
+    setEntryFrom("");
+    setEntryTo("");
   };
 
   return (
@@ -1131,8 +1214,10 @@ export default function LeadsPage() {
                 onStatusChange={setStatusFilter}
                 sourceFilter={sourceFilter}
                 onSourceChange={setSourceFilter}
-                dateRange={dateRange}
-                onDateRangeChange={setDateRange}
+                entryFrom={entryFrom}
+                onEntryFromChange={setEntryFrom}
+                entryTo={entryTo}
+                onEntryToChange={setEntryTo}
                 onClear={handleClearFilters}
               />
             </div>
@@ -1141,18 +1226,34 @@ export default function LeadsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    Name
-                  </th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    Source
-                  </th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    Date Added
-                  </th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    Status
-                  </th>
+                  <SortableHeader
+                    label="Name"
+                    column="name"
+                    sortBy={sortBy}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Source"
+                    column="source"
+                    sortBy={sortBy}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Date Added"
+                    column="entry_date"
+                    sortBy={sortBy}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Status"
+                    column="status"
+                    sortBy={sortBy}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
                   <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     Score
                   </th>
