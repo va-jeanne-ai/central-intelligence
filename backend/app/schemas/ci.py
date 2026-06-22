@@ -70,6 +70,10 @@ class CallSummary(BaseModel):
     transcript_quality: str | None = None
     processed_date: datetime | None = None
     insights_count: int = 0
+    # Provenance: 'wgr' = mirrored from the client DB; else CI-analyzed.
+    source: str | None = None
+    # When CI ingested the row ("Date Added"), distinct from `date` (call date).
+    created_at: datetime | None = None
 
 
 class CallListResponse(BaseModel):
@@ -88,6 +92,8 @@ class CallDetail(BaseModel):
     transcript: str | None = None
     summary: str | None = None
     created_at: datetime | None = None
+    # Provenance: 'wgr' = mirrored from the client DB; else CI-analyzed.
+    source: str | None = None
 
 
 class InsightBrief(BaseModel):
@@ -136,10 +142,43 @@ class ContentIdeaBrief(BaseModel):
     idea_score: float | None = None
 
 
+class ContentIdeaDetail(BaseModel):
+    """Full content-idea brief — every field the analyzer generates from a call.
+
+    Surfaced on the call-detail page so the idea reads as a shootable brief
+    (hook, premise, CTA, source quote) rather than a 'Reel · High' label.
+    """
+
+    content_id: str
+    insight_id: str | None = None
+    call_id: str | None = None
+    source: str | None = None
+    market_audience: str | None = None
+    content_format: str | None = None
+    content_angle: str | None = None
+    trigger_insight: str | None = None
+    raw_quote: str | None = None
+    content_premise: str | None = None
+    hook_opening_line: str | None = None
+    teaching_point: str | None = None
+    cta_idea: str | None = None
+    priority_level: str | None = None
+    best_platform: str | None = None
+    repurpose_opportunities: str | None = None
+    idea_score: float | None = None
+    status: str | None = None
+    created_at: datetime | None = None
+
+
 class CallDetailResponse(BaseModel):
     call: CallDetail
-    insights: list[InsightBrief]
-    content_ideas: list[ContentIdeaBrief]
+    # Full insight payload (every analysis field) so the call-detail page can
+    # surface the deep marketing/psychology data, not just the 4-field brief.
+    # InsightDetail is defined further down — forward ref resolved via
+    # model_rebuild() after its definition.
+    insights: list["InsightDetail"]
+    # Full content-idea brief (hook, premise, CTA, etc.), not just format/status.
+    content_ideas: list[ContentIdeaDetail]
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +237,11 @@ class InsightDetailResponse(BaseModel):
     insight: InsightDetail
     tags: list[str]
     related_content_ideas: list[ContentIdeaBrief]
+
+
+# CallDetailResponse references InsightDetail (defined above) via a forward
+# ref; resolve it now that InsightDetail exists.
+CallDetailResponse.model_rebuild()
 
 
 # ---------------------------------------------------------------------------
