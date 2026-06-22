@@ -480,6 +480,29 @@ def backfill_wgr_embeddings(self, batch_size: int = _BATCH_SIZE) -> dict[str, An
         )
         session.commit()
 
+        # 6. Substantive social comments (real voice-of-customer). ~98% of the
+        #    social_comments are bare GHL keyword triggers ("Info"/"Agent" typed
+        #    to fire a DM funnel) — pure noise for retrieval. Keep only genuine
+        #    comments: longer than a trigger word AND not a known trigger phrase.
+        rows = session.execute(
+            text("""
+                SELECT id::text, comment_text
+                FROM social_comments
+                WHERE comment_text IS NOT NULL
+                  AND length(comment_text) > 20
+                  AND lower(btrim(comment_text)) NOT IN (
+                      'info', 'agent', 'info please', 'info!', 'agent!',
+                      'info 🔥', 'agent 🔥', 'yes', 'interested'
+                  )
+                ORDER BY commented_at ASC NULLS LAST
+            """),
+        ).fetchall()
+        enqueued["wgr_social_comment"] = _enqueue_missing(
+            session, source_table="wgr_social_comment",
+            rows=[(r[0], r[1]) for r in rows],
+        )
+        session.commit()
+
     total = sum(enqueued.values())
     logger.info("backfill_wgr_embeddings: enqueued=%d %s", total, enqueued)
     return {"enqueued_total": total, "by_source": enqueued}

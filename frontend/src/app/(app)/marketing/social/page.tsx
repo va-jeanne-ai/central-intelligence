@@ -37,12 +37,20 @@ interface InstagramPostData {
   engagement_rate: number | null;
 }
 
+interface SocialCommentData {
+  id: string;
+  platform: string;
+  comment_text: string;
+  commented_at: string | null;
+}
+
 interface SocialData {
   posts: number;
   engagement: number;
   followers: number;
   by_platform: PlatformMetricData[];
   top_content: InstagramPostData[];
+  recent_comments: SocialCommentData[];
   generated_at: string;
 }
 
@@ -275,6 +283,53 @@ function RecentPostsCard({ posts }: { posts: InstagramPostData[] }) {
   );
 }
 
+// ─── Recent comments card ─────────────────────────────────────────────────────
+
+function platformDot(platform: string): string {
+  if (platform === "instagram") return "#E1306C";
+  if (platform === "facebook") return "#1877F2";
+  return "#9CA3AF";
+}
+
+function RecentCommentsCard({ comments }: { comments: SocialCommentData[] }) {
+  return (
+    <Card>
+      <CardHeader
+        title="Recent Comments"
+        action={
+          <span className="text-xs text-gray-400">voice of customer</span>
+        }
+      />
+      <CardBody>
+        {comments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-2">
+            <span className="text-3xl" aria-hidden="true">💬</span>
+            <p className="text-sm font-medium text-gray-500">No comments yet.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {comments.map((c) => (
+              <li key={c.id} className="flex items-start gap-3 py-3">
+                <span
+                  className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: platformDot(c.platform) }}
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-gray-700">{c.comment_text}</p>
+                  <span className="mt-0.5 block text-xs text-gray-400">
+                    {c.platform} · {formatPostDate(c.commented_at)}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
 // ─── Loading skeleton ─────────────────────────────────────────────────────────
 
 function SocialPageSkeleton() {
@@ -405,6 +460,9 @@ export default function SocialMediaPage() {
 
         {/* Row 3: Recent posts */}
         <RecentPostsCard posts={data?.top_content ?? []} />
+
+        {/* Row 4: Recent comments (voice of customer) */}
+        <RecentCommentsCard comments={data?.recent_comments ?? []} />
       </main>
     </>
   );

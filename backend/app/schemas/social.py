@@ -55,4 +55,6 @@ class SocialDataResponse(BaseModel):
     followers: int
     by_platform: list[SocialPlatformMetric] = []
     top_content: list[dict]
+    # Recent genuine comments (bare keyword triggers excluded).
+    recent_comments: list[dict] = []
     generated_at: str

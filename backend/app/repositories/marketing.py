@@ -152,6 +152,25 @@ class SocialCommentRepository(RepositoryBase[SocialComment]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    # Bare GHL keyword triggers — people type these to fire a DM funnel, not to
+    # say anything. ~98% of comments are one of these; excluded from the UI feed.
+    _TRIGGER_WORDS = (
+        "info", "agent", "info please", "info!", "agent!",
+        "info 🔥", "agent 🔥", "yes", "interested",
+    )
+
+    async def find_recent_substantive(self, limit: int = 15) -> list[SocialComment]:
+        """Most recent genuine comments — excludes bare keyword triggers."""
+        stmt = (
+            self._base_select()
+            .where(func.length(SocialComment.comment_text) > 20)
+            .where(func.lower(func.btrim(SocialComment.comment_text)).notin_(self._TRIGGER_WORDS))
+            .order_by(SocialComment.commented_at.desc().nullslast())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def find_by_post(self, post_id: str) -> list[SocialComment]:
         stmt = (
             self._base_select()

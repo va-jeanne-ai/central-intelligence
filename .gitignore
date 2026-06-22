@@ -45,3 +45,7 @@ celerybeat-schedule-wal
 
 # graphify local interpreter (regenerable, never commit)
 graphify-out/.graphify_venv/
+
+# Local-only personal skill (not part of the shared project)
+.claude/
+tools/weekly_report/
