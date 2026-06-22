@@ -14,6 +14,7 @@ from app.models.marketing import (
     EmailCampaign,
     FunnelEvent,
     FunnelStats,
+    InstagramPost,
     Promotion,
     SocialComment,
     SocialStats,
@@ -156,6 +157,23 @@ class SocialCommentRepository(RepositoryBase[SocialComment]):
             self._base_select()
             .where(SocialComment.post_id == post_id)
             .order_by(SocialComment.commented_at.asc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+
+class InstagramPostRepository(RepositoryBase[InstagramPost]):
+    """Repository for InstagramPost — per-post Instagram performance (WGR mirror)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, InstagramPost)
+
+    async def find_recent(self, limit: int = 12) -> list[InstagramPost]:
+        """Most recently published posts first (nulls last)."""
+        stmt = (
+            self._base_select()
+            .order_by(InstagramPost.posted_at.desc().nullslast())
+            .limit(limit)
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

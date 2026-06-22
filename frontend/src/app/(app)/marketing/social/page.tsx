@@ -21,12 +21,28 @@ interface PlatformMetricData {
   engagement_rate: number | null;
 }
 
+interface InstagramPostData {
+  id: string;
+  platform: string;
+  caption: string | null;
+  permalink: string | null;
+  media_type: string | null;
+  is_reel: boolean;
+  posted_at: string | null;
+  likes_count: number | null;
+  comments_count: number | null;
+  saves_count: number | null;
+  reach: number | null;
+  views: number | null;
+  engagement_rate: number | null;
+}
+
 interface SocialData {
   posts: number;
   engagement: number;
   followers: number;
   by_platform: PlatformMetricData[];
-  top_content: unknown[];
+  top_content: InstagramPostData[];
   generated_at: string;
 }
 
@@ -184,15 +200,76 @@ function RecentPostsEmptyState() {
 
 // ─── Recent posts card ────────────────────────────────────────────────────────
 
-function RecentPostsCard() {
+function formatPostDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function metric(value: number | null): string {
+  return value != null ? value.toLocaleString("en-US") : "—";
+}
+
+function RecentPostRow({ post }: { post: InstagramPostData }) {
+  const caption = post.caption?.trim() || "(no caption)";
+  const inner = (
+    <div className="flex items-start justify-between gap-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+            {post.is_reel ? "Reel" : post.media_type || "Post"}
+          </span>
+          <span className="text-xs text-gray-400">{formatPostDate(post.posted_at)}</span>
+        </div>
+        <p className="mt-1 text-sm text-gray-700 line-clamp-2">{caption}</p>
+      </div>
+      <div className="flex shrink-0 gap-4 text-xs text-gray-500 tabular-nums">
+        <span title="Reach">👁 {metric(post.reach)}</span>
+        <span title="Likes">❤️ {metric(post.likes_count)}</span>
+        <span title="Comments">💬 {metric(post.comments_count)}</span>
+        <span title="Saves">🔖 {metric(post.saves_count)}</span>
+        <span title="Engagement rate" className="font-semibold text-gray-700">
+          {post.engagement_rate != null ? `${post.engagement_rate.toFixed(1)}%` : "—"}
+        </span>
+      </div>
+    </div>
+  );
+  return post.permalink ? (
+    <a
+      href={post.permalink}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block px-1 -mx-1 rounded-lg hover:bg-gray-50 transition-colors"
+    >
+      {inner}
+    </a>
+  ) : (
+    <div className="px-1 -mx-1">{inner}</div>
+  );
+}
+
+function RecentPostsCard({ posts }: { posts: InstagramPostData[] }) {
   return (
     <Card>
       <CardHeader
         title="Recent Posts"
-        action={<span className="text-xs text-gray-400">0 posts</span>}
+        action={
+          <span className="text-xs text-gray-400">
+            {posts.length} {posts.length === 1 ? "post" : "posts"}
+          </span>
+        }
       />
       <CardBody>
-        <RecentPostsEmptyState />
+        {posts.length === 0 ? (
+          <RecentPostsEmptyState />
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {posts.map((p) => (
+              <RecentPostRow key={p.id} post={p} />
+            ))}
+          </div>
+        )}
       </CardBody>
     </Card>
   );
@@ -327,7 +404,7 @@ export default function SocialMediaPage() {
         </div>
 
         {/* Row 3: Recent posts */}
-        <RecentPostsCard />
+        <RecentPostsCard posts={data?.top_content ?? []} />
       </main>
     </>
   );
