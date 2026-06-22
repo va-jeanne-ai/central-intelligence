@@ -27,6 +27,10 @@ WATERMARK_COLUMN: dict[str, str] = {
     "webinar_engagements": "created_at",
     "lead_opt_in_events": "occurred_at",
     "sales": "created_at",
+    "email_campaigns": "synced_at",
+    "comment_events": "created_at",
+    "instagram_posts": "synced_at",
+    # insight_tags has created_at but is tiny/static; full pull is fine.
 }
 
 

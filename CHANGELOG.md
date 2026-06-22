@@ -6,6 +6,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — WGR marketing/social mirror (4 previously-empty CI tables wired to real data)
+
+Four CI tables had models + UI but sat empty (the original seed data was cleared in the Phase 1 rebase). Wired them to WGR's real data via the existing sync — read-only from WGR, write only to CI. **Backfilled live:** email_campaigns **2,394**, social_comments **10,395**, instagram_posts **1,000**, insight_tags **752** (+ tag_dictionary **627**).
+
+- `backend/app/models/marketing.py` — added `source`/`external_id` (+ unique) to `SocialComment` for idempotent WGR dedup; new `InstagramPost` model (per-post grain — engagement/reach/reel metrics + creative context like hook/pillar/transcript). Distinct from `SocialStats` (per-period aggregate), which is why instagram_posts gets its own table rather than being forced into social_stats.
+- Migration `o6f7a8b9c0d1` (hand-written) — social_comments columns + indexes + unique; new instagram_posts table.
+- `backend/app/services/wgr_sync/mapping.py` — `map_email_campaign` (unique_opens/clicks → headline counts; status='sent'), `map_social_comment` (skips empty-text rows; post_id falls back to fb_page_id), `map_instagram_post`, `map_insight_tag`.
+- `backend/app/services/wgr_sync/bulk_load.py` + `upsert.py` — both sync paths wired. **FK handling discovered live:** (1) `insight_tags.tag → tag_dictionary.tag` — WGR doesn't enforce it and its tag_dictionary is empty, so a new seed step derives CI's dictionary from the 627 distinct tags actually used before loading; (2) `insight_tags.insight_id → insights.id` — 51 tags reference insights CI didn't sync, so orphan insight_ids are nulled (kept the tag), same policy as strike evidence. `email_campaigns` uses a PARTIAL unique index (like leads) so its ON CONFLICT repeats the WHERE predicate; social_comments/instagram_posts use full constraints.
+- `backend/app/services/wgr_sync/reader.py` — watermarks for incremental hourly sync (email_campaigns/instagram_posts on `synced_at`, comment_events on `created_at`).
+- `backend/tests/test_wgr_mapping.py` — added `test_map_marketing_social` (18 checks). All mapping checks pass.
+- **Surfacing:** the email page reads `email_campaigns` directly → shows the 2,394 real campaigns immediately. social_comments feed VoC/RAG + chat (no dedicated page). instagram_posts is in CI + embeddable but not yet wired to a route — UI is a follow-up.
+
 ### Added — clickable column sorting on the leads table
 
 The leads table headers were static text; the backend already supported `sort_by`/`sort_dir` but nothing drove it. Headers are now click-to-sort.

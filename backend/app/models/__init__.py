@@ -53,6 +53,7 @@ from app.models.marketing import (  # noqa: F401
     EmailCampaign,
     FunnelEvent,
     FunnelStats,
+    InstagramPost,
     OptInEvent,
     Promotion,
     SocialComment,
@@ -128,6 +129,7 @@ __all__ = [
     # marketing
     "SocialStats",
     "SocialComment",
+    "InstagramPost",
     "EmailCampaign",
     "FunnelEvent",
     "FunnelStats",

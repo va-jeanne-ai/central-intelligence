@@ -121,12 +121,49 @@ def test_map_webinar_and_optin() -> None:
     check("optin requires lead_id", m.map_opt_in_event({"opt_in_event_id": "x", "lead_id": ""}) is None)
 
 
+def test_map_marketing_social() -> None:
+    # email_campaign: unique_opens/clicks become the headline counts; numeric rates pass through
+    ec = m.map_email_campaign({"campaign_id": "C1", "campaign_name": " Launch ",
+                               "subject_line": "Hi", "total_sent": 100, "unique_opens": 40,
+                               "unique_clicks": 5, "send_date": "2026-01-01", "open_rate": 40.0})
+    check("email source=wgr", ec["source"] == "wgr")
+    check("email external_id", ec["external_id"] == "C1")
+    check("email name trimmed", ec["name"] == "Launch")
+    check("email status=sent", ec["status"] == "sent")
+    check("email open_count=unique_opens", ec["open_count"] == 40)
+    check("email blank name → campaign_id", m.map_email_campaign({"campaign_id": "C2"})["name"] == "C2")
+    check("email missing id → None", m.map_email_campaign({"campaign_name": "x"}) is None)
+
+    # social_comment: needs id + text; post_id falls back to fb_page_id
+    sc = m.map_social_comment({"id": "e1", "platform": "facebook", "comment_text": " hey ",
+                               "fb_page_id": "PG1", "occurred_at": "2026-02-02"})
+    check("comment source=wgr", sc["source"] == "wgr")
+    check("comment text trimmed", sc["comment_text"] == "hey")
+    check("comment post_id fallback to fb_page", sc["post_id"] == "PG1")
+    check("comment blank text → None", m.map_social_comment({"id": "e2", "comment_text": "  "}) is None)
+    check("comment missing id → None", m.map_social_comment({"comment_text": "hi"}) is None)
+
+    # instagram_post: ig_media_id required; metrics + creative context pass through
+    ig = m.map_instagram_post({"ig_media_id": "M1", "is_reel": True, "reach": 500,
+                               "saves_count": 10, "engagement_rate": 7.5, "hook_text": "Watch"})
+    check("ig external_id=ig_media_id", ig["external_id"] == "M1")
+    check("ig is_reel bool", ig["is_reel"] is True)
+    check("ig reach", ig["reach"] == 500)
+    check("ig missing media id → None", m.map_instagram_post({"reach": 1}) is None)
+
+    # insight_tag: keeps WGR int id; tag required
+    it = m.map_insight_tag({"id": 7, "insight_id": "INS_1", "tag": " pain "})
+    check("tag id kept", it["id"] == 7)
+    check("tag trimmed", it["tag"] == "pain")
+    check("tag blank → None", m.map_insight_tag({"id": 8, "tag": "  "}) is None)
+
+
 def main() -> int:
     for fn in (
         test_normalize_phone, test_test_call_filter, test_map_lead,
         test_map_appointment_status, test_map_insight, test_map_content_idea,
         test_map_market_signal, test_map_sales_rep, test_map_closed_sale_and_activity,
-        test_map_webinar_and_optin,
+        test_map_webinar_and_optin, test_map_marketing_social,
     ):
         print(f"\n{fn.__name__}:")
         fn()

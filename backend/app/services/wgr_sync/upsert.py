@@ -29,8 +29,12 @@ from sqlalchemy import insert, inspect, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.marketing import OptInEvent, WebinarEngagement
-from app.models.intelligence import BusinessProfile, MarketSignal, Offer
+from app.models.marketing import (
+    EmailCampaign, InstagramPost, OptInEvent, SocialComment, WebinarEngagement,
+)
+from app.models.intelligence import (
+    BusinessProfile, InsightTag, MarketSignal, Offer, TagDictionary,
+)
 from app.models.operational import Appointment, ContentIdea, Insight, Lead, Call
 from app.models.sales import (
     CallScore, ClosedSale, CoachingStrike, EodReport, SalesActivity, SalesRep,
@@ -354,6 +358,39 @@ async def sync_strike_evidence(session: AsyncSession, *, since: Optional[str] = 
     return total
 
 
+async def sync_insight_tags(session: AsyncSession, *, since: Optional[str] = None) -> int:
+    """Sync insight_tags after insights + tag_dictionary. Nulls orphan insight_ids.
+
+    insight_id → insights.id is nullable: ~51 WGR tags point at insights CI didn't
+    sync, so we keep the tag and null the dangling link (orphan-tolerant), same as
+    strike evidence. tag → tag_dictionary.tag is satisfied by _seed_tag_dictionary."""
+    total = 0
+    nulled = 0
+    batch: list[dict[str, Any]] = []
+
+    async def flush(maps: list[dict[str, Any]]) -> int:
+        nonlocal nulled
+        if not maps:
+            return 0
+        n = await _null_orphan_fks(session, maps, [("insight_id", Insight.id)])
+        nulled += sum(n.values())
+        written = await _on_conflict_upsert(session, InsightTag, "id", maps)
+        await session.commit()
+        return written
+
+    for raw in reader.read_table("insight_tags", since=since):
+        mapped = mapping.map_insight_tag(raw)
+        if mapped is None:
+            continue
+        batch.append(mapped)
+        if len(batch) >= BATCH:
+            total += await flush(batch)
+            batch = []
+    total += await flush(batch)
+    logger.info("wgr_sync insight_tags: upserted %d (nulled %d orphan insight_ids)", total, nulled)
+    return total
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator — runs all tables in dependency order. Returns per-table counts.
 # ---------------------------------------------------------------------------
@@ -377,7 +414,94 @@ _NATIVE_PLAN: list[tuple] = [
     ("sales_activities", SalesActivity, "activity_id", mapping.map_sales_activity),
     ("webinar_engagements", WebinarEngagement, "engagement_id", mapping.map_webinar_engagement),
     ("lead_opt_in_events", OptInEvent, "opt_in_event_id", mapping.map_opt_in_event),
+    # insight_tags handled by sync_insight_tags (FK-orphan resolution like evidence).
 ]
+
+# (source, external_id)-deduped marketing/social mirrors — UUID PK assigned by CI.
+_SOURCE_EXTERNAL_PLAN: list[tuple] = [
+    ("email_campaigns", EmailCampaign, mapping.map_email_campaign),
+    ("comment_events", SocialComment, mapping.map_social_comment),
+    ("instagram_posts", InstagramPost, mapping.map_instagram_post),
+]
+
+
+async def _sync_source_external(
+    session: AsyncSession, *, wgr_table: str, model,
+    map_fn: Callable[[dict], Optional[dict]], since: Optional[str],
+) -> int:
+    """Sync a WGR table into a CI table deduped on (source='wgr', external_id).
+
+    Same shape as ``sync_leads``: select existing rows by external_id, bulk-insert
+    the new ones with a generated UUID, update the (rare) already-present ones."""
+    total = 0
+    batch: list[dict[str, Any]] = []
+
+    async def flush(maps: list[dict[str, Any]]) -> int:
+        if not maps:
+            return 0
+        maps = list({m["external_id"]: m for m in maps}.values())  # last wins
+        ext_ids = [m["external_id"] for m in maps]
+        existing = (await session.execute(
+            select(model.id, model.external_id).where(
+                model.source == mapping.WGR_SOURCE, model.external_id.in_(ext_ids),
+            )
+        )).all()
+        by_ext = {ext: rid for rid, ext in existing}
+        new_rows = [
+            {"id": uuid.uuid4(), **m} for m in maps if m["external_id"] not in by_ext
+        ]
+        if new_rows:
+            await session.execute(insert(model), new_rows)
+        for m in maps:
+            if m["external_id"] in by_ext:
+                await session.execute(
+                    update(model).where(model.id == by_ext[m["external_id"]]).values(**m)
+                )
+        await session.commit()
+        return len(maps)
+
+    for raw in reader.read_table(wgr_table, since=since):
+        mapped = map_fn(raw)
+        if mapped is None:
+            continue
+        batch.append(mapped)
+        if len(batch) >= BATCH:
+            total += await flush(batch)
+            batch = []
+    total += await flush(batch)
+    logger.info("wgr_sync %s → %s: upserted %d", wgr_table, model.__tablename__, total)
+    return total
+
+
+async def _seed_tag_dictionary(session: AsyncSession) -> int:
+    """Seed CI tag_dictionary from WGR's tags (insight_tags + any dict rows).
+
+    WGR's tag_dictionary is empty but insight_tags references hundreds of tags;
+    CI enforces the FK WGR doesn't. ON CONFLICT (tag) DO NOTHING keeps it
+    idempotent. Async mirror of bulk_load._load_tag_dictionary."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    tags: dict[str, dict] = {}
+    for r in reader.wgr_client.query(
+        "SELECT tag, tag_type, synonyms, notes FROM tag_dictionary WHERE tag IS NOT NULL"
+    ):
+        t = (r.get("tag") or "").strip()
+        if t:
+            tags[t] = {"tag": t, "tag_type": r.get("tag_type"),
+                       "synonyms": r.get("synonyms"), "notes": r.get("notes")}
+    for r in reader.wgr_client.query(
+        "SELECT DISTINCT tag FROM insight_tags WHERE tag IS NOT NULL"
+    ):
+        t = (r.get("tag") or "").strip()
+        if t and t not in tags:
+            tags[t] = {"tag": t, "tag_type": None, "synonyms": None, "notes": None}
+    if not tags:
+        return 0
+    stmt = pg_insert(TagDictionary.__table__).values(list(tags.values()))
+    stmt = stmt.on_conflict_do_nothing(index_elements=["tag"])
+    await session.execute(stmt)
+    await session.commit()
+    return len(tags)
 
 
 async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dict[str, int]:
@@ -386,6 +510,9 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
 
     # 1. leads first (appointments + sales reference CI lead UUIDs).
     counts["leads"] = await sync_leads(session, since=since)
+    # 1b. seed tag_dictionary so insight_tags' FK (tag → tag_dictionary.tag),
+    #     which WGR doesn't enforce, is satisfied before the native loop.
+    counts["tag_dictionary"] = await _seed_tag_dictionary(session)
     # 2. native-PK tables (business_profile/offers/reps/calls/insights/... first
     #    in the list so their children's FKs resolve).
     for wgr_table, model, pk_col, map_fn in _NATIVE_PLAN:
@@ -396,7 +523,14 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
     # 3. strike evidence (needs strikes + scores from the loop above) — resolves
     #    orphan FKs against what's actually in CI before inserting.
     counts["sales_strike_evidence"] = await sync_strike_evidence(session, since=since)
+    # 3b. insight_tags (needs insights from the native loop) — nulls orphan FKs.
+    counts["insight_tags"] = await sync_insight_tags(session, since=since)
     # 4. appointments (needs leads) + market_signals.
     counts["appointments"] = await sync_appointments(session, since=since)
     counts["market_signals"] = await sync_market_signals(session)
+    # 5. (source, external_id)-deduped marketing/social mirrors.
+    for wgr_table, model, map_fn in _SOURCE_EXTERNAL_PLAN:
+        counts[wgr_table] = await _sync_source_external(
+            session, wgr_table=wgr_table, model=model, map_fn=map_fn, since=since,
+        )
     return counts

@@ -461,6 +461,101 @@ def map_webinar_engagement(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 
 
+def map_email_campaign(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """WGR email_campaigns → CI EmailCampaign. Deduped on (source, external_id).
+
+    CI uses unique_opens/unique_clicks as the headline open/click counts (one per
+    recipient), keeping total_opens/clicks out — the dashboard reports unique."""
+    ext = _clean(row.get("campaign_id"))
+    if not ext:
+        return None
+    return {
+        "source": WGR_SOURCE,
+        "external_id": str(ext),
+        # name is NOT NULL in CI; fall back to the campaign id when WGR's is blank.
+        "name": _clean(row.get("campaign_name")) or str(ext),
+        "subject": _clean(row.get("subject_line")),
+        "campaign_type": _clean(row.get("email_type")),
+        # WGR has no draft/sent status; everything mirrored here was sent.
+        "status": "sent",
+        "sent_at": row.get("send_date"),
+        "recipients_count": row.get("total_sent") or 0,
+        "open_count": row.get("unique_opens") or 0,
+        "click_count": row.get("unique_clicks") or 0,
+        "unsubscribe_count": row.get("unsubscribes") or 0,
+        "bounce_count": row.get("bounces") or 0,
+        "open_rate": row.get("open_rate"),
+        "click_rate": row.get("click_rate"),
+        "body_html": _clean(row.get("body_copy")),
+    }
+
+
+def map_social_comment(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """WGR comment_events → CI SocialComment. Deduped on (source, external_id).
+
+    comment_text + post_id are NOT NULL in CI; WGR can leave both blank (a bare
+    keyword trigger with no post link), so skip rows with no usable text."""
+    ext = _clean(row.get("id"))
+    text = _clean(row.get("comment_text"))
+    if not ext or not text:
+        return None
+    return {
+        "source": WGR_SOURCE,
+        "external_id": str(ext),
+        "platform": _clean(row.get("platform")) or "unknown",
+        # post_id NOT NULL; fall back to the fb page when WGR has no post id.
+        "post_id": _clean(row.get("post_id")) or _clean(row.get("fb_page_id")) or "unknown",
+        # WGR comment_events carry no author name (GHL keyword triggers).
+        "author_name": None,
+        "comment_text": text,
+        "commented_at": row.get("occurred_at"),
+    }
+
+
+def map_instagram_post(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """WGR instagram_posts → CI InstagramPost. Deduped on (source, external_id)."""
+    ext = _clean(row.get("ig_media_id"))
+    if not ext:
+        return None
+    return {
+        "source": WGR_SOURCE,
+        "external_id": str(ext),
+        "ig_media_id": str(ext),
+        "permalink": _clean(row.get("permalink")),
+        "media_type": _clean(row.get("media_type")),
+        "is_reel": bool(row.get("is_reel", False)),
+        "caption": _clean(row.get("caption")),
+        "posted_at": row.get("posted_at"),
+        "likes_count": row.get("likes_count"),
+        "comments_count": row.get("comments_count"),
+        "saves_count": row.get("saves_count"),
+        "shares_count": row.get("shares_count"),
+        "reach": row.get("reach"),
+        "views": row.get("views"),
+        "avg_watch_time_sec": row.get("avg_watch_time_sec"),
+        "engagement_rate": row.get("engagement_rate"),
+        "content_pillar": _clean(row.get("content_pillar")),
+        "hook_text": _clean(row.get("hook_text")),
+        "hook_type": _clean(row.get("hook_type")),
+        "script_transcript": _clean(row.get("script_transcript")),
+    }
+
+
+def map_insight_tag(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """WGR insight_tags → CI InsightTag. Deduped on (insight_id, tag).
+
+    Keeps WGR's integer PK so re-runs are stable; FK to insights is nullable in
+    CI, so a tag whose insight wasn't synced still lands (orphan-tolerant)."""
+    tag = _clean(row.get("tag"))
+    if not tag:
+        return None
+    return {
+        "id": row.get("id"),
+        "insight_id": _clean(row.get("insight_id")),
+        "tag": tag,
+    }
+
+
 def map_opt_in_event(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     oid = _clean(row.get("opt_in_event_id"))
     if not oid or not _clean(row.get("lead_id")):
