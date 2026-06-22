@@ -100,6 +100,10 @@ async def _run(since_override: str | None) -> dict:
         try:
             counts = await upsert.sync_all(session, since=since)
         except Exception as exc:  # noqa: BLE001 — record the failure, then re-raise.
+            # The sync failure aborts the transaction; roll back before writing
+            # the error row, or the INSERT itself fails with
+            # InFailedSQLTransactionError and the real cause is never recorded.
+            await session.rollback()
             session.add(SyncLog(
                 id=uuid.uuid4(),
                 operation=SYNC_OPERATION,
@@ -150,4 +154,26 @@ def sync_wgr(since: str | None = None) -> dict:
         (datetime.now(timezone.utc) - started).total_seconds(),
         result["total"], len(result["counts"]), result["watermark"],
     )
-    return {"status": "ok", **result}
+
+    # Feed newly-synced rows into the RAG corpus (project RAG-everything policy):
+    # without this, synced WGR rows are queryable by SQL but invisible to chat —
+    # the vector store would freeze at the Phase 5 snapshot. We chain the two
+    # idempotent enqueue backfills rather than filter by a `since` window: these
+    # tables carry only `created_at` (preserved across upserts) and no
+    # `updated_at`, so a time filter would silently skip re-embedding rows whose
+    # content changed upstream. The backfills full-scan but `_enqueue_missing`
+    # dedups on content_hash, so only genuinely new/changed rows reach Voyage.
+    # Skip entirely when nothing synced — no new rows means nothing to embed.
+    enqueued = False
+    if result["total"] > 0:
+        # Lazy import — avoids a task-module import cycle at worker startup.
+        from app.tasks.embed_backfill import (
+            backfill_insights_embeddings,
+            backfill_wgr_embeddings,
+        )
+        backfill_wgr_embeddings.delay()
+        backfill_insights_embeddings.delay()
+        enqueued = True
+        logger.info("wgr_sync: enqueued WGR + insights embedding backfills")
+
+    return {"status": "ok", "embed_backfills_enqueued": enqueued, **result}
