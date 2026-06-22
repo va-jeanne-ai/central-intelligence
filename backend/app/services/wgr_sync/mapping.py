@@ -58,6 +58,39 @@ def _clean(v: Any) -> Any:
     return v
 
 
+def humanize_label(v: Any) -> Any:
+    """Title-Case a taxonomy value for display consistency.
+
+    Insight taxonomy fields arrive in mixed casing: most WGR values are already
+    Title Case ("Skills & Competency"), but some — notably ``pain_layer`` — are
+    lowercase ("structural"), and CI-analyzer rows can be snake_case
+    ("buying_signal"). Normalize the raw ones to Title Case; leave already-human
+    values (any with whitespace or an internal uppercase) untouched. Mirrors the
+    frontend ``humanizeLabel`` so stored and displayed values agree.
+    """
+    if not isinstance(v, str):
+        return v
+    t = v.strip()
+    if not t or " " in t or "\t" in t or any(ch.isupper() for ch in t[1:]):
+        return v
+    parts = [p for p in re.split(r"[_-]+", t) if p]
+    return " ".join(p[:1].upper() + p[1:] for p in parts)
+
+
+# Insight taxonomy fields normalized to Title Case on ingest (controlled
+# vocabularies). Free-text fields (signal, raw_quote, etc.) are left verbatim.
+_INSIGHT_TAXONOMY_FIELDS = frozenset(
+    {
+        "insight_type",
+        "signal_family",
+        "signal_strength",
+        "pain_layer",
+        "quote_confidence",
+        "best_use_case",
+    }
+)
+
+
 def is_test_call(call_id: Optional[str]) -> bool:
     """WGR has Greg's manual test rows (``TEST_T1_Alice`` etc.) that should not
     pollute CI's call corpus."""
@@ -166,7 +199,10 @@ def map_insight(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         return None
     out: dict[str, Any] = {"id": iid, "call_id": _clean(row.get("call_id"))}
     for f in _INSIGHT_FIELDS:
-        out[f] = _clean(row.get(f))
+        val = _clean(row.get(f))
+        # Normalize controlled-vocabulary fields to Title Case so the mirror is
+        # consistent (matches the frontend humanize + the CI analyzer prompt).
+        out[f] = humanize_label(val) if f in _INSIGHT_TAXONOMY_FIELDS else val
     fs = row.get("frequency_score")
     out["frequency_score"] = int(fs) if fs is not None else 0
     return out

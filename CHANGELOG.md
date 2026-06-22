@@ -7,6 +7,60 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — sortable/filterable calls table with a Date Added column
+
+The Sales Calls and All Calls pages were flat card lists with no way to sort, filter, or see when a call was ingested. Replaced both with a shared sortable table.
+
+- **Backend** (`backend/app/routes/ci.py`, `backend/app/schemas/ci.py`) — `GET /ci/calls` gains `sort_by` (whitelisted: date, created_at, call_type, call_result, call_owner, source) + `sort_dir`, plus `call_result`, `source`, and `search` (ILIKE on call_id/owner) filters. `created_at` ("Date Added") added to `CallSummary`. Sort column is whitelisted against injection with a stable `id` tiebreaker.
+- **Frontend** — new shared `CallsTable` (`frontend/src/components/calls/calls-table.tsx`): sortable headers (▲/▼/↕), a filter bar (search · type · result · source · call-date range · Clear), a **Date Added** column alongside Call Date, plus Owner / Insights / Source / transcript columns. All sorting and filtering is server-side.
+- **All Calls** (`frontend/.../calls/page.tsx`) — uses the table with the Type column + filter shown.
+- **Sales Calls** (`frontend/.../sales-calls/page.tsx`) — uses the table locked to `Sales,Discovery` (Type filter hidden), keeps the upload widget, and refetches via a `refreshKey` bump after a successful upload.
+
+### Fixed — inconsistent insight typography (snake_case / lowercase taxonomy values)
+
+Insight taxonomy values were stored in mixed casing, so some calls showed `buying_signal` / `value_clarity` / `structural` while others showed `Goal` / `Skills & Competency`. Two causes: the CI analyzer prompt emitted snake_case, and WGR stores `pain_layer` lowercase. Fixed at all three layers so stored, synced, and displayed values agree:
+
+- **Frontend** (`frontend/.../sales-calls/[call_id]/page.tsx`) — `humanizeLabel()` Title-Cases taxonomy values at render (insight_type, signal_family, signal_strength, pain_layer). Display-only via a new `displayTransform` prop on `InlineTextEdit` — the edit input still shows and saves the raw value. Already-human values (with spaces or internal caps) pass through untouched; free-text fields (signal, quotes) are never transformed.
+- **Analyzer prompts** (`backend/app/prompts/call_analyzer_v1.py`, `coaching_analyzer_v1.py`) — enum guidance + mock output rewritten to Title Case (`Pain`/`Goal`/`Trigger`, `Strong`/`Moderate`/`Weak`, `Verbatim`/`Near Verbatim`), aligning future CI analyses with WGR's vocabulary.
+- **WGR sync** (`backend/app/services/wgr_sync/mapping.py`) — new shared `humanize_label()` normalizes the 6 taxonomy fields on ingest (`_INSIGHT_TAXONOMY_FIELDS`), so re-syncs keep CI's mirror normalized rather than reverting `pain_layer` to lowercase.
+- **Backfill** (`backend/scripts/backfill_insight_taxonomy_case.py`) — one-time, idempotent normalization of **157 existing insight rows** (152 lowercase `pain_layer` + the 5-field CI-vocab call). Dry-run by default; `--yes` to apply. Touches CI's mirror only, never upstream WGR.
+
+### Added — CI analyzer now generates content ideas (closes Pipeline B gap)
+
+`analyze_call` extracted insights but never created content ideas — every content idea in CI came mirrored from the client's (WGR) pipeline, so re-analyzing a CI-native call produced insights but zero content. Closed the gap so a single analysis pass produces both.
+
+- **New prompt** (`backend/app/prompts/content_idea_generator_v1.py`) — a Claude Sonnet 4.6 "content strategist" that converts the just-extracted insights into 0–8 shootable briefs (16 fields each: hook, premise, teaching point, CTA, audience, format, platform, score…). Selects only *marketable* insights rather than mechanically converting all of them.
+- **Analyzer wiring** (`backend/app/tasks/call_analyzer.py`) — after writing insights, `analyze_call` feeds the persisted insights (with their new IDs) to `_call_claude_content_ideas` → `_write_content_ideas`. Content ideas link back to real insight rows; dangling `insight_id`s are NULLed (FK is SET NULL). Generation failure is non-fatal — the call is still analyzed with its insights. Re-analyze now clears this call's prior insights **and** content ideas before regenerating. Mock-mode path included for tests/no-key.
+
+### Added — provenance badge (WGR-synced vs CI-analyzed) on calls
+
+Calls and their insights/content ideas come from two pipelines — mirrored from the client's WGR DB (`source='wgr'`) or analyzed natively in CI — and the UI didn't distinguish them. Surfaced `Call.source`:
+
+- **Backend** — `source` added to `CallSummary` + `CallDetail` schemas and populated in the list/detail endpoints; `POST /ci/calls` now stamps `source='ci_upload'` on locally-uploaded calls.
+- **Frontend** — a **WGR** / **CI** tag on each row (Sales Calls + All Calls) and a full **WGR-synced** / **CI-analyzed** pill in the call-detail header, with tooltips explaining the difference.
+
+### Added — full content-idea briefs on the call detail page
+
+The call-detail page rendered each content idea as just `content_format · priority_level` (e.g. "Reel · High"), hiding the 17 other fields the analyzer generates — the actual brief (hook line, premise, teaching point, CTA, source quote, audience, repurpose options).
+
+- **Backend** (`backend/app/schemas/ci.py`, `backend/app/routes/ci.py`) — new `ContentIdeaDetail` schema (all 19 fields) + `_content_idea_detail()` helper; `GET /ci/calls/{id}` now embeds it instead of the 5-field `ContentIdeaBrief`. No DB change — every content_ideas column is already fully populated (234 rows).
+- **Frontend** (`frontend/.../sales-calls/[call_id]/page.tsx`) — new `ContentIdeaCard` renders each idea as an always-expanded shootable brief: the hook line gets a highlighted callout, then premise / teaching point / CTA / audience / repurpose / trigger insight in a two-column grid, with the sparking prospect quote underneath. Header shows format · platform · angle · priority · score · status.
+
+### Added — full insight analysis on the call detail page (expandable)
+
+The call-detail endpoint returned only a 4-field insight brief (`insight_type`, `signal_family`, `signal`, `raw_quote`), so the 16 deeper analysis fields per insight — the marketing/psychology gold — never reached the UI despite being in the DB.
+
+- **Backend** (`backend/app/routes/ci.py`, `backend/app/schemas/ci.py`) — `GET /ci/calls/{id}` now embeds the full `InsightDetail` payload (was `InsightBrief`). Extracted a shared `_insight_detail()` helper, also used by `GET /ci/insights/{id}`, so both surface the same complete shape. No DB/repository change — `find_by_call` already returned full ORM rows.
+- **Frontend** (`frontend/.../sales-calls/[call_id]/page.tsx`) — each insight now has a **Show analysis** toggle that expands a card grouping the deep fields into **Psychology** (real problem, emotional driver, core fear, false belief, structural obstacle, identity signal, pain layer) and **Marketing** (marketing translation, hook angle example, buying trigger, objection created, best use case). Empty fields are hidden; the 4 summary fields stay inline-editable. Signal strength now shows as a pill. Insight markup extracted into an `InsightRow` component.
+
+### Fixed — Sales Calls page showed no calls after WGR rebase; added All Calls page
+
+The `/sales-calls` page filtered for `call_type=Sales` (exact match), but every WGR-synced call is typed `Discovery` (81) or `Outbound` (77) — so the page rendered its empty state despite 158 processed calls in the DB.
+
+- **Backend** (`backend/app/routes/ci.py`) — `GET /ci/calls`'s `call_type` filter now accepts a comma-separated list (`Sales,Discovery`) via `IN (...)`. A single value still works as an exact match (backward compatible).
+- **Sales Calls** (`frontend/.../sales-calls/page.tsx`) — now requests `call_type=Sales,Discovery` → shows the **81** Discovery calls (plus any future `Sales` uploads). Outbound is intentionally excluded here.
+- **All Calls** (new `frontend/.../calls/page.tsx` + sidebar entry under Sales) — lists every call type with no filter (**158**), each row tagged with its `call_type` pill. Reuses the existing `/sales-calls/[call_id]` detail page.
+
 ### Added — surface social_comments: Recent Comments card + RAG embedding
 
 The 10,395 synced `social_comments` had no surface. Wired them up — but ~98% are bare GHL keyword triggers ("Info"/"Agent" typed to fire a DM funnel), so both surfaces keep only the **substantive** comments (real voice-of-customer).

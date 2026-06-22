@@ -9,10 +9,11 @@ Implements 13 REST endpoints for the CI subsystem plus two data sync bridges:
 import logging
 import math
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response
-from sqlalchemy import func, select
+from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -54,6 +55,7 @@ from app.schemas.ci import (
     CallListResponse,
     CallSummary,
     ContentIdeaBrief,
+    ContentIdeaDetail,
     ContentIdeaListResponse,
     ContentIdeaSummary,
     CreateCallFromTranscriptRequest,
@@ -239,38 +241,75 @@ async def process_transcript(
 # 3. GET /ci/calls
 # ===================================================================
 
+# Columns the calls table may sort by — whitelisted to prevent injection and to
+# keep the UI and API in lock-step. Maps the UI's sort key → Call column.
+_CALL_SORTABLE = {
+    "date": Call.date,
+    "created_at": Call.created_at,  # "Date Added" — when CI ingested the row
+    "call_type": Call.call_type,
+    "call_result": Call.call_result,
+    "call_owner": Call.call_owner,
+    "source": Call.source,
+}
+
+
 @router.get("/calls", response_model=CallListResponse)
 async def list_calls(
-    call_type: str | None = Query(None),
-    date_from: str | None = Query(None),
-    date_to: str | None = Query(None),
-    call_owner: str | None = Query(None),
+    call_type: str | None = Query(
+        None,
+        description="Filter by call_type. Accepts a single value or a comma-separated "
+        "list (e.g. 'Sales,Discovery'); matches any of the given types.",
+    ),
+    call_result: str | None = Query(None, description="Filter by exact call_result."),
+    call_owner: str | None = Query(None, description="Filter by exact call_owner."),
+    source: str | None = Query(None, description="Filter by provenance ('wgr' / 'ci_upload')."),
+    search: str | None = Query(None, description="Case-insensitive match on call_id or owner."),
+    date_from: str | None = Query(None, description="Call date >= (ISO)."),
+    date_to: str | None = Query(None, description="Call date <= (ISO)."),
+    sort_by: str = Query("date", description="Sort column (see _CALL_SORTABLE)."),
+    sort_dir: Literal["asc", "desc"] = Query("desc", description="Sort direction."),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ):
-    """List processed calls with filters (CI-MKT-01)."""
+    """List processed calls with filters + sort (CI-MKT-01)."""
     stmt = select(Call)
     count_stmt = select(func.count()).select_from(Call)
 
+    def _both(clause):
+        nonlocal stmt, count_stmt
+        stmt = stmt.where(clause)
+        count_stmt = count_stmt.where(clause)
+
     if call_type:
-        stmt = stmt.where(Call.call_type == call_type)
-        count_stmt = count_stmt.where(Call.call_type == call_type)
+        types = [t.strip() for t in call_type.split(",") if t.strip()]
+        if types:
+            _both(Call.call_type.in_(types))
+    if call_result:
+        _both(Call.call_result == call_result)
     if call_owner:
-        stmt = stmt.where(Call.call_owner == call_owner)
-        count_stmt = count_stmt.where(Call.call_owner == call_owner)
+        _both(Call.call_owner == call_owner)
+    if source:
+        _both(Call.source == source)
+    if search:
+        like = f"%{search.strip()}%"
+        _both(or_(Call.id.ilike(like), Call.call_owner.ilike(like)))
     if date_from:
-        dt_from = datetime.fromisoformat(date_from)
-        stmt = stmt.where(Call.date >= dt_from)
-        count_stmt = count_stmt.where(Call.date >= dt_from)
+        _both(Call.date >= datetime.fromisoformat(date_from))
     if date_to:
-        dt_to = datetime.fromisoformat(date_to)
-        stmt = stmt.where(Call.date <= dt_to)
-        count_stmt = count_stmt.where(Call.date <= dt_to)
+        _both(Call.date <= datetime.fromisoformat(date_to))
 
     total = (await session.execute(count_stmt)).scalar_one()
 
-    stmt = stmt.order_by(Call.date.desc().nullslast()).offset((page - 1) * limit).limit(limit)
+    # Resolve sort to a whitelisted column; fall back to date desc.
+    sort_col = _CALL_SORTABLE.get(sort_by, Call.date)
+    direction = asc if sort_dir == "asc" else desc
+    # Stable tiebreaker on id so equal-keyed rows paginate deterministically.
+    stmt = (
+        stmt.order_by(direction(sort_col).nullslast(), Call.id.asc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
     result = await session.execute(stmt)
     calls = result.scalars().all()
 
@@ -289,6 +328,8 @@ async def list_calls(
             transcript_quality=c.transcript_quality,
             processed_date=c.processed_date,
             insights_count=ins_count,
+            source=c.source,
+            created_at=c.created_at,
         ))
 
     return CallListResponse(data=data, pagination=_pagination(page, limit, total))
@@ -297,6 +338,65 @@ async def list_calls(
 # ===================================================================
 # 4. GET /ci/calls/:call_id
 # ===================================================================
+
+def _insight_detail(i: Insight) -> InsightDetail:
+    """Build the full InsightDetail payload from an Insight ORM row.
+
+    Shared by GET /ci/calls/{id} (embedded list) and GET /ci/insights/{id}
+    so both surface the complete analysis, not a truncated brief.
+    """
+    return InsightDetail(
+        insight_id=i.id,
+        call_id=i.call_id,
+        speaker_name=i.speaker_name,
+        insight_type=i.insight_type,
+        signal_family=i.signal_family,
+        signal=i.signal,
+        signal_strength=i.signal_strength,
+        pain_layer=i.pain_layer,
+        raw_quote=i.raw_quote,
+        what_they_say=i.what_they_say,
+        the_real_problem=i.the_real_problem,
+        emotional_driver=i.emotional_driver,
+        core_fear_revealed=i.core_fear_revealed,
+        false_belief_revealed=i.false_belief_revealed,
+        structural_obstacle=i.structural_obstacle,
+        identity_signal=i.identity_signal,
+        buying_trigger=i.buying_trigger,
+        objection_created=i.objection_created,
+        marketing_translation=i.marketing_translation,
+        hook_angle_example=i.hook_angle_example,
+        best_use_case=i.best_use_case,
+        quote_confidence=i.quote_confidence,
+        frequency_score=i.frequency_score,
+        created_at=i.created_at,
+    )
+
+
+def _content_idea_detail(ci: ContentIdea) -> ContentIdeaDetail:
+    """Build the full ContentIdeaDetail payload from a ContentIdea ORM row."""
+    return ContentIdeaDetail(
+        content_id=ci.id,
+        insight_id=ci.insight_id,
+        call_id=ci.call_id,
+        source=ci.source,
+        market_audience=ci.market_audience,
+        content_format=ci.content_format,
+        content_angle=ci.content_angle,
+        trigger_insight=ci.trigger_insight,
+        raw_quote=ci.raw_quote,
+        content_premise=ci.content_premise,
+        hook_opening_line=ci.hook_opening_line,
+        teaching_point=ci.teaching_point,
+        cta_idea=ci.cta_idea,
+        priority_level=ci.priority_level,
+        best_platform=ci.best_platform,
+        repurpose_opportunities=ci.repurpose_opportunities,
+        idea_score=ci.idea_score,
+        status=ci.status,
+        created_at=ci.created_at,
+    )
+
 
 @router.get("/calls/{call_id}", response_model=CallDetailResponse)
 async def get_call(
@@ -335,27 +435,10 @@ async def get_call(
             transcript=call.transcript_text,
             summary=call.summary,
             created_at=call.created_at,
+            source=call.source,
         ),
-        insights=[
-            InsightBrief(
-                insight_id=i.id,
-                insight_type=i.insight_type,
-                signal_family=i.signal_family,
-                signal=i.signal,
-                raw_quote=i.raw_quote,
-            )
-            for i in insights
-        ],
-        content_ideas=[
-            ContentIdeaBrief(
-                content_id=ci.id,
-                content_format=ci.content_format,
-                status=ci.status,
-                priority_level=ci.priority_level,
-                idea_score=ci.idea_score,
-            )
-            for ci in content_ideas
-        ],
+        insights=[_insight_detail(i) for i in insights],
+        content_ideas=[_content_idea_detail(ci) for ci in content_ideas],
     )
 
 
@@ -428,6 +511,7 @@ async def create_call_from_transcript(
         id=call_id,
         call_type=body.call_type or "sales_call",
         call_owner=body.call_owner,
+        source="ci_upload",  # provenance: analyzed in CI (vs 'wgr' mirror)
         transcript_source="manual_paste",
         transcript_text=text,
         processed_date=None,  # set when analyze_call finishes
@@ -555,6 +639,7 @@ async def update_call(
         transcript=call.transcript_text,
         summary=call.summary,
         created_at=call.created_at,
+        source=call.source,
     )
 
 
@@ -664,32 +749,7 @@ async def get_insight(
     content_ideas = ci_result.scalars().all()
 
     return InsightDetailResponse(
-        insight=InsightDetail(
-            insight_id=insight.id,
-            call_id=insight.call_id,
-            speaker_name=insight.speaker_name,
-            insight_type=insight.insight_type,
-            signal_family=insight.signal_family,
-            signal=insight.signal,
-            signal_strength=insight.signal_strength,
-            pain_layer=insight.pain_layer,
-            raw_quote=insight.raw_quote,
-            what_they_say=insight.what_they_say,
-            the_real_problem=insight.the_real_problem,
-            emotional_driver=insight.emotional_driver,
-            core_fear_revealed=insight.core_fear_revealed,
-            false_belief_revealed=insight.false_belief_revealed,
-            structural_obstacle=insight.structural_obstacle,
-            identity_signal=insight.identity_signal,
-            buying_trigger=insight.buying_trigger,
-            objection_created=insight.objection_created,
-            marketing_translation=insight.marketing_translation,
-            hook_angle_example=insight.hook_angle_example,
-            best_use_case=insight.best_use_case,
-            quote_confidence=insight.quote_confidence,
-            frequency_score=insight.frequency_score,
-            created_at=insight.created_at,
-        ),
+        insight=_insight_detail(insight),
         tags=tags,
         related_content_ideas=[
             ContentIdeaBrief(
