@@ -99,6 +99,9 @@ def map_lead(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         # WGR pipeline_stage is ~94% null and unreliable; leave CI status unset
         # rather than import a misleading funnel field (analysis doc finding).
         "status": _clean(row.get("pipeline_stage")),
+        # When the lead entered the funnel upstream. Surfaced as the lead's date
+        # in the UI (created_at is sync time, not entry time). Often null in WGR.
+        "entry_date": row.get("entry_date"),
         "notes": _clean(row.get("notes")),
     }
 

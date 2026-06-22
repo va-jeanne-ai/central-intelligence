@@ -176,6 +176,8 @@ class LeadDetailResponse(BaseModel):
     source: str | None = None
     score: int = 0
     external_id: str | None = None
+    # When the lead entered the funnel upstream (WGR). May be null.
+    entry_date: str | None = None
     created_at: str | None = None
     notes_raw: str | None = None
     calls: list[LeadCallSummary] = Field(default_factory=list)

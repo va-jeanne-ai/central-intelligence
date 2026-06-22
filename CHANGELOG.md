@@ -6,6 +6,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — clickable column sorting on the leads table
+
+The leads table headers were static text; the backend already supported `sort_by`/`sort_dir` but nothing drove it. Headers are now click-to-sort.
+
+- `frontend/src/app/(app)/leads/page.tsx` — new `SortableHeader` component with an active ▲/▼ indicator (idle ↕); `sortBy`/`sortDir` state (defaults `entry_date` desc, matching the API). Clicking a column flips direction; a new column starts desc. Wired into the fetch as `sort_by`/`sort_dir` + effect deps. Name → `name`, Source → `source`, Date Added → `entry_date`, Status → `status`. **Score** stays a plain header (no DB column — it's derived from status, which the Status sort already orders by).
+- `backend/app/routes/leads.py` — list `ORDER BY` now appends `NULLS LAST, id ASC` so null entry-dates don't dominate the top when sorting desc, and pagination is deterministic on ties.
+- Verified live: all four sort columns run in both directions. Note: sorting by Source is a visual no-op — every WGR lead is `source='wgr'` in CI (the original platform lives in utm/notes), so there's nothing to reorder.
+
+### Added — entry-date range filter on the leads table
+
+The `/leads` toolbar had a dead "Date range..." free-text input that was collected into state but never sent to the API. Replaced it with a real entry-date range filter, wired end-to-end on the now-persisted `entry_date`.
+
+- `frontend/src/app/(app)/leads/page.tsx` — `FilterBar` now renders two `<input type="date">` pickers ("Entered" from–to) with min/max cross-bounding; page state `dateRange` → `entryFrom`/`entryTo`, both sent as `entry_from`/`entry_to` query params and added to the fetch effect deps + clear-filters reset.
+- `backend/app/routes/leads.py` — `list_leads` accepts `entry_from`/`entry_to` (YYYY-MM-DD), filtering on `entry_date`. New `_parse_date` helper swallows invalid/half-typed dates (degrades to no-filter rather than 422). Verified live: 2026-06 range → 511 leads, since-2025 → 9,372, pre-2021 → 29.
+
+### Fixed — /leads crash on null source/status + persist WGR entry_date
+
+Two issues surfaced once real WGR leads (the ~11.6k backfilled rows) flowed into the UI.
+
+- **Fix — `/leads` crash (`Cannot read properties of null (reading 'split')`):** WGR stores most leads with a null `pipeline_stage` (94%) and null source (85%); CI's `Lead` type wrongly assumes these are never null. `resolveStatus(null)`/`resolveSource(null)` fell through to `_humanise(null)` → `null.split()`. `frontend/src/app/(app)/leads/page.tsx`: `_humanise` now returns `"Unknown"` for null/empty, and both resolvers skip the config lookup when `raw` is falsy and accept `string | null | undefined`. The lead-detail page already guarded this.
+- **Added — persist `entry_date`:** the list showed `created_at` (CI sync time), not when the lead actually entered the funnel — so most leads displayed the sync date. WGR carries a real `entry_date` per lead that the Phase 4 sync dropped. Now persisted end-to-end:
+  - `backend/app/models/operational.py` — new `Lead.entry_date` (Date, nullable, indexed). Migration `n5e6f7a8b9c0` (hand-written; autogenerate emits spurious index drops on this project).
+  - `backend/app/services/wgr_sync/mapping.py` — `map_lead` now carries `entry_date`, so the hourly sync populates it going forward.
+  - `backend/app/routes/leads.py` — list + update responses serve `entry_date or created_at` as the lead's `createdAt`; `entry_date` added to `_SORTABLE_COLUMNS`. Detail response adds a dedicated `entry_date` field; the detail page shows an "Entered" row above "Created".
+  - `backend/scripts/backfill_lead_entry_date.py` (new) — one-shot, idempotent, pooler-safe psycopg2 backfill (`--dry-run` / `--yes`) that updates WGR-sourced CI leads from WGR. **Run live:** 11,592 of 11,599 WGR leads populated (7 have no upstream date); entry dates span 2019→2026.
+  - `backend/tests/test_wgr_mapping.py` — added entry_date checks; all mapping checks still pass.
+
 ### Added/Fixed — WGR sync feeds RAG + first end-to-end run fixes (Phase 7)
 
 Running the now-enabled hourly sync against live data for the first time surfaced three blockers (the sync had never executed past the backfill). This wires synced rows into the RAG corpus and fixes the bugs that aborted every run.

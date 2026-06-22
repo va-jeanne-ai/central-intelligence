@@ -32,7 +32,7 @@ Column reference — leads table
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -108,7 +108,7 @@ _STATUS_SCORE: dict[str, int] = {
 
 # Columns that are safe to use in ORDER BY (whitelist to prevent injection).
 _SORTABLE_COLUMNS: frozenset[str] = frozenset(
-    {"created_at", "name", "email", "status", "source"}
+    {"created_at", "entry_date", "name", "email", "status", "source"}
 )
 
 # Allowed sort directions.
@@ -134,6 +134,19 @@ def _float(value: object) -> float:
         return float(value) if value is not None else 0.0
     except (TypeError, ValueError):
         return 0.0
+
+
+def _parse_date(value: str | None) -> date | None:
+    """Parse a YYYY-MM-DD string to a date; return None for empty/invalid input.
+
+    Invalid dates are swallowed (not raised) so a half-typed date-range filter
+    degrades to "no filter" rather than 422-ing the whole list request."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except (TypeError, ValueError):
+        return None
 
 
 def _map_status(db_status: str | None) -> str | None:
@@ -197,6 +210,12 @@ async def list_leads(
     status: str | None = Query(default=None, description="Filter by API status"),
     source: str | None = Query(default=None, description="Filter by source"),
     search: str | None = Query(default=None, description="Search name or email"),
+    entry_from: str | None = Query(
+        default=None, description="Filter: entry_date on/after this date (YYYY-MM-DD)"
+    ),
+    entry_to: str | None = Query(
+        default=None, description="Filter: entry_date on/before this date (YYYY-MM-DD)"
+    ),
     page: int = Query(default=1, ge=1, description="Page number (1-based)"),
     per_page: int = Query(default=50, ge=1, le=200, description="Results per page"),
     sort_by: str = Query(default="created_at", description="Column to sort by"),
@@ -242,6 +261,17 @@ async def list_leads(
         )
         params["search_pattern"] = f"%{search.lower()}%"
 
+    # Date-range filter on the upstream funnel-entry date. Invalid dates are
+    # ignored rather than erroring, so a half-typed range never breaks the list.
+    entry_lo = _parse_date(entry_from)
+    if entry_lo is not None:
+        where_parts.append("entry_date >= :entry_from")
+        params["entry_from"] = entry_lo
+    entry_hi = _parse_date(entry_to)
+    if entry_hi is not None:
+        where_parts.append("entry_date <= :entry_to")
+        params["entry_to"] = entry_hi
+
     where_sql = " AND ".join(where_parts)
 
     # ---- COUNT total matching rows ------------------------------------------
@@ -263,10 +293,11 @@ async def list_leads(
             phone,
             status,
             source,
+            entry_date,
             created_at
         FROM leads
         WHERE {where_sql}
-        ORDER BY {sort_by} {sort_dir}
+        ORDER BY {sort_by} {sort_dir} NULLS LAST, id ASC
         LIMIT :limit OFFSET :offset
         """  # noqa: S608
     )
@@ -275,9 +306,12 @@ async def list_leads(
     # ---- Map rows to response models ----------------------------------------
     leads: list[LeadRecord] = []
     for r in rows:
-        raw_id, name, email, phone, raw_status, source_val, created_at = r
+        raw_id, name, email, phone, raw_status, source_val, entry_date, created_at = r
         api_status = _map_status(raw_status)
         score = _score_for_status(api_status)
+        # The lead's date in the UI is the true funnel-entry date when known;
+        # fall back to created_at (sync time) for leads with no upstream date.
+        lead_date = entry_date or created_at
         leads.append(
             LeadRecord(
                 id=str(raw_id),
@@ -287,7 +321,7 @@ async def list_leads(
                 status=api_status,
                 source=source_val,
                 notes=None,
-                createdAt=created_at.isoformat() if created_at is not None else None,
+                createdAt=lead_date.isoformat() if lead_date is not None else None,
                 score=score,
             )
         )
@@ -375,7 +409,7 @@ async def get_lead_detail(
     lead_row = (await session.execute(
         text("""
             SELECT id::text AS id, name, email, phone, status, source,
-                   notes, external_id, created_at
+                   notes, external_id, entry_date, created_at
             FROM leads
             WHERE id = :id AND deleted_at IS NULL
         """),
@@ -468,6 +502,7 @@ async def get_lead_detail(
         source=lead_row["source"],
         score=score,
         external_id=lead_row["external_id"],
+        entry_date=lead_row["entry_date"].isoformat() if lead_row["entry_date"] else None,
         created_at=lead_row["created_at"].isoformat() if lead_row["created_at"] else None,
         notes_raw=lead_row["notes"],
         calls=[
@@ -1142,7 +1177,8 @@ async def update_lead(
         UPDATE leads
         SET {', '.join(set_parts)}
         WHERE id = :id AND deleted_at IS NULL
-        RETURNING id::text AS id, name, email, phone, status, source, created_at
+        RETURNING id::text AS id, name, email, phone, status, source,
+                  entry_date, created_at
     """  # noqa: S608 — set_parts is whitelisted above
 
     row = (await session.execute(text(sql), params)).mappings().one_or_none()
@@ -1238,7 +1274,9 @@ async def update_lead(
         status=api_status or "new",
         source=row["source"] or "other",
         score=score,
-        createdAt=row["created_at"].isoformat() if row["created_at"] else "",
+        createdAt=(row["entry_date"] or row["created_at"]).isoformat()
+        if (row["entry_date"] or row["created_at"])
+        else "",
         notes=None,
     )
 
