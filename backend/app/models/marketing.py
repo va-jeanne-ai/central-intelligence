@@ -66,6 +66,74 @@ class SocialComment(Base, TimestampMixin):
     )
     sentiment: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    # Provenance — which integration/source produced this comment ("wgr" for the
+    # WGR comment_events mirror). external_id is the upstream row id; the WGR
+    # sync dedups on (source, external_id) so re-runs update rather than dup.
+    source: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source", "external_id", name="uq_social_comments_source_external_id"
+        ),
+    )
+
+
+class InstagramPost(Base, TimestampMixin):
+    """Per-post Instagram performance, mirrored from WGR ``instagram_posts``.
+
+    Distinct grain from ``SocialStats`` (per-platform/per-period aggregate):
+    this is one row per published post, with engagement + reach + reel metrics
+    and the creative context (hook, pillar, transcript) WGR enriches. Read-only
+    in CI — written only by the WGR sync, deduped on (source, external_id) where
+    external_id is the upstream ``ig_media_id``.
+    """
+
+    __tablename__ = "instagram_posts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    source: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True
+    )
+
+    ig_media_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    permalink: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    media_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_reel: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+    posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+    # Engagement / reach metrics.
+    likes_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    comments_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    saves_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shares_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reach: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    views: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    avg_watch_time_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    engagement_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Creative context (WGR enrichment) — useful for content intelligence / RAG.
+    content_pillar: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    hook_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hook_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    script_transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source", "external_id", name="uq_instagram_posts_source_external_id"
+        ),
+    )
+
 
 class EmailCampaign(Base, TimestampMixin, SoftDeleteMixin):
     """Email campaign with performance metrics."""

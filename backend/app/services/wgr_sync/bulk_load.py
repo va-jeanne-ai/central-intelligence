@@ -138,6 +138,17 @@ _PLAN: list[tuple[str, str, Callable, tuple[str, ...]]] = [
     ("webinar_engagements", "webinar_engagements", mapping.map_webinar_engagement, ("engagement_id",)),
     ("lead_opt_in_events", "opt_in_events", mapping.map_opt_in_event, ("opt_in_event_id",)),
 ]
+# insight_tags is loaded separately (after seeding tag_dictionary to satisfy the
+# FK insight_tags.tag → tag_dictionary.tag, which WGR doesn't enforce).
+
+# CI tables deduped on a unique (source, external_id) — UUID PK assigned at
+# insert. Mirrored read-only from WGR; written only by the sync. The 4th element
+# is True when the unique index is PARTIAL (email_campaigns, pre-existing schema).
+_SOURCE_EXTERNAL_PLAN: list[tuple[str, str, Callable, bool]] = [
+    ("email_campaigns", "email_campaigns", mapping.map_email_campaign, True),
+    ("comment_events", "social_comments", mapping.map_social_comment, False),
+    ("instagram_posts", "instagram_posts", mapping.map_instagram_post, False),
+]
 
 
 def _conflict_clause_for(table: str, sample: dict, pk: tuple[str, ...]) -> str:
@@ -158,6 +169,13 @@ def run_backfill(since: Optional[str] = None) -> dict[str, int]:
         # 2. native-PK family.
         for wgr_table, ci_table, map_fn, pk in _PLAN:
             counts[ci_table] = _load_native(conn, wgr_table, ci_table, map_fn, pk, since)
+        # 2b. tag_dictionary (FK parent) then insight_tags (orphan-tolerant).
+        counts["tag_dictionary"] = _load_tag_dictionary(conn)
+        counts["insight_tags"] = _load_insight_tags(conn, since)
+        # 2c. (source, external_id)-deduped marketing/social mirrors.
+        for wgr_table, ci_table, map_fn, partial in _SOURCE_EXTERNAL_PLAN:
+            counts[ci_table] = _load_source_external(
+                conn, wgr_table, ci_table, map_fn, since, partial=partial)
         # 3. appointments (needs leads), market_signals.
         counts["appointments"] = _load_appointments(conn, since)
         counts["market_signals"] = _load_market_signals(conn)
@@ -254,6 +272,112 @@ def _load_leads(conn, since) -> int:
     return _load_table(conn, wgr_table="leads", ci_table="leads",
                        map_fn=mapping.map_lead, conflict_sql=conflict,
                        since=since, inject=inject, skip_fn=skip)
+
+
+def _load_source_external(conn, wgr_table, ci_table, map_fn, since, partial=False) -> int:
+    """Loader for CI tables deduped on a unique (source, external_id).
+
+    Mirrors WGR-sourced marketing/social tables (email_campaigns, social_comments,
+    instagram_posts) whose CI PK is a generated UUID — we assign the UUID on
+    insert and let ON CONFLICT update the existing row on re-run. ``partial=True``
+    for tables whose unique index is PARTIAL (email_campaigns, like leads): the
+    ON CONFLICT must repeat the index's WHERE predicate to match it."""
+    first: dict | None = None
+    for raw in reader.read_table(wgr_table, since=since):
+        m = map_fn(raw)
+        if m is not None:
+            first = m
+            break
+    if first is None:
+        logger.info("bulk_load %s: no rows", wgr_table)
+        return 0
+
+    def inject(m: dict) -> None:
+        m["id"] = str(uuid.uuid4())
+
+    cols = list(first.keys())  # source/external_id + mapped fields (no id yet)
+    where = (" WHERE source IS NOT NULL AND external_id IS NOT NULL" if partial else "")
+    conflict = (f"ON CONFLICT (source, external_id){where} DO UPDATE SET "
+                + _excl(cols, ("source", "external_id")))
+    return _load_table(conn, wgr_table=wgr_table, ci_table=ci_table,
+                       map_fn=map_fn, conflict_sql=conflict,
+                       since=since, inject=inject)
+
+
+def _load_tag_dictionary(conn) -> int:
+    """Seed CI ``tag_dictionary`` from WGR's tags before loading insight_tags.
+
+    CI enforces an FK ``insight_tags.tag → tag_dictionary.tag`` that WGR does
+    not — WGR's ``tag_dictionary`` is empty while ``insight_tags`` references
+    hundreds of tags. We derive the dictionary from the distinct tags actually
+    used (union'd with any rows WGR does have), so the FK is satisfied. Idempotent
+    via ON CONFLICT (tag) DO NOTHING."""
+    # Prefer WGR's own dictionary rows (carry tag_type/synonyms/notes); fall back
+    # to bare distinct tags from insight_tags for the rest.
+    rows: dict[str, dict] = {}
+    for r in reader.wgr_client.query(
+        "SELECT tag, tag_type, synonyms, notes FROM tag_dictionary WHERE tag IS NOT NULL"
+    ):
+        t = (r.get("tag") or "").strip()
+        if t:
+            rows[t] = {"tag": t, "tag_type": r.get("tag_type"),
+                       "synonyms": r.get("synonyms"), "notes": r.get("notes")}
+    for r in reader.wgr_client.query(
+        "SELECT DISTINCT tag FROM insight_tags WHERE tag IS NOT NULL"
+    ):
+        t = (r.get("tag") or "").strip()
+        if t and t not in rows:
+            rows[t] = {"tag": t, "tag_type": None, "synonyms": None, "notes": None}
+    if not rows:
+        return 0
+    values = [(d["tag"], d["tag_type"], d["synonyms"], d["notes"]) for d in rows.values()]
+    with conn.cursor() as cur:
+        execute_values(
+            cur,
+            "INSERT INTO tag_dictionary (tag, tag_type, synonyms, notes) VALUES %s "
+            "ON CONFLICT (tag) DO NOTHING",
+            values,
+            page_size=PAGE,
+        )
+    conn.commit()
+    logger.info("bulk_load tag_dictionary: seeded %d tags", len(values))
+    return len(values)
+
+
+def _load_insight_tags(conn, since) -> int:
+    """Load insight_tags after seeding tag_dictionary; null orphaned insight_ids.
+
+    51-ish WGR tags reference insights CI didn't sync (filtered / out of window).
+    insight_id is nullable in CI, so we keep the tag and null the dangling link
+    rather than dropping the row — same orphan-tolerant policy as sales evidence."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM insights")
+        ci_insight_ids = {r[0] for r in cur.fetchall()}
+
+    def inject(m: dict) -> None:
+        if m.get("insight_id") and m["insight_id"] not in ci_insight_ids:
+            m["insight_id"] = None
+
+    return _load_native_with_inject(
+        conn, "insight_tags", "insight_tags", mapping.map_insight_tag, ("id",),
+        since, inject,
+    )
+
+
+def _load_native_with_inject(conn, wgr_table, ci_table, map_fn, pk, since, inject) -> int:
+    """_load_native variant that runs an inject() on each mapped row."""
+    first: dict | None = None
+    for raw in reader.read_table(wgr_table, since=since):
+        m = map_fn(raw)
+        if m is not None:
+            first = m
+            break
+    if first is None:
+        logger.info("bulk_load %s: no rows", wgr_table)
+        return 0
+    conflict = _conflict_clause_for(ci_table, _remap(dict(first)), pk)
+    return _load_table(conn, wgr_table=wgr_table, ci_table=ci_table, map_fn=map_fn,
+                       conflict_sql=conflict, since=since, inject=inject)
 
 
 def _load_appointments(conn, since) -> int:
