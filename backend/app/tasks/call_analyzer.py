@@ -32,7 +32,7 @@ from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
-from app.models.operational import Call, Insight
+from app.models.operational import Call, ContentIdea, Insight
 from app.prompts.call_analyzer_v1 import (
     CALL_ANALYZER_SYSTEM_PROMPT_V1,
     MOCK_CALL_ANALYZER_OUTPUT,
@@ -42,6 +42,11 @@ from app.prompts.coaching_analyzer_v1 import (
     COACHING_ANALYZER_SYSTEM_PROMPT_V1,
     MOCK_COACHING_ANALYZER_OUTPUT,
     build_coaching_user_prompt,
+)
+from app.prompts.content_idea_generator_v1 import (
+    CONTENT_IDEA_GENERATOR_SYSTEM_PROMPT_V1,
+    MOCK_CONTENT_IDEA_OUTPUT,
+    build_content_idea_user_prompt,
 )
 from app.tasks.celery_app import celery_app
 
@@ -173,6 +178,52 @@ def _call_claude(transcript_text: str, call_type: str | None) -> tuple[str | Non
     return summary, insights
 
 
+def _call_claude_content_ideas(
+    insights: list[dict], call_type: str | None, summary: str | None
+) -> list[dict]:
+    """Turn extracted insights into content-idea dicts via Claude.
+
+    Mirrors ``_call_claude`` (same mock fallback + JSON extraction). Returns the
+    0–N list of content-idea dicts (each carrying ``insight_id`` linking it back
+    to its source insight). Returns ``[]`` when there are no insights to work
+    from.
+    """
+    if not insights:
+        return []
+
+    if not settings.anthropic_api_key or settings.mock_mode:
+        logger.warning(
+            "content_idea_generator: Anthropic API key missing or mock_mode=True — using mock output."
+        )
+        return json.loads(MOCK_CONTENT_IDEA_OUTPUT).get("content_ideas", [])
+
+    import anthropic  # lazy import — large module
+
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        # 16-field briefs × up to 8 ideas can run long; 8192 gives headroom.
+        max_tokens=8192,
+        system=CONTENT_IDEA_GENERATOR_SYSTEM_PROMPT_V1,
+        messages=[
+            {
+                "role": "user",
+                "content": build_content_idea_user_prompt(
+                    insights, call_type=call_type, summary=summary
+                ),
+            }
+        ],
+    )
+
+    raw_text = message.content[0].text
+    parsed = json.loads(_extract_json_object(raw_text))
+    ideas = parsed.get("content_ideas", [])
+    if not isinstance(ideas, list):
+        raise ValueError("Expected 'content_ideas' to be a list in Claude output.")
+    return ideas
+
+
 # ---------------------------------------------------------------------------
 # DB write
 # ---------------------------------------------------------------------------
@@ -205,13 +256,20 @@ _INSIGHT_FIELDS: tuple[str, ...] = (
 )
 
 
-def _write_insights(db: Session, call_id: str, insights: list[dict]) -> list[str]:
+def _write_insights(
+    db: Session, call_id: str, insights: list[dict]
+) -> tuple[list[str], list[dict]]:
     """Persist a list of insight dicts as Insight rows linked to ``call_id``.
 
     Each row gets a fresh ``id`` (``INS_xxxxxxxxxxxx``). Fields missing from
     Claude's output are coerced to None (the model columns are nullable).
+
+    Returns ``(inserted_ids, persisted)`` where ``persisted`` is each written
+    insight's fields plus its assigned ``insight_id`` — fed to the content-idea
+    generator so the briefs it produces link back to real insight rows.
     """
     inserted_ids: list[str] = []
+    persisted: list[dict] = []
     for raw in insights:
         if not isinstance(raw, dict):
             logger.warning("call_analyzer: skipping non-dict insight: %r", raw)
@@ -226,13 +284,77 @@ def _write_insights(db: Session, call_id: str, insights: list[dict]) -> list[str
             except (TypeError, ValueError):
                 kwargs["frequency_score"] = 1
 
-        insight = Insight(
-            id=f"INS_{uuid4().hex[:12].upper()}",
+        new_id = f"INS_{uuid4().hex[:12].upper()}"
+        insight = Insight(id=new_id, call_id=call_id, **kwargs)
+        db.add(insight)
+        inserted_ids.append(new_id)
+        persisted.append({"insight_id": new_id, **kwargs})
+
+    db.commit()
+    return inserted_ids, persisted
+
+
+# Claude content-idea field → ContentIdea column. Identity mapping, spelled out
+# so a prompt-schema typo fails loudly here rather than silently dropping data.
+_CONTENT_IDEA_FIELDS: tuple[str, ...] = (
+    "insight_id",
+    "source",
+    "market_audience",
+    "content_format",
+    "content_angle",
+    "trigger_insight",
+    "raw_quote",
+    "content_premise",
+    "hook_opening_line",
+    "teaching_point",
+    "cta_idea",
+    "priority_level",
+    "best_platform",
+    "repurpose_opportunities",
+    "idea_score",
+    "status",
+)
+
+
+def _write_content_ideas(
+    db: Session, call_id: str, ideas: list[dict], valid_insight_ids: set[str]
+) -> list[str]:
+    """Persist content-idea dicts as ContentIdea rows linked to ``call_id``.
+
+    Each row gets a fresh ``id`` (``CONT_xxxxxxxxxxxx``). ``insight_id`` is kept
+    only when it points at an insight we just wrote (else NULL — the FK is
+    ON DELETE SET NULL and Claude can hallucinate ids). ``idea_score`` is coerced
+    to float; ``status`` defaults to "Idea".
+    """
+    inserted_ids: list[str] = []
+    for raw in ideas:
+        if not isinstance(raw, dict):
+            logger.warning("content_idea_generator: skipping non-dict idea: %r", raw)
+            continue
+
+        kwargs = {field: raw.get(field) for field in _CONTENT_IDEA_FIELDS}
+
+        # Drop a dangling insight_id rather than violating the FK.
+        if kwargs.get("insight_id") not in valid_insight_ids:
+            kwargs["insight_id"] = None
+
+        score = kwargs.get("idea_score")
+        if score is not None and not isinstance(score, (int, float)):
+            try:
+                kwargs["idea_score"] = float(score)
+            except (TypeError, ValueError):
+                kwargs["idea_score"] = None
+
+        if not kwargs.get("status"):
+            kwargs["status"] = "Idea"
+
+        idea = ContentIdea(
+            id=f"CONT_{uuid4().hex[:12].upper()}",
             call_id=call_id,
             **kwargs,
         )
-        db.add(insight)
-        inserted_ids.append(insight.id)
+        db.add(idea)
+        inserted_ids.append(idea.id)
 
     db.commit()
     return inserted_ids
@@ -304,7 +426,9 @@ def analyze_call(self, call_id: str) -> dict:
                 "reason": "mock_transcript",
             }
 
-        # Run Claude
+        # Run Claude — insight extraction, then content-idea generation from
+        # those insights. Both are part of one analysis pass so "Re-analyze"
+        # regenerates the full downstream (insights + content ideas).
         try:
             summary, insights = _call_claude(transcript, call_type=call.call_type)
         except Exception as exc:
@@ -323,15 +447,40 @@ def analyze_call(self, call_id: str) -> dict:
                 )
                 raise
 
-        # Re-analyze cleanly: drop any prior insights for this call before
-        # writing the new batch. InsightTag rows cascade-delete with their
-        # parent Insight; ContentIdea.insight_id is SET NULL on delete, so
-        # downstream content ideas survive (just unlinked).
+        # Re-analyze cleanly: drop this call's prior insights AND content ideas
+        # before writing the new batch, so a regen doesn't leave stale rows.
+        # InsightTag rows cascade-delete with their parent Insight. Content ideas
+        # are scoped to this call_id (the unit being re-analyzed).
         deleted = db.execute(delete(Insight).where(Insight.call_id == call_id)).rowcount
         if deleted:
             logger.info("analyze_call: cleared %d prior insights for call_id=%s", deleted, call_id)
+        deleted_ci = db.execute(
+            delete(ContentIdea).where(ContentIdea.call_id == call_id)
+        ).rowcount
+        if deleted_ci:
+            logger.info(
+                "analyze_call: cleared %d prior content ideas for call_id=%s", deleted_ci, call_id
+            )
 
-        inserted_ids = _write_insights(db, call_id, insights)
+        inserted_ids, persisted_insights = _write_insights(db, call_id, insights)
+
+        # Generate content ideas from the just-written insights. Failure here is
+        # non-fatal — the call is still successfully analyzed with its insights;
+        # log and move on rather than retrying the whole task.
+        content_idea_ids: list[str] = []
+        try:
+            ideas = _call_claude_content_ideas(
+                persisted_insights, call_type=call.call_type, summary=summary
+            )
+            valid_ids = {i["insight_id"] for i in persisted_insights}
+            content_idea_ids = _write_content_ideas(db, call_id, ideas, valid_ids)
+        except Exception as exc:
+            logger.exception(
+                "analyze_call: content-idea generation failed (non-fatal) — "
+                "call_id=%s error=%s",
+                call_id,
+                exc,
+            )
 
         # Stamp the call as processed and overwrite the narrative summary.
         # summary is overwritten unconditionally on re-analyze (even to None)
@@ -344,16 +493,18 @@ def analyze_call(self, call_id: str) -> dict:
         is_mock = not settings.anthropic_api_key or settings.mock_mode
 
         logger.info(
-            "analyze_call completed — task_id=%s call_id=%s insights=%d mock=%s",
+            "analyze_call completed — task_id=%s call_id=%s insights=%d content_ideas=%d mock=%s",
             task_id,
             call_id,
             len(inserted_ids),
+            len(content_idea_ids),
             is_mock,
         )
 
         return {
             "call_id": call_id,
             "insights_written": len(inserted_ids),
+            "content_ideas_written": len(content_idea_ids),
             "insight_ids": inserted_ids,
             "status": "mock" if is_mock else "completed",
         }
