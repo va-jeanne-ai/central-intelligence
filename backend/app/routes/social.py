@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
-from app.repositories.marketing import SocialStatsRepository
+from app.repositories.marketing import InstagramPostRepository, SocialStatsRepository
 from app.services.integrations_registry import get_provider
 from app.schemas.social import (
     SocialAnalyzeRequest,
@@ -156,11 +156,33 @@ async def get_social_data(
             )
         )
 
+    # Recent Instagram posts (per-post WGR mirror) for the "Recent Posts" card.
+    ig_repo = InstagramPostRepository(session)
+    recent_posts = await ig_repo.find_recent(limit=12)
+    top_content = [
+        {
+            "id": str(p.id),
+            "platform": "instagram",
+            "caption": p.caption,
+            "permalink": p.permalink,
+            "media_type": p.media_type,
+            "is_reel": p.is_reel,
+            "posted_at": p.posted_at.isoformat() if p.posted_at else None,
+            "likes_count": p.likes_count,
+            "comments_count": p.comments_count,
+            "saves_count": p.saves_count,
+            "reach": p.reach,
+            "views": p.views,
+            "engagement_rate": p.engagement_rate,
+        }
+        for p in recent_posts
+    ]
+
     return SocialDataResponse(
         posts=totals["total_posts"],
         engagement=totals["avg_engagement"],
         followers=totals["total_followers"],
         by_platform=by_platform,
-        top_content=[],
+        top_content=top_content,
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
