@@ -7,6 +7,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Changed — `best_use_case` constrained to a disciplined, extensible vocabulary
+
+`best_use_case` on insights had sprawled to 240 distinct values across 303 rows (213 singletons) — slash-combos (`Instagram Reel / Email subject line` ×11, plus 3 other spellings) and full sentences (`Email nurture sequence for cold leads who are currently satisfied`). Cause: the analyzer prompts only *suggested* example values, so the model treated it as free text. The field is meant to drive downstream content-pipeline routing and in that state couldn't.
+
+Decision: a **seed vocabulary that stays disciplined but is open to growth** — prefer the list, coin a new value only when none fits, under a strict shape rule.
+
+- **Shared taxonomy module** (`backend/app/prompts/_taxonomy.py`, new) — single source of truth: `BEST_USE_CASE_SEED` (16 single-purpose values) + `normalize_best_use_case()` which enforces the *shape* rule (no slashes, ≤3 words) on write. Membership is not required — clean new single-purpose values pass; only sprawl-shaped values are coerced to null.
+- **Analyzer prompts** (`backend/app/prompts/call_analyzer_v1.py`, `coaching_analyzer_v1.py`) — `best_use_case` guidance rewritten from open "e.g." examples to "choose the single best from this list; only if none fits, coin ONE new value — Title Case, ≤3 words, single-purpose, no slashes, no sentences." Seed list injected from the shared module so prompt and validation can't drift.
+- **Write path** (`backend/app/tasks/call_analyzer.py`) — `_write_insights` runs `normalize_best_use_case()` on every persisted value, so the shape rule holds even if the model disobeys.
+- **Seed vocabulary** is now 18 values — `Brand Positioning` and `Lead Magnet` were promoted from the backfill below (clean values Opus coined when no seed fit).
+- **Backfill of existing rows** (`backend/scripts/remap_best_use_case.py`, new) — collapsed the 240 sprawled values to **17** via one batched Opus call over the distinct values (dry-run writes the proposed map to `.tmp/best_use_case_remap.json` for review; `--apply` reads the reviewed file and writes, no re-call). 290 rows updated, idempotent, CI mirror only. Result: 90 `Email Nurture`, 71 `Instagram Reel`, 43 `Instagram Post`, … — no slash-combos or sentences remain.
+
 ### Added — sortable/filterable calls table with a Date Added column
 
 The Sales Calls and All Calls pages were flat card lists with no way to sort, filter, or see when a call was ingested. Replaced both with a shared sortable table.

@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
 from app.models.operational import Call, ContentIdea, Insight
+from app.prompts._taxonomy import normalize_best_use_case
 from app.prompts.call_analyzer_v1 import (
     CALL_ANALYZER_SYSTEM_PROMPT_V1,
     MOCK_CALL_ANALYZER_OUTPUT,
@@ -283,6 +284,10 @@ def _write_insights(
                 kwargs["frequency_score"] = int(freq) if freq is not None else 1
             except (TypeError, ValueError):
                 kwargs["frequency_score"] = 1
+
+        # Enforce the best_use_case shape rule (no slash-combos / sentences) even
+        # if the model ignored the prompt. Clean new single-purpose values pass.
+        kwargs["best_use_case"] = normalize_best_use_case(kwargs.get("best_use_case"))
 
         new_id = f"INS_{uuid4().hex[:12].upper()}"
         insight = Insight(id=new_id, call_id=call_id, **kwargs)

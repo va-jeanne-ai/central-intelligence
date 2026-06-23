@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json
 
+from app.prompts._taxonomy import BEST_USE_CASE_SEED_LIST_STR
+
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
@@ -61,7 +63,7 @@ For each insight, produce a JSON object with **exactly** these fields. Fields ar
 - **objection_created** (string | null): Rare in coaching. Null unless a renewal/upsell objection surfaced.
 - **marketing_translation** (string): How this insight could inform content/marketing. For wins: a testimonial/case-study angle. For blocks: a content angle that speaks to that struggle. A strategic prompt for a copywriter, not a tagline.
 - **hook_angle_example** (string | null): A short example hook (≤15 words) inspired by this insight. Null if you can't write a strong one.
-- **best_use_case** (string | null): Where this insight is best used downstream, in Title Case. For wins: `Testimonial`, `Case Study`, `Social Proof`. For blocks: `Coaching Curriculum`, `Email Subject`, `Content Idea`. Null if uncertain.
+- **best_use_case** (string | null): Where this insight is best used downstream. Choose the single best value from this list: __BEST_USE_CASE_SEED__ (for wins, prefer `Testimonial` / `Case Study` / `Social Proof`; for blocks, `Coaching Curriculum` / `Email Subject` / `Content Idea`). Only if none genuinely fits may you coin ONE new value — Title Case, 3 words or fewer, single-purpose, NO slashes, NO sentences. Strongly prefer the list. Null only if no downstream use applies.
 - **quote_confidence** (string): One of `Verbatim`, `Near Verbatim`, `Paraphrased`. Be honest.
 - **frequency_score** (integer): Always `1` for a single-call extraction.
 
@@ -84,6 +86,12 @@ If the transcript is too short, too noisy, or too generic to yield real insights
 
 You are evaluated on: (a) capturing genuine WINS when present, (b) the specificity of `raw_quote`, (c) the depth of `the_real_problem` vs `what_they_say`, (d) the usefulness of `marketing_translation` (especially win → testimonial/case-study angles).
 """
+
+# Inject the shared best_use_case seed vocabulary (placeholder kept out of the
+# triple-quoted literal so the JSON braces below don't conflict with .format()).
+COACHING_ANALYZER_SYSTEM_PROMPT_V1 = COACHING_ANALYZER_SYSTEM_PROMPT_V1.replace(
+    "__BEST_USE_CASE_SEED__", BEST_USE_CASE_SEED_LIST_STR
+)
 
 # ---------------------------------------------------------------------------
 # User prompt builder
