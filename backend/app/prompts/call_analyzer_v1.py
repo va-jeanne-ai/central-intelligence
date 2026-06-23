@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import json
 
+from app.prompts._taxonomy import BEST_USE_CASE_SEED_LIST_STR
+
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
@@ -58,7 +60,7 @@ For each insight, you must produce a JSON object with **exactly** these fields. 
 - **objection_created** (string | null): If this insight creates or names a sales objection. "Price", "Time commitment", "Spouse approval". Null otherwise.
 - **marketing_translation** (string): How to translate this insight into marketing copy. NOT a tagline — a strategic prompt for a copywriter. "Lead with 90-day timeline framing; this segment fears slow programs more than expensive ones."
 - **hook_angle_example** (string | null): A short example hook (≤ 15 words) inspired by this insight. e.g. "What if 90 days is enough?" Null if you can't write a strong one.
-- **best_use_case** (string | null): Where this insight is best used downstream, in Title Case — e.g. `Email Subject`, `Ad Copy`, `Landing Page Hook`, `Sales Objection Handler`, `Coaching Curriculum`. Null if uncertain.
+- **best_use_case** (string | null): Where this insight is best used downstream. Choose the single best value from this list: __BEST_USE_CASE_SEED__. Only if none genuinely fits may you coin ONE new value — it MUST be Title Case, 3 words or fewer, single-purpose, with NO slashes and NO sentences (e.g. `Quiz Hook`, never `Email / Instagram reel`). Strongly prefer the list. Null only if no downstream use applies.
 - **quote_confidence** (string): One of `Verbatim`, `Near Verbatim`, `Paraphrased`. How close `raw_quote` is to literal transcript text. Be honest — if the transcript was unclear and you cleaned it up significantly, mark `Paraphrased`.
 - **frequency_score** (integer): Always `1` for a single-call extraction. Aggregation across calls is a separate step downstream.
 
@@ -92,6 +94,12 @@ Weak (skip):
 
 You are evaluated on: (a) the specificity of `raw_quote` (verbatim wins), (b) the depth and accuracy of `the_real_problem` vs `what_they_say` distinction, (c) the usefulness of `marketing_translation` for a downstream copywriter.
 """
+
+# Inject the shared best_use_case seed vocabulary (placeholder kept out of the
+# triple-quoted literal so the JSON braces below don't conflict with .format()).
+CALL_ANALYZER_SYSTEM_PROMPT_V1 = CALL_ANALYZER_SYSTEM_PROMPT_V1.replace(
+    "__BEST_USE_CASE_SEED__", BEST_USE_CASE_SEED_LIST_STR
+)
 
 # ---------------------------------------------------------------------------
 # User prompt builder
