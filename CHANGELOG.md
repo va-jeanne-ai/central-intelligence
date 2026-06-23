@@ -7,6 +7,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Fixed — WGR backfill silently dropped market_signals with orphan call FKs
+
+`market_signals.example_call_id` is a real FK to `calls` (ON DELETE SET NULL). WGR signals can reference a call CI filtered out (`TEST_`) or hasn't synced yet, so the ref is orphaned in CI. The async sync path (`upsert.sync_market_signals`) nulls orphan FKs before insert via `_null_orphan_fks`, but the **sync bulk-load path** (`bulk_load._load_market_signals`, used by the `scripts/backfill_wgr` CLI) had no equivalent — the FK violation aborted the whole `execute_values` batch and those rows never landed, silently.
+
+Surfaced during a post-backfill WGR↔CI sanity check: CI held 340 market_signals vs WGR's 348; all 8 missing rows referenced one orphan call (`CALL_LEADhphcQ5wt_20260623_…`).
+
+- **`backend/app/services/wgr_sync/bulk_load.py`** — `_load_market_signals` now pre-loads CI `calls.id` and nulls any orphan `example_call_id` via the `_load_table` `inject` hook, mirroring `_load_insight_tags`' orphan-tolerant policy. Backfill now lands all 348 (idempotent; re-run = 348, no error).
+
 ### Changed — `best_use_case` constrained to a disciplined, extensible vocabulary
 
 `best_use_case` on insights had sprawled to 240 distinct values across 303 rows (213 singletons) — slash-combos (`Instagram Reel / Email subject line` ×11, plus 3 other spellings) and full sentences (`Email nurture sequence for cold leads who are currently satisfied`). Cause: the analyzer prompts only *suggested* example values, so the model treated it as free text. The field is meant to drive downstream content-pipeline routing and in that state couldn't.
