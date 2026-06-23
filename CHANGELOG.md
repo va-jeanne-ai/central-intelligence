@@ -16,7 +16,8 @@ Decision: a **seed vocabulary that stays disciplined but is open to growth** —
 - **Shared taxonomy module** (`backend/app/prompts/_taxonomy.py`, new) — single source of truth: `BEST_USE_CASE_SEED` (16 single-purpose values) + `normalize_best_use_case()` which enforces the *shape* rule (no slashes, ≤3 words) on write. Membership is not required — clean new single-purpose values pass; only sprawl-shaped values are coerced to null.
 - **Analyzer prompts** (`backend/app/prompts/call_analyzer_v1.py`, `coaching_analyzer_v1.py`) — `best_use_case` guidance rewritten from open "e.g." examples to "choose the single best from this list; only if none fits, coin ONE new value — Title Case, ≤3 words, single-purpose, no slashes, no sentences." Seed list injected from the shared module so prompt and validation can't drift.
 - **Write path** (`backend/app/tasks/call_analyzer.py`) — `_write_insights` runs `normalize_best_use_case()` on every persisted value, so the shape rule holds even if the model disobeys.
-- **Backfill of the 240 existing values is a separate step** (LLM-assisted remap, paid API call) — not included in this change; see `plans/2026-06-24-best-use-case-enum.md`.
+- **Seed vocabulary** is now 18 values — `Brand Positioning` and `Lead Magnet` were promoted from the backfill below (clean values Opus coined when no seed fit).
+- **Backfill of existing rows** (`backend/scripts/remap_best_use_case.py`, new) — collapsed the 240 sprawled values to **17** via one batched Opus call over the distinct values (dry-run writes the proposed map to `.tmp/best_use_case_remap.json` for review; `--apply` reads the reviewed file and writes, no re-call). 290 rows updated, idempotent, CI mirror only. Result: 90 `Email Nurture`, 71 `Instagram Reel`, 43 `Instagram Post`, … — no slash-combos or sentences remain.
 
 ### Added — sortable/filterable calls table with a Date Added column
 

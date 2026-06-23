@@ -40,6 +40,10 @@ BEST_USE_CASE_SEED: tuple[str, ...] = (
     "Testimonial",
     "Case Study",
     "Social Proof",
+    # Promoted from the 2026-06-24 remap of existing rows (clean new values the
+    # model coined when no seed value fit; see plans/2026-06-24-best-use-case-enum.md).
+    "Brand Positioning",
+    "Lead Magnet",
 )
 
 # Rendered into the prompt field descriptions as a comma-separated list.

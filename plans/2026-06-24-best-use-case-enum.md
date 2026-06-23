@@ -2,7 +2,9 @@
 
 **Date:** 2026-06-24
 **Branch:** `feat/best-use-case-enum` (fresh off latest `main`)
-**Status:** Draft — awaiting approval
+**Status:** Implemented — all 5 steps done. Backfill collapsed 240 → 17 values
+(290 rows updated, idempotent) via one Opus call ($0.485). `Brand Positioning` +
+`Lead Magnet` promoted into the seed (now 18 values).
 
 ## Problem
 
