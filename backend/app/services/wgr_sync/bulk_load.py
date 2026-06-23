@@ -401,6 +401,17 @@ def _load_appointments(conn, since) -> int:
                        since=since, inject=inject)
 
 
+def _null_orphan_example_call_id(m: dict, ci_call_ids: set) -> None:
+    """Null a market_signal's example_call_id if it references a call not in CI.
+
+    Pure decision logic, extracted so it's unit-testable without a live DB.
+    WGR signals can reference a call CI filtered out (TEST_) or hasn't synced;
+    the FK to calls (ON DELETE SET NULL) would otherwise abort the insert batch.
+    """
+    if m.get("example_call_id") and m["example_call_id"] not in ci_call_ids:
+        m["example_call_id"] = None
+
+
 def _load_market_signals(conn) -> int:
     first = None
     for raw in reader.read_table("market_signals"):
@@ -421,8 +432,7 @@ def _load_market_signals(conn) -> int:
         ci_call_ids = {r[0] for r in cur.fetchall()}
 
     def inject(m: dict) -> None:
-        if m.get("example_call_id") and m["example_call_id"] not in ci_call_ids:
-            m["example_call_id"] = None
+        _null_orphan_example_call_id(m, ci_call_ids)
 
     conflict = ("ON CONFLICT (signal_family, signal) DO UPDATE SET "
                 + _excl(list(first.keys()), ("signal_family", "signal")))
