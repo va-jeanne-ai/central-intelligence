@@ -166,7 +166,7 @@ export interface CIInsight {
   insight_type: string;
   signal_family: string;
   signal: string;
-  signal_strength: "Strong" | "Moderate" | "Weak";
+  signal_strength: string;
   raw_quote: string;
   marketing_translation: string;
   hook_angle_example: string;
@@ -185,6 +185,14 @@ export interface CIInsightsResponse {
     hasNextPage: boolean;
     hasPreviousPage: boolean;
   };
+}
+
+/** Distinct filterable values present in the insights table — drives the
+ * insights-page filter dropdowns so options can't drift from the data. */
+export interface CIInsightFacets {
+  insight_type: string[];
+  signal_family: string[];
+  signal_strength: string[];
 }
 
 // ─── CI Market Signals ───────────────────────────────────────────────────────

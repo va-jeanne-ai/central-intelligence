@@ -1,26 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
-import type { CIInsight, CIInsightsResponse } from "@/types";
+import type { CIInsight, CIInsightsResponse, CIInsightFacets } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const INSIGHT_TYPES = [
-  "All",
-  "Pain",
-  "Goal",
-  "Objection",
-  "False Belief",
-  "Win",
-  "Breakthrough",
-  "Product Issue",
-  "Feature Request",
-] as const;
-
-const SIGNAL_STRENGTHS = ["All", "Strong", "Moderate", "Weak"] as const;
 
 const PAGE_LIMIT = 20;
 
@@ -72,82 +58,88 @@ interface FilterBarProps {
   insightType: string;
   signalFamily: string;
   signalStrength: string;
+  insightTypeOptions: string[];
+  signalFamilyOptions: string[];
+  signalStrengthOptions: string[];
   onInsightTypeChange: (v: string) => void;
   onSignalFamilyChange: (v: string) => void;
   onSignalStrengthChange: (v: string) => void;
+}
+
+/** A labelled facet dropdown whose options are derived from the data.
+ * The "All" sentinel clears the filter. */
+function FacetSelect({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label
+        htmlFor={id}
+        className="text-[10px] font-bold uppercase tracking-wider text-emerald-600"
+      >
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+      >
+        <option value="All">All</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }
 
 function FilterBar({
   insightType,
   signalFamily,
   signalStrength,
+  insightTypeOptions,
+  signalFamilyOptions,
+  signalStrengthOptions,
   onInsightTypeChange,
   onSignalFamilyChange,
   onSignalStrengthChange,
 }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
-      {/* Insight type dropdown */}
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="filter-insight-type"
-          className="text-[10px] font-bold uppercase tracking-wider text-emerald-600"
-        >
-          Insight Type
-        </label>
-        <select
-          id="filter-insight-type"
-          value={insightType}
-          onChange={(e) => onInsightTypeChange(e.target.value)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-        >
-          {INSIGHT_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Signal family text search */}
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="filter-signal-family"
-          className="text-[10px] font-bold uppercase tracking-wider text-emerald-600"
-        >
-          Signal Family
-        </label>
-        <input
-          id="filter-signal-family"
-          type="text"
-          value={signalFamily}
-          onChange={(e) => onSignalFamilyChange(e.target.value)}
-          placeholder="Search signal family…"
-          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent w-48"
-        />
-      </div>
-
-      {/* Signal strength dropdown */}
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="filter-signal-strength"
-          className="text-[10px] font-bold uppercase tracking-wider text-emerald-600"
-        >
-          Signal Strength
-        </label>
-        <select
-          id="filter-signal-strength"
-          value={signalStrength}
-          onChange={(e) => onSignalStrengthChange(e.target.value)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-        >
-          {SIGNAL_STRENGTHS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-      </div>
+      <FacetSelect
+        id="filter-insight-type"
+        label="Insight Type"
+        value={insightType}
+        options={insightTypeOptions}
+        onChange={onInsightTypeChange}
+      />
+      <FacetSelect
+        id="filter-signal-family"
+        label="Signal Family"
+        value={signalFamily}
+        options={signalFamilyOptions}
+        onChange={onSignalFamilyChange}
+      />
+      <FacetSelect
+        id="filter-signal-strength"
+        label="Signal Strength"
+        value={signalStrength}
+        options={signalStrengthOptions}
+        onChange={onSignalStrengthChange}
+      />
     </div>
   );
 }
@@ -298,40 +290,41 @@ export default function CIInsightsPage() {
     total: 0,
   });
 
-  // Filter state
+  // Filter state — "All" is the cleared sentinel for every facet.
   const [insightType, setInsightType] = useState("All");
-  const [signalFamily, setSignalFamily] = useState("");
+  const [signalFamily, setSignalFamily] = useState("All");
   const [signalStrength, setSignalStrength] = useState("All");
   const [page, setPage] = useState(1);
 
-  const fetchInsights = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set("page", String(page));
-      params.set("limit", String(PAGE_LIMIT));
-      if (insightType !== "All") params.set("insight_type", insightType);
-      if (signalFamily.trim()) params.set("signal_family", signalFamily.trim());
-      if (signalStrength !== "All") params.set("signal_strength", signalStrength);
+  // Facet options, derived from the data so they can't drift from it.
+  const [facets, setFacets] = useState<CIInsightFacets>({
+    insight_type: [],
+    signal_family: [],
+    signal_strength: [],
+  });
 
-      const data = await apiClient.get<CIInsightsResponse>(
-        `/ci/insights?${params.toString()}`,
-        { silent: true }
-      );
-      setInsights(data.data);
-      setPagination({
-        page: data.pagination.page,
-        totalPages: data.pagination.totalPages,
-        hasNextPage: data.pagination.hasNextPage,
-        hasPreviousPage: data.pagination.hasPreviousPage,
-        total: data.pagination.total,
-      });
-    } catch {
-      setInsights([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, insightType, signalFamily, signalStrength]);
+  // Fetch the available filter values once auth is ready. Silent — an
+  // empty facet set just leaves the dropdowns with only "All".
+  useEffect(() => {
+    if (authLoading) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const data = await apiClient.get<CIInsightFacets>(
+          "/ci/insights/facets",
+          { silent: true }
+        );
+        if (!cancelled) setFacets(data);
+      } catch {
+        /* leave facets empty — dropdowns still show "All" */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -344,7 +337,7 @@ export default function CIInsightsPage() {
         params.set("page", String(page));
         params.set("limit", String(PAGE_LIMIT));
         if (insightType !== "All") params.set("insight_type", insightType);
-        if (signalFamily.trim()) params.set("signal_family", signalFamily.trim());
+        if (signalFamily !== "All") params.set("signal_family", signalFamily);
         if (signalStrength !== "All") params.set("signal_strength", signalStrength);
 
         const data = await apiClient.get<CIInsightsResponse>(
@@ -387,9 +380,6 @@ export default function CIInsightsPage() {
     setPage(1);
   }
 
-  // Suppress unused warning — fetchInsights used as fallback ref
-  void fetchInsights;
-
   return (
     <>
       <Header title="CI Insights" />
@@ -421,6 +411,9 @@ export default function CIInsightsPage() {
               insightType={insightType}
               signalFamily={signalFamily}
               signalStrength={signalStrength}
+              insightTypeOptions={facets.insight_type}
+              signalFamilyOptions={facets.signal_family}
+              signalStrengthOptions={facets.signal_strength}
               onInsightTypeChange={handleInsightTypeChange}
               onSignalFamilyChange={handleSignalFamilyChange}
               onSignalStrengthChange={handleSignalStrengthChange}

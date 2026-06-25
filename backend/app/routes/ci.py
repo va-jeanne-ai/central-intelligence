@@ -64,6 +64,7 @@ from app.schemas.ci import (
     InsightBrief,
     InsightDetail,
     InsightDetailResponse,
+    InsightFacets,
     InsightListResponse,
     InsightSummary,
     MarketSignalItem,
@@ -714,6 +715,41 @@ async def list_insights(
             for i in insights
         ],
         pagination=_pagination(page, limit, total),
+    )
+
+
+# ===================================================================
+# 5b. GET /ci/insights/facets
+# ===================================================================
+# NOTE: declared before /insights/{insight_id} so the literal "facets"
+# path isn't swallowed by the dynamic insight_id route.
+
+@router.get("/insights/facets", response_model=InsightFacets)
+async def insight_facets(
+    session: AsyncSession = Depends(get_session),
+):
+    """Distinct filterable values present in the insights table.
+
+    Drives the insights-page filter dropdowns so the options can never
+    drift from the analyzer/WGR taxonomy. NULLs and blanks are excluded;
+    values are returned sorted.
+    """
+
+    async def _distinct(column) -> list[str]:
+        stmt = (
+            select(column)
+            .where(column.is_not(None))
+            .where(func.trim(column) != "")
+            .distinct()
+            .order_by(column.asc())
+        )
+        rows = (await session.execute(stmt)).scalars().all()
+        return [r for r in rows if r and r.strip()]
+
+    return InsightFacets(
+        insight_type=await _distinct(Insight.insight_type),
+        signal_family=await _distinct(Insight.signal_family),
+        signal_strength=await _distinct(Insight.signal_strength),
     )
 
 

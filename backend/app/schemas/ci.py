@@ -206,6 +206,18 @@ class InsightListResponse(BaseModel):
     pagination: PaginationMeta
 
 
+class InsightFacets(BaseModel):
+    """Distinct filterable values actually present in the insights table.
+
+    Drives the insights-page filter dropdowns so the available options can
+    never drift from the data the analyzer/WGR sync produce.
+    """
+
+    insight_type: list[str]
+    signal_family: list[str]
+    signal_strength: list[str]
+
+
 class InsightDetail(BaseModel):
     insight_id: str
     call_id: str | None = None
