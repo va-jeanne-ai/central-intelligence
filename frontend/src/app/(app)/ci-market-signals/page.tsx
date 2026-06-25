@@ -4,22 +4,13 @@ import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
-import type { CIMarketSignal, CIMarketSignalsResponse } from "@/types";
+import type {
+  CIMarketSignal,
+  CIMarketSignalsResponse,
+  CIMarketSignalFacets,
+} from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-// value = the raw insight_type stored on insights/market_signals (lowercase,
-// AI-coined); label = a human-friendly display. "All" is the no-filter sentinel.
-const INSIGHT_TYPES: { value: string; label: string }[] = [
-  { value: "All", label: "All" },
-  { value: "pain_point", label: "Pain Point" },
-  { value: "win", label: "Win" },
-  { value: "objection", label: "Objection" },
-  { value: "goal", label: "Goal" },
-  { value: "belief", label: "Belief" },
-  { value: "identity", label: "Identity" },
-  { value: "buying_signal", label: "Buying Signal" },
-];
 
 type SortBy = "total_mentions" | "last_30_days" | "last_7_days";
 
@@ -168,42 +159,83 @@ function SkeletonCard() {
 
 // ─── Filter bar ───────────────────────────────────────────────────────────────
 
+/** A labelled facet dropdown whose options are derived from the data.
+ * The "All" sentinel clears the filter. */
+function FacetSelect({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label
+        htmlFor={id}
+        className="text-[10px] font-bold uppercase tracking-wider text-emerald-600"
+      >
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+      >
+        <option value="All">All</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 interface FilterBarProps {
   insightType: string;
+  signalFamily: string;
   sortBy: SortBy;
+  insightTypeOptions: string[];
+  signalFamilyOptions: string[];
   onInsightTypeChange: (v: string) => void;
+  onSignalFamilyChange: (v: string) => void;
   onSortByChange: (v: SortBy) => void;
 }
 
 function FilterBar({
   insightType,
+  signalFamily,
   sortBy,
+  insightTypeOptions,
+  signalFamilyOptions,
   onInsightTypeChange,
+  onSignalFamilyChange,
   onSortByChange,
 }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
-      {/* Insight type dropdown */}
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="ms-filter-insight-type"
-          className="text-[10px] font-bold uppercase tracking-wider text-emerald-600"
-        >
-          Insight Type
-        </label>
-        <select
-          id="ms-filter-insight-type"
-          value={insightType}
-          onChange={(e) => onInsightTypeChange(e.target.value)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-        >
-          {INSIGHT_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <FacetSelect
+        id="ms-filter-insight-type"
+        label="Insight Type"
+        value={insightType}
+        options={insightTypeOptions}
+        onChange={onInsightTypeChange}
+      />
+      <FacetSelect
+        id="ms-filter-signal-family"
+        label="Signal Family"
+        value={signalFamily}
+        options={signalFamilyOptions}
+        onChange={onSignalFamilyChange}
+      />
 
       {/* Sort by dropdown */}
       <div className="flex flex-col gap-1">
@@ -257,7 +289,37 @@ export default function CIMarketSignalsPage() {
   const [signals, setSignals] = useState<CIMarketSignal[]>([]);
 
   const [insightType, setInsightType] = useState("All");
+  const [signalFamily, setSignalFamily] = useState("All");
   const [sortBy, setSortBy] = useState<SortBy>("total_mentions");
+
+  // Facet options, derived from the data so they can't drift from it.
+  const [facets, setFacets] = useState<CIMarketSignalFacets>({
+    insight_type: [],
+    signal_family: [],
+  });
+
+  // Fetch the available filter values once auth is ready. Silent — an
+  // empty facet set just leaves the dropdowns with only "All".
+  useEffect(() => {
+    if (authLoading) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const data = await apiClient.get<CIMarketSignalFacets>(
+          "/ci/market-signals/facets",
+          { silent: true }
+        );
+        if (!cancelled) setFacets(data);
+      } catch {
+        /* leave facets empty — dropdowns still show "All" */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -268,6 +330,7 @@ export default function CIMarketSignalsPage() {
       try {
         const params = new URLSearchParams();
         if (insightType !== "All") params.set("insight_type", insightType);
+        if (signalFamily !== "All") params.set("signal_family", signalFamily);
         params.set("sort_by", sortBy);
 
         const data = await apiClient.get<CIMarketSignalsResponse>(
@@ -287,7 +350,7 @@ export default function CIMarketSignalsPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, insightType, sortBy]);
+  }, [authLoading, insightType, signalFamily, sortBy]);
 
   return (
     <>
@@ -320,8 +383,12 @@ export default function CIMarketSignalsPage() {
             {/* Filter bar */}
             <FilterBar
               insightType={insightType}
+              signalFamily={signalFamily}
               sortBy={sortBy}
+              insightTypeOptions={facets.insight_type}
+              signalFamilyOptions={facets.signal_family}
               onInsightTypeChange={setInsightType}
+              onSignalFamilyChange={setSignalFamily}
               onSortByChange={setSortBy}
             />
 

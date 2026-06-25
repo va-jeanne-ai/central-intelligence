@@ -67,6 +67,7 @@ from app.schemas.ci import (
     InsightFacets,
     InsightListResponse,
     InsightSummary,
+    MarketSignalFacets,
     MarketSignalItem,
     MarketSignalListResponse,
     MonthlyPreferenceResponse,
@@ -1047,6 +1048,38 @@ async def list_market_signals(
             )
             for s in signals
         ]
+    )
+
+
+# ===================================================================
+# 9a. GET /ci/market-signals/facets
+# ===================================================================
+
+@router.get("/market-signals/facets", response_model=MarketSignalFacets)
+async def market_signal_facets(
+    session: AsyncSession = Depends(get_session),
+):
+    """Distinct filterable values present in the market_signals table.
+
+    Drives the market-signals page filter dropdowns so the options can
+    never drift from the aggregated data. NULLs and blanks are excluded;
+    values are returned sorted.
+    """
+
+    async def _distinct(column) -> list[str]:
+        stmt = (
+            select(column)
+            .where(column.is_not(None))
+            .where(func.trim(column) != "")
+            .distinct()
+            .order_by(column.asc())
+        )
+        rows = (await session.execute(stmt)).scalars().all()
+        return [r for r in rows if r and r.strip()]
+
+    return MarketSignalFacets(
+        insight_type=await _distinct(MarketSignal.insight_type),
+        signal_family=await _distinct(MarketSignal.signal_family),
     )
 
 

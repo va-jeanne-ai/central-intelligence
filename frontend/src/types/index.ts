@@ -212,6 +212,13 @@ export interface CIMarketSignalsResponse {
   data: CIMarketSignal[];
 }
 
+/** Distinct filterable values present in the market_signals table — drives
+ * the market-signals page filter dropdowns so options can't drift. */
+export interface CIMarketSignalFacets {
+  insight_type: string[];
+  signal_family: string[];
+}
+
 // ─── Ads ─────────────────────────────────────────────────────────────────────
 
 export interface AdsData {

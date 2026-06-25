@@ -367,6 +367,17 @@ class MarketSignalListResponse(BaseModel):
     data: list[MarketSignalItem]
 
 
+class MarketSignalFacets(BaseModel):
+    """Distinct filterable values present in the market_signals table.
+
+    Drives the market-signals page filter dropdowns so the available
+    options can never drift from the aggregated data.
+    """
+
+    insight_type: list[str]
+    signal_family: list[str]
+
+
 # ---------------------------------------------------------------------------
 # Tags
 # ---------------------------------------------------------------------------
