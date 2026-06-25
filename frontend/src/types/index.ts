@@ -219,6 +219,14 @@ export interface CIMarketSignalFacets {
   signal_family: string[];
 }
 
+/** Distinct filterable values present in the calls table — drives the
+ * calls-table filter dropdowns so options can't drift. `source` is a fixed
+ * provenance set and is not derived. */
+export interface CICallFacets {
+  call_type: string[];
+  call_result: string[];
+}
+
 // ─── Ads ─────────────────────────────────────────────────────────────────────
 
 export interface AdsData {

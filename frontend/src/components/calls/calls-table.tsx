@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { showError, showWarning } from "@/lib/toast";
+import type { CICallFacets } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,16 +92,6 @@ async function downloadTranscript(callId: string): Promise<void> {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-
-const CALL_TYPES = ["Discovery", "Sales", "Outbound"];
-const CALL_RESULTS = [
-  "Booked",
-  "Follow-up Scheduled",
-  "No Sale",
-  "No Show",
-  "Not Qualified",
-  "Pending",
-];
 
 // ─── Sortable header cell ───────────────────────────────────────────────────────
 
@@ -189,6 +180,12 @@ export function CallsTable({
   const [sortBy, setSortBy] = useState<SortColumn>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // Filter options, derived from the data so they can't drift from it.
+  const [facets, setFacets] = useState<CICallFacets>({
+    call_type: [],
+    call_result: [],
+  });
+
   const hasFilters =
     search !== "" ||
     typeFilter !== "all" ||
@@ -262,6 +259,28 @@ export function CallsTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, loadCalls, refreshKey]);
 
+  // Fetch the available filter values once auth is ready. Silent — an empty
+  // facet set just leaves the dropdowns with only their "All" option.
+  useEffect(() => {
+    if (authLoading) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const data = await apiClient.get<CICallFacets>("/ci/calls/facets", {
+          silent: true,
+        });
+        if (!cancelled) setFacets(data);
+      } catch {
+        /* leave facets empty — dropdowns still show "All" */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading]);
+
   const showTypeColumn = useMemo(() => !hideTypeFilter, [hideTypeFilter]);
 
   return (
@@ -299,7 +318,7 @@ export function CallsTable({
               className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
             >
               <option value="all">All Types</option>
-              {CALL_TYPES.map((t) => (
+              {facets.call_type.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
@@ -313,7 +332,7 @@ export function CallsTable({
             className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
           >
             <option value="all">All Results</option>
-            {CALL_RESULTS.map((r) => (
+            {facets.call_result.map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>

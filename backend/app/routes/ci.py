@@ -52,6 +52,7 @@ from app.schemas.ci import (
     AnalyzeCallResponse,
     CallDetail,
     CallDetailResponse,
+    CallFacets,
     CallListResponse,
     CallSummary,
     ContentIdeaBrief,
@@ -335,6 +336,41 @@ async def list_calls(
         ))
 
     return CallListResponse(data=data, pagination=_pagination(page, limit, total))
+
+
+# ===================================================================
+# 3b. GET /ci/calls/facets
+# ===================================================================
+# NOTE: declared before /calls/{call_id} so the literal "facets" path
+# isn't swallowed by the dynamic call_id route.
+
+@router.get("/calls/facets", response_model=CallFacets)
+async def call_facets(
+    session: AsyncSession = Depends(get_session),
+):
+    """Distinct filterable values present in the calls table.
+
+    Drives the calls-table filter dropdowns so the options can never drift
+    from the WGR sync / CI upload taxonomy. NULLs and blanks are excluded;
+    values are returned sorted. (`source` is a fixed provenance set —
+    'wgr' / 'ci_upload' — so it is not derived here.)
+    """
+
+    async def _distinct(column) -> list[str]:
+        stmt = (
+            select(column)
+            .where(column.is_not(None))
+            .where(func.trim(column) != "")
+            .distinct()
+            .order_by(column.asc())
+        )
+        rows = (await session.execute(stmt)).scalars().all()
+        return [r for r in rows if r and r.strip()]
+
+    return CallFacets(
+        call_type=await _distinct(Call.call_type),
+        call_result=await _distinct(Call.call_result),
+    )
 
 
 # ===================================================================

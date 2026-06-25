@@ -81,6 +81,17 @@ class CallListResponse(BaseModel):
     pagination: PaginationMeta
 
 
+class CallFacets(BaseModel):
+    """Distinct filterable values present in the calls table.
+
+    Drives the calls-table filter dropdowns so the available options can
+    never drift from the data the WGR sync / CI uploads produce.
+    """
+
+    call_type: list[str]
+    call_result: list[str]
+
+
 class CallDetail(BaseModel):
     call_id: str
     date: datetime | None = None
