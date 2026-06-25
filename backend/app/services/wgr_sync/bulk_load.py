@@ -401,6 +401,17 @@ def _load_appointments(conn, since) -> int:
                        since=since, inject=inject)
 
 
+def _null_orphan_example_call_id(m: dict, ci_call_ids: set) -> None:
+    """Null a market_signal's example_call_id if it references a call not in CI.
+
+    Pure decision logic, extracted so it's unit-testable without a live DB.
+    WGR signals can reference a call CI filtered out (TEST_) or hasn't synced;
+    the FK to calls (ON DELETE SET NULL) would otherwise abort the insert batch.
+    """
+    if m.get("example_call_id") and m["example_call_id"] not in ci_call_ids:
+        m["example_call_id"] = None
+
+
 def _load_market_signals(conn) -> int:
     first = None
     for raw in reader.read_table("market_signals"):
@@ -410,7 +421,21 @@ def _load_market_signals(conn) -> int:
             break
     if first is None:
         return 0
+
+    # example_call_id → calls is a real FK (ON DELETE SET NULL). WGR signals can
+    # reference a call CI filtered out (TEST_) or hasn't synced; left as-is the FK
+    # violation aborts the whole batch and silently drops those rows. Null the
+    # orphan ref before insert — same orphan-tolerant policy as the async path
+    # (upsert.sync_market_signals via _null_orphan_fks) and _load_insight_tags.
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM calls")
+        ci_call_ids = {r[0] for r in cur.fetchall()}
+
+    def inject(m: dict) -> None:
+        _null_orphan_example_call_id(m, ci_call_ids)
+
     conflict = ("ON CONFLICT (signal_family, signal) DO UPDATE SET "
                 + _excl(list(first.keys()), ("signal_family", "signal")))
     return _load_table(conn, wgr_table="market_signals", ci_table="market_signals",
-                       map_fn=mapping.map_market_signal, conflict_sql=conflict)
+                       map_fn=mapping.map_market_signal, conflict_sql=conflict,
+                       inject=inject)
