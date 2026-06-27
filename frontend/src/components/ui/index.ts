@@ -19,6 +19,7 @@ export { Card, CardHeader, CardBody } from "./card";
 export { FilterBar } from "./filter-bar";
 export { HistoryItem, HistoryList } from "./history-item";
 export { SuggestionPanel } from "./suggestion-panel";
+export { Pagination, PAGE_SIZE_OPTIONS, DEFAULT_PAGE_SIZE } from "./pagination";
 
 // ─── Existing ────────────────────────────────────────────────────────────────
 export { Skeleton } from "./skeleton";

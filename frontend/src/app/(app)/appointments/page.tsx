@@ -8,6 +8,8 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagination } from "@/hooks/use-pagination";
+import { Pagination } from "@/components/ui";
 import { showSuccess, showApiError } from "@/lib/toast";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -306,6 +308,10 @@ export default function AppointmentsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Pagination — page size persisted per surface in localStorage.
+  const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
+    usePagination("appointments");
+
   // Stats
   useEffect(() => {
     if (authLoading) return;
@@ -339,8 +345,8 @@ export default function AppointmentsPage() {
         if (statusFilter !== "all") params.set("status", statusFilter);
         if (windowFilter !== "all") params.set("window", windowFilter);
         if (search) params.set("search", search);
-        params.set("page", "1");
-        params.set("per_page", "50");
+        params.set("page", String(page));
+        params.set("per_page", String(pageSize));
         try {
           const data = await apiClient.get<AppointmentsListResponse>(`/appointments?${params.toString()}`, { silent: true });
           if (!cancelled) setListData(data);
@@ -361,7 +367,14 @@ export default function AppointmentsPage() {
       };
     }
     return doFetch();
-  }, [authLoading, statusFilter, windowFilter, search, refreshKey]);
+  }, [authLoading, statusFilter, windowFilter, search, refreshKey, page, pageSize]);
+
+  // When a filter/search narrows the set, jump back to page 1 so the user
+  // isn't stranded on a page that no longer exists.
+  useEffect(() => {
+    resetToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, windowFilter, search]);
 
   const kpiCards = [
     { label: "Total Appointments", value: String(kpis.total), sub: "All time" },
@@ -467,6 +480,16 @@ export default function AppointmentsPage() {
               )}
             </tbody>
           </table>
+
+          {!isLoading && listData.total > 0 && (
+            <Pagination
+              page={page}
+              total={listData.total}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          )}
         </div>
       </main>
 

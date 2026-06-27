@@ -347,6 +347,41 @@ export interface TestIntegrationResponse {
   details?: Record<string, unknown> | null;
 }
 
+// ─── Data freshness ───────────────────────────────────────────────────────
+
+export type FreshnessVerdict = "fresh" | "stale" | "unknown";
+
+export interface FreshnessSourceResult {
+  key: string;
+  label: string;
+  description: string;
+  interval_minutes: number;
+  last_run_at: string | null;
+  last_status: string | null;
+  age_minutes: number | null;
+  verdict: FreshnessVerdict;
+  detail: string;
+}
+
+export interface FreshnessResponse {
+  overall: FreshnessVerdict;
+  checked_at: string;
+  sources: FreshnessSourceResult[];
+}
+
+export interface SyncTriggerResponse {
+  queued: boolean;
+  task_id: string | null;
+  message: string;
+}
+
+export interface SyncStatusResponse {
+  task_id: string;
+  state: string; // PENDING | STARTED | SUCCESS | FAILURE | RETRY
+  running: boolean;
+  detail: string | null;
+}
+
 // ─── Calendar ─────────────────────────────────────────────────────────────
 
 export interface CalendarAttendee {

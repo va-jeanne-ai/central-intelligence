@@ -13,6 +13,8 @@ import type { GoalModalGoal } from "@/components/goals/goal-modal";
 import { GoalBoard } from "@/components/goals/goal-board";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagination } from "@/hooks/use-pagination";
+import { Pagination } from "@/components/ui";
 import { showSuccess, showApiError } from "@/lib/toast";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -123,6 +125,9 @@ export default function AccountabilityPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [view, setView] = useState<View>("table");
 
+  const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
+    usePagination("goals");
+
   // Restore the saved Table/Board preference once on mount.
   useEffect(() => {
     const saved = typeof window !== "undefined" ? window.localStorage.getItem("accountability_view") : null;
@@ -174,8 +179,15 @@ export default function AccountabilityPage() {
         if (statusFilter !== "all") params.set("status", statusFilter);
         if (overdueOnly) params.set("overdue", "true");
         if (search) params.set("search", search);
-        params.set("page", "1");
-        params.set("per_page", "100");
+        // The table is paginated; the board groups the full set into columns,
+        // so it fetches everything (capped at the backend's per_page max).
+        if (view === "table") {
+          params.set("page", String(page));
+          params.set("per_page", String(pageSize));
+        } else {
+          params.set("page", "1");
+          params.set("per_page", "200");
+        }
         try {
           const data = await apiClient.get<GoalsListResponse>(`/goals?${params.toString()}`, { silent: true });
           if (!cancelled) setListData(data);
@@ -196,7 +208,14 @@ export default function AccountabilityPage() {
       };
     }
     return doFetch();
-  }, [authLoading, statusFilter, overdueOnly, search, refreshKey]);
+  }, [authLoading, statusFilter, overdueOnly, search, refreshKey, view, page, pageSize]);
+
+  // When a filter/search narrows the set, jump back to page 1 so the user
+  // isn't stranded on a page that no longer exists.
+  useEffect(() => {
+    resetToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, overdueOnly, search]);
 
   async function completeGoal(id: string) {
     try {
@@ -415,6 +434,16 @@ export default function AccountabilityPage() {
                   )}
                 </tbody>
               </table>
+              )}
+
+              {view === "table" && !isLoading && listData.total > 0 && (
+                <Pagination
+                  page={page}
+                  total={listData.total}
+                  pageSize={pageSize}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
               )}
             </div>
           </div>

@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagination } from "@/hooks/use-pagination";
 import { showError, showWarning } from "@/lib/toast";
+import { Pagination } from "@/components/ui";
 import type { CICallFacets } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -168,6 +170,11 @@ export function CallsTable({
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Pagination — page size persisted per surface (Sales vs All Calls share the
+  // component but get distinct keys via lockedCallType).
+  const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
+    usePagination(`calls:${lockedCallType ?? "all"}`);
+
   // Filters
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -216,7 +223,8 @@ export function CallsTable({
     setIsLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set("limit", "100");
+      params.set("page", String(page));
+      params.set("limit", String(pageSize));
       params.set("sort_by", sortBy);
       params.set("sort_dir", sortDir);
       // Sales Calls locks the type set; otherwise honor the dropdown.
@@ -240,6 +248,25 @@ export function CallsTable({
     } finally {
       setIsLoading(false);
     }
+  }, [
+    lockedCallType,
+    typeFilter,
+    resultFilter,
+    sourceFilter,
+    search,
+    dateFrom,
+    dateTo,
+    sortBy,
+    sortDir,
+    page,
+    pageSize,
+  ]);
+
+  // When a filter/search/sort narrows the set, jump back to page 1 so the user
+  // isn't stranded on a page that no longer exists.
+  useEffect(() => {
+    resetToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     lockedCallType,
     typeFilter,
@@ -513,6 +540,16 @@ export function CallsTable({
               </tbody>
             </table>
           </div>
+        )}
+
+        {!isLoading && total > 0 && (
+          <Pagination
+            page={page}
+            total={total}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </div>
     </section>

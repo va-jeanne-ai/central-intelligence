@@ -7,6 +7,7 @@ import { Card, CardBody, StatusBadge } from "@/components/ui";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import type { IntegrationSummary } from "@/types";
+import { FreshnessPanel } from "./freshness-panel";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -125,6 +126,8 @@ export default function IntegrationsPage() {
 
         {!isLoading && !error && (
           <>
+            <FreshnessPanel />
+
             <section aria-labelledby="available-heading" className="space-y-3">
               <h2 id="available-heading" className="text-[11px] font-bold tracking-widest uppercase text-emerald-600">
                 Available

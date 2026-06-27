@@ -7,6 +7,8 @@ import { TranscriptUploadWidget } from "@/components/upload/transcript-upload-wi
 import type { TranscriptUploadResult } from "@/components/upload/transcript-upload-widget";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagination } from "@/hooks/use-pagination";
+import { Pagination } from "@/components/ui";
 import { showError, showWarning } from "@/lib/toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -94,10 +96,19 @@ export default function CoachingCallsPage() {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Pagination — page/pageSize persisted per surface via the shared hook.
+  const { page, pageSize, setPage, setPageSize } = usePagination("coaching-calls");
+
   const loadCalls = useCallback(async () => {
+    setIsLoading(true);
     try {
+      const params = new URLSearchParams();
+      params.set("call_type", "Coaching");
+      params.set("page", String(page));
+      params.set("limit", String(pageSize));
+
       const result = await apiClient.get<CallsResponse>(
-        "/ci/calls?call_type=Coaching&limit=50",
+        `/ci/calls?${params.toString()}`,
         { silent: true },
       );
       setCalls(result.data);
@@ -108,7 +119,7 @@ export default function CoachingCallsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [page, pageSize]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -187,6 +198,16 @@ export default function CoachingCallsPage() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {!isLoading && total > 0 && (
+              <Pagination
+                page={page}
+                total={total}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
             )}
           </div>
         </section>

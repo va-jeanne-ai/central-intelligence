@@ -12,6 +12,8 @@ import { TicketModal } from "@/components/tech-sos/ticket-modal";
 import type { TicketModalTicket } from "@/components/tech-sos/ticket-modal";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagination } from "@/hooks/use-pagination";
+import { Pagination } from "@/components/ui";
 import { showSuccess, showApiError } from "@/lib/toast";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -134,6 +136,9 @@ export default function TechSosPage() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
+    usePagination("tech-sos");
+
   const [showAdd, setShowAdd] = useState(false);
   const [editTicket, setEditTicket] = useState<TicketModalTicket | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -173,8 +178,8 @@ export default function TechSosPage() {
         if (statusFilter !== "all") params.set("status", statusFilter);
         if (categoryFilter !== "all") params.set("category", categoryFilter);
         if (search) params.set("search", search);
-        params.set("page", "1");
-        params.set("per_page", "100");
+        params.set("page", String(page));
+        params.set("per_page", String(pageSize));
         try {
           const data = await apiClient.get<TicketsListResponse>(`/tech-sos?${params.toString()}`, { silent: true });
           if (!cancelled) setListData(data);
@@ -194,7 +199,14 @@ export default function TechSosPage() {
       };
     }
     return doFetch();
-  }, [authLoading, statusFilter, categoryFilter, search, refreshKey]);
+  }, [authLoading, statusFilter, categoryFilter, search, refreshKey, page, pageSize]);
+
+  // When a filter/search narrows the set, jump back to page 1 so the user
+  // isn't stranded on a page that no longer exists.
+  useEffect(() => {
+    resetToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, categoryFilter, search]);
 
   async function confirmDelete() {
     if (!deleteId) return;
@@ -383,6 +395,16 @@ export default function TechSosPage() {
                   )}
                 </tbody>
               </table>
+
+              {!isLoading && listData.total > 0 && (
+                <Pagination
+                  page={page}
+                  total={listData.total}
+                  pageSize={pageSize}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
+              )}
             </div>
           </div>
         </div>

@@ -8,6 +8,8 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagination } from "@/hooks/use-pagination";
+import { Pagination } from "@/components/ui";
 import { showSuccess, showApiError } from "@/lib/toast";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -452,6 +454,9 @@ export default function MembersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
+    usePagination("members");
+
   // Fetch stats once on mount (after auth hydrates)
   useEffect(() => {
     if (authLoading) return;
@@ -500,8 +505,8 @@ export default function MembersPage() {
         const params = new URLSearchParams();
         if (statusFilter !== "all") params.set("status", statusFilter);
         if (search) params.set("search", search);
-        params.set("page", "1");
-        params.set("per_page", "50");
+        params.set("page", String(page));
+        params.set("per_page", String(pageSize));
         params.set("sort_by", "enrollment_date");
         params.set("sort_dir", "desc");
 
@@ -536,7 +541,14 @@ export default function MembersPage() {
     }
 
     return doFetch();
-  }, [authLoading, statusFilter, search, refreshKey]);
+  }, [authLoading, statusFilter, search, refreshKey, page, pageSize]);
+
+  // When a filter/search narrows the set, jump back to page 1 so the user
+  // isn't stranded on a page that no longer exists.
+  useEffect(() => {
+    resetToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, search]);
 
   function handleClearFilters() {
     setSearch("");
@@ -669,6 +681,16 @@ export default function MembersPage() {
                 {listData.total.toLocaleString()} members
               </span>
             </div>
+
+            {!isLoading && listData.total > 0 && (
+              <Pagination
+                page={page}
+                total={listData.total}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            )}
           </div>
         )}
       </main>
