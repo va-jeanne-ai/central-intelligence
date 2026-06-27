@@ -32,9 +32,10 @@ export default function SalesCallsPage() {
         {/* Upload widget */}
         <TranscriptUploadWidget callType="Sales" onSuccess={handleUploadSuccess} />
 
-        {/* Sales + Discovery calls only; type column/filter hidden since locked. */}
+        {/* Sales-side calls: Sales, Discovery, and Outbound (the WGR mirror's
+            outbound-dial calls). Type column/filter hidden since locked. */}
         <CallsTable
-          lockedCallType="Sales,Discovery"
+          lockedCallType="Sales,Discovery,Outbound"
           hideTypeFilter
           refreshKey={refreshKey}
         />

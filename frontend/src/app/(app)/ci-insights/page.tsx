@@ -4,11 +4,9 @@ import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagination } from "@/hooks/use-pagination";
+import { Pagination } from "@/components/ui";
 import type { CIInsight, CIInsightsResponse, CIInsightFacets } from "@/types";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const PAGE_LIMIT = 20;
 
 // ─── Insight type pill color map ──────────────────────────────────────────────
 
@@ -231,50 +229,6 @@ function LoadingSkeleton() {
   );
 }
 
-// ─── Pagination bar ───────────────────────────────────────────────────────────
-
-interface PaginationBarProps {
-  page: number;
-  totalPages: number;
-  hasPrevious: boolean;
-  hasNext: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-}
-
-function PaginationBar({
-  page,
-  totalPages,
-  hasPrevious,
-  hasNext,
-  onPrev,
-  onNext,
-}: PaginationBarProps) {
-  return (
-    <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100">
-      <button
-        type="button"
-        onClick={onPrev}
-        disabled={!hasPrevious}
-        className="text-sm font-medium text-gray-600 hover:text-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-      >
-        ← Previous
-      </button>
-      <span className="text-sm text-gray-500">
-        Page {page} of {totalPages}
-      </span>
-      <button
-        type="button"
-        onClick={onNext}
-        disabled={!hasNext}
-        className="text-sm font-medium text-gray-600 hover:text-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-      >
-        Next →
-      </button>
-    </div>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CIInsightsPage() {
@@ -282,19 +236,15 @@ export default function CIInsightsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [insights, setInsights] = useState<CIInsight[]>([]);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    totalPages: 1,
-    hasNextPage: false,
-    hasPreviousPage: false,
-    total: 0,
-  });
+  const [total, setTotal] = useState(0);
+
+  // Pagination — page/pageSize persisted per surface via the shared hook.
+  const { page, pageSize, setPage, setPageSize } = usePagination("insights");
 
   // Filter state — "All" is the cleared sentinel for every facet.
   const [insightType, setInsightType] = useState("All");
   const [signalFamily, setSignalFamily] = useState("All");
   const [signalStrength, setSignalStrength] = useState("All");
-  const [page, setPage] = useState(1);
 
   // Facet options, derived from the data so they can't drift from it.
   const [facets, setFacets] = useState<CIInsightFacets>({
@@ -335,7 +285,7 @@ export default function CIInsightsPage() {
       try {
         const params = new URLSearchParams();
         params.set("page", String(page));
-        params.set("limit", String(PAGE_LIMIT));
+        params.set("limit", String(pageSize));
         if (insightType !== "All") params.set("insight_type", insightType);
         if (signalFamily !== "All") params.set("signal_family", signalFamily);
         if (signalStrength !== "All") params.set("signal_strength", signalStrength);
@@ -346,16 +296,13 @@ export default function CIInsightsPage() {
         );
         if (!cancelled) {
           setInsights(data.data);
-          setPagination({
-            page: data.pagination.page,
-            totalPages: data.pagination.totalPages,
-            hasNextPage: data.pagination.hasNextPage,
-            hasPreviousPage: data.pagination.hasPreviousPage,
-            total: data.pagination.total,
-          });
+          setTotal(data.pagination.total);
         }
       } catch {
-        if (!cancelled) setInsights([]);
+        if (!cancelled) {
+          setInsights([]);
+          setTotal(0);
+        }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -364,7 +311,7 @@ export default function CIInsightsPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, page, insightType, signalFamily, signalStrength]);
+  }, [authLoading, page, pageSize, insightType, signalFamily, signalStrength]);
 
   // Reset to page 1 whenever filters change
   function handleInsightTypeChange(v: string) {
@@ -400,9 +347,7 @@ export default function CIInsightsPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-bold text-gray-900">Insights</h2>
               {!isLoading && (
-                <span className="text-xs text-gray-400">
-                  {pagination.total} total
-                </span>
+                <span className="text-xs text-gray-400">{total} total</span>
               )}
             </div>
 
@@ -431,13 +376,12 @@ export default function CIInsightsPage() {
                     <InsightRow key={insight.insight_id} insight={insight} />
                   ))}
                 </div>
-                <PaginationBar
-                  page={pagination.page}
-                  totalPages={pagination.totalPages}
-                  hasPrevious={pagination.hasPreviousPage}
-                  hasNext={pagination.hasNextPage}
-                  onPrev={() => setPage((p) => Math.max(1, p - 1))}
-                  onNext={() => setPage((p) => p + 1)}
+                <Pagination
+                  page={page}
+                  total={total}
+                  pageSize={pageSize}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
                 />
               </>
             )}

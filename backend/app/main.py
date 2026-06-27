@@ -104,6 +104,7 @@ def create_app() -> FastAPI:
     from app.routes.offers import router as offers_router, generate_router as offer_generate_router
     from app.routes.promo_calendar import router as promo_calendar_router
     from app.routes.integrations import router as integrations_router
+    from app.routes.freshness import router as freshness_router
     from app.routes.oauth import router as oauth_router
     from app.routes.webhooks import router as webhooks_router
     from app.routes.chat_sessions import router as chat_sessions_router
@@ -197,6 +198,10 @@ def create_app() -> FastAPI:
     #               POST   /api/v1/integrations/{slug}/test
     #               DELETE /api/v1/integrations/{slug}
     app.include_router(integrations_router, prefix="/api/v1")
+
+    # Data-freshness check under /api/v1.
+    # Resolves to:  GET /api/v1/freshness
+    app.include_router(freshness_router, prefix="/api/v1")
 
     # Google OAuth flow — per-user. /start is auth'd (frontend calls it
     # with the user's JWT); /callback is exempt (Google hits it

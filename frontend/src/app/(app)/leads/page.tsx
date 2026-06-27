@@ -7,6 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Lead, LeadStatus, LeadSource } from "@/types";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagination } from "@/hooks/use-pagination";
+import { Pagination } from "@/components/ui";
 
 // ─── API response types ───────────────────────────────────────────────────────
 
@@ -964,6 +966,10 @@ export default function LeadsPage() {
   const [sortBy, setSortBy] = useState<SortColumn>("entry_date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // Pagination — page size persisted per surface in localStorage.
+  const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
+    usePagination("leads");
+
   // Toggle sort on a column: same column flips direction, new column starts desc.
   const handleSort = (col: SortColumn) => {
     if (col === sortBy) {
@@ -1025,8 +1031,8 @@ export default function LeadsPage() {
         if (entryTo) params.set("entry_to", entryTo);
         params.set("sort_by", sortBy);
         params.set("sort_dir", sortDir);
-        params.set("page", "1");
-        params.set("per_page", "50");
+        params.set("page", String(page));
+        params.set("per_page", String(pageSize));
 
         try {
           const data = await apiClient.get<LeadsListResponse>(
@@ -1059,7 +1065,14 @@ export default function LeadsPage() {
     }
 
     return doFetch();
-  }, [authLoading, statusFilter, sourceFilter, search, entryFrom, entryTo, sortBy, sortDir]);
+  }, [authLoading, statusFilter, sourceFilter, search, entryFrom, entryTo, sortBy, sortDir, page, pageSize]);
+
+  // When a filter/search/sort narrows the set, jump back to page 1 so the user
+  // isn't stranded on a page that no longer exists.
+  useEffect(() => {
+    resetToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, sourceFilter, search, entryFrom, entryTo, sortBy, sortDir]);
 
   // Build KPI cards from live stats
   const kpiCards = [
@@ -1276,6 +1289,16 @@ export default function LeadsPage() {
                 )}
               </tbody>
             </table>
+
+            {!isLoading && leadsData.total > 0 && (
+              <Pagination
+                page={page}
+                total={leadsData.total}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            )}
 
             {/* Table footer */}
             <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/50">

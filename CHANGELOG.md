@@ -7,6 +7,31 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — pagination + records-per-page (default 20) across all record tables
+
+Most tables fetched only the first N rows (hardcoded 50–100) with no way to page through the rest, and limits were inconsistent per page. The backends already supported pagination (they returned `total` and accepted `page`+`per_page`/`limit`); the frontend just never wired the navigation. Added a single shared control and rolled it out.
+
+- **`frontend/src/components/ui/pagination.tsx`** (new) — shared `Pagination` molecule: Prev/Next + "Page X of Y" + a **rows-per-page selector (20 / 50 / 100, default 20)** + an "a–b of N" range readout. Presentational; callers pass normalized `(page, total, pageSize)` so it works across the differing endpoint conventions.
+- **`frontend/src/hooks/use-pagination.ts`** (new) — `usePagination(storageKey)` owns page + pageSize, **persists the size choice per table in localStorage** (survives refresh), snaps to page 1 on size change, and exposes `resetToFirstPage()` for filter changes.
+- Wired into: Calls (shared `CallsTable` → All Calls + Sales Calls), Leads, Appointments, Members, Tech SOS, Goals (table view only — board view unchanged), Insights (replaced its bespoke `PaginationBar`, added the size selector), Coaching Calls. Each sends real `page`/size to its endpoint, reads `total`, and resets to page 1 when filters/search/sort change. Card/stat grids (Market Signals, email/social/ads) were intentionally left out — they aren't row tables.
+
+Backend unchanged — existing `per_page` (≤200) / `limit` (≤100) caps cover 20/50/100. Pagination determinism verified against the DB (the calls query's `ORDER BY … , id ASC` tiebreaker gives disjoint pages).
+
+### Fixed — /sales-calls hid 116 Outbound calls
+
+The Sales Calls page locked its call-type filter to `Sales,Discovery`, written (commit `f27e3fc`) before the WGR sync began importing calls. WGR passes `call_type` through verbatim with no normalization, so the client's real data is 116 `Outbound` + 97 `Discovery` + 1 `Sales` (214 total, **zero** soft-deleted — verified against the DB). The lock silently excluded all 116 `Outbound` rows, so they looked "missing" from the page even though they were present and queryable everywhere else (incl. the All Calls page).
+
+- **`frontend/src/app/(app)/sales-calls/page.tsx`** — lock widened to `Sales,Discovery,Outbound`. The page now matches all 214 live calls. Upload widget stays `callType="Sales"` (new uploads are still Sales); only the list filter changed.
+
+### Added — on-demand data-freshness check (endpoint + Integrations panel)
+
+Answers "how do I know the data is up to date?" without reasoning about the beat schedule. All scheduled data refreshes via Celery beat, which only fires when the worker/beat are running — so after an end-of-day stop, data is frozen until they restart. This makes that observable on demand.
+
+- **`backend/app/services/freshness.py`** — catalog of every scheduled source with its expected cadence (mirroring `tasks/celery_app.py`) and where its last-run timestamp lives: `integrations.last_synced_at` (Mailchimp, Instagram, Facebook, GHL, Google Workspace), the latest `sync_log` row (WGR), or `MAX(updated_at)` on the results table for tasks that record neither (funnel_stats, market_signals). Pure `classify()` flags a source `stale` past 3× its cadence, `unknown` if never run.
+- **`backend/app/routes/freshness.py`** — `GET /api/v1/freshness` (auth'd, read-only — does NOT trigger a sync). Returns per-source verdicts plus a worst-wins `overall`. Also `POST /api/v1/freshness/wgr/sync` — enqueues an on-demand **incremental** WGR pull (`sync_wgr.delay()`, `since=None`, same as the hourly job; idempotent upsert). Returns `queued=false` with an honest message when `client_sync_enabled` is off or the broker is down, rather than a no-op task id. And `GET /api/v1/freshness/wgr/sync/{task_id}` — polls the task's Celery state into a single `running` boolean; resolves Celery's ambiguous `PENDING` (unknown vs. queued) via a `queued_seconds_ago` giveup window so a stale id can't spin forever.
+- **`frontend/.../integrations/freshness-panel.tsx`** — "Data freshness" card at the top of the Integrations page with a Check-now button; renders each source's verdict pill, age, and last-run time. The WGR row has a **"Sync now"** button that triggers the on-demand pull. The running state is **durable across refresh/navigation**: the task id + queued time are persisted in `localStorage`, re-hydrated on mount, and polled until terminal — driving a spinner on the button plus an always-visible "WGR sync in progress…" banner. On completion it toasts the row count (or error) and auto re-checks freshness so the timestamp updates.
+- **`backend/tests/test_freshness_classify.py`** — covers the verdict logic + roll-up (cadence-aware staleness, grace boundary, naive-tz tolerance).
+
 ### Fixed — WGR backfill silently dropped market_signals with orphan call FKs
 
 `market_signals.example_call_id` is a real FK to `calls` (ON DELETE SET NULL). WGR signals can reference a call CI filtered out (`TEST_`) or hasn't synced yet, so the ref is orphaned in CI. The async sync path (`upsert.sync_market_signals`) nulls orphan FKs before insert via `_null_orphan_fks`, but the **sync bulk-load path** (`bulk_load._load_market_signals`, used by the `scripts/backfill_wgr` CLI) had no equivalent — the FK violation aborted the whole `execute_values` batch and those rows never landed, silently.
