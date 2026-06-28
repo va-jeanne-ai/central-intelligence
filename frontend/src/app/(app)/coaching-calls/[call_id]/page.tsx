@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { showError, showWarning } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Breadcrumbs, resolveOrigin } from "@/components/ui/breadcrumbs";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -287,6 +288,9 @@ function InlineTextareaEdit({
 export default function CallDetailPage({ params }: { params: { call_id: string } }) {
   const { isLoading: authLoading } = useAuth();
   const callId = params.call_id;
+  // Where the user came from (?from=…); defaults to Coaching Calls for this page.
+  const searchParams = useSearchParams();
+  const origin = resolveOrigin(searchParams.get("from"), "coaching-calls");
 
   const [detail, setDetail] = useState<CallDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -422,9 +426,7 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
       <>
         <Header title="Call detail" />
         <main className="flex-1 overflow-y-auto p-7 space-y-4">
-          <Link href="/coaching-calls" className="text-[15px] text-orange-600 hover:text-orange-700 underline underline-offset-2">
-            ← Back to calls
-          </Link>
+          <Breadcrumbs origin={origin} current="Call detail" />
           <p className="text-[15px] text-red-700">{error ?? "Call not found."}</p>
         </main>
       </>
@@ -443,13 +445,8 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
       <Header title="Call detail" />
 
       <main className="flex-1 overflow-y-auto p-7 space-y-6">
-        {/* Back link */}
-        <Link
-          href="/coaching-calls"
-          className="inline-block text-[13px] font-medium text-orange-600 hover:text-orange-700 underline underline-offset-2"
-        >
-          ← Back to calls
-        </Link>
+        {/* Breadcrumb — reflects where the user came from (?from=…) */}
+        <Breadcrumbs origin={origin} current="Call detail" />
 
         {/* Header — editable metadata */}
         <div className="flex items-start justify-between gap-4">

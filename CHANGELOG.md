@@ -7,6 +7,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — breadcrumbs on call detail pages (back to where you came from)
+
+The call detail pages had a hardcoded "← Back to calls" that always went to /sales-calls, even when the
+call was opened from /calls, /coaching-calls, or a lead. Replaced it with a breadcrumb that reflects
+the actual origin, passed via a `?from=<key>` link param.
+
+- **`components/ui/breadcrumbs.tsx`** (new) — `Breadcrumbs` ("Origin › Call detail") + an `ORIGINS`
+  allow-list (sales-calls / calls / coaching-calls / members / leads) and `resolveOrigin(fromKey, fallback)`
+  so we never navigate to an arbitrary URL; unknown/absent `?from=` falls back to the page's default.
+- **`sales-calls/[call_id]` + `coaching-calls/[call_id]`** — read `?from=` via `useSearchParams` and render
+  the breadcrumb (default origins Sales Calls / Coaching Calls respectively).
+- **Link sources** pass `?from=`: the calls table (`?from=calls`, drives All Calls), the coaching list
+  (`?from=coaching-calls`), the lead detail's call links (`?from=leads`), and the Members Call History
+  (`?from=members`).
+
+`tsc` + ESLint clean, `next build` passes.
+
+
 ### Added — Members page rebuilt as the team roster (sourced from sales_reps)
 
 The member/fulfillment domain was empty (members/goals tables = 0 rows, no upstream source). The reps
@@ -44,8 +62,6 @@ earlier `/sales`→`/leads` move).
 - Left untouched: the `/fulfillment/summary` backend endpoint and `/fulfillment-director`.
 
 `tsc` + ESLint clean, `next build` passes (`/fulfillment` → 151 B redirect).
-
-
 ### Changed — Type + Result filters on the Calls table are now multi-select
 
 The Type and Result filters in `CallsTable` (the All Calls page) were single-select dropdowns; they're

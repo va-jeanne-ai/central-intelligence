@@ -168,7 +168,7 @@ export default function CoachingCallsPage() {
                     key={call.call_id}
                     className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors"
                   >
-                    <Link href={`/coaching-calls/${call.call_id}`} className="flex-1 min-w-0 group">
+                    <Link href={`/coaching-calls/${call.call_id}?from=coaching-calls`} className="flex-1 min-w-0 group">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-gray-900 truncate group-hover:text-orange-700">
                           {call.call_type ?? "Call"} — {formatDate(call.date)}
