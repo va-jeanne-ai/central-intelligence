@@ -232,6 +232,9 @@ function CallCard({ call }: { call: CallSummary }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// Result excluded by default ("show all except No Show").
+const DEFAULT_EXCLUDED_RESULT = "No Show";
+
 export default function SalesCallsPage() {
   const router = useRouter();
   const { isLoading: authLoading } = useAuth();
@@ -240,14 +243,49 @@ export default function SalesCallsPage() {
   const [calls, setCalls] = useState<CallSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Multi-select result filter. `null` = not yet initialized (defaults seed from
+  // the facets the first time they load: every result ON except "No Show").
+  const [resultOptions, setResultOptions] = useState<string[]>([]);
+  const [selectedResults, setSelectedResults] = useState<Set<string> | null>(null);
+
+  // Load the available result values once and seed the default selection.
+  useEffect(() => {
+    if (authLoading || selectedResults !== null) return;
+    void (async () => {
+      try {
+        const facets = await apiClient.get<{ call_result: string[] }>("/ci/calls/facets", {
+          silent: true,
+        });
+        setResultOptions(facets.call_result);
+        setSelectedResults(
+          new Set(facets.call_result.filter((r) => r !== DEFAULT_EXCLUDED_RESULT)),
+        );
+      } catch {
+        setSelectedResults(new Set()); // facets failed — treat as "no filter"
+      }
+    })();
+  }, [authLoading, selectedResults]);
+
   const load = useCallback(async () => {
     try {
+      const params = new URLSearchParams({
+        call_type: "Sales,Discovery,Outbound",
+        sort_by: "date",
+        sort_dir: "desc",
+        limit: "100",
+      });
+      // Only send call_result when a strict subset is selected — sending all
+      // (or none) just means "no result filter".
+      if (
+        selectedResults &&
+        selectedResults.size > 0 &&
+        selectedResults.size < resultOptions.length
+      ) {
+        params.set("call_result", Array.from(selectedResults).join(","));
+      }
       const [statsData, callsData] = await Promise.all([
         apiClient.get<CallStats>("/ci/calls/stats", { silent: true }),
-        apiClient.get<CallsResponse>(
-          "/ci/calls?call_type=Sales,Discovery,Outbound&sort_by=date&sort_dir=desc&limit=25",
-          { silent: true },
-        ),
+        apiClient.get<CallsResponse>(`/ci/calls?${params.toString()}`, { silent: true }),
       ]);
       setStats(statsData);
       setCalls(callsData.data);
@@ -256,12 +294,21 @@ export default function SalesCallsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedResults, resultOptions.length]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || selectedResults === null) return;
     void load();
-  }, [authLoading, load, refreshKey]);
+  }, [authLoading, load, refreshKey, selectedResults]);
+
+  const toggleResult = useCallback((result: string) => {
+    setSelectedResults((prev) => {
+      const next = new Set(prev ?? []);
+      if (next.has(result)) next.delete(result);
+      else next.add(result);
+      return next;
+    });
+  }, []);
 
   function handleUploadSuccess(result: TranscriptUploadResult) {
     void result;
@@ -324,15 +371,47 @@ export default function SalesCallsPage() {
 
         {/* Analyzed calls */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-bold text-gray-900">Analyzed Calls</h2>
-            <span className="text-xs text-gray-400">Most recent first</span>
+          <div className="px-5 py-4 border-b border-gray-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-gray-900">Analyzed Calls</h2>
+              <span className="text-xs text-gray-400">Most recent first</span>
+            </div>
+            {/* Multi-select result filter — all on except "No Show" by default. */}
+            {resultOptions.length > 0 && selectedResults && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mr-1">
+                  Result
+                </span>
+                {resultOptions.map((result) => {
+                  const active = selectedResults.has(result);
+                  return (
+                    <button
+                      key={result}
+                      type="button"
+                      onClick={() => toggleResult(result)}
+                      aria-pressed={active}
+                      className={`rounded-full px-2.5 py-1 text-[12px] font-medium border transition-colors ${
+                        active
+                          ? "bg-accent-50 border-accent-300 text-accent-700"
+                          : "bg-white border-gray-200 text-gray-400 hover:border-gray-300"
+                      }`}
+                    >
+                      {result}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="p-4 space-y-3">
             {isLoading ? (
               <p className="text-sm text-gray-400">Loading calls…</p>
             ) : calls.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No analyzed calls yet. Submit a recording above.</p>
+              <p className="text-sm text-gray-400 italic">
+                {selectedResults && selectedResults.size === 0
+                  ? "No results selected — pick a result chip above to show calls."
+                  : "No calls match the selected results."}
+              </p>
             ) : (
               calls.map((call) => <CallCard key={call.call_id} call={call} />)
             )}

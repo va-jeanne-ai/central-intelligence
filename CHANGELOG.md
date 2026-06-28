@@ -7,6 +7,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — multi-select result filter on Sales Calls (default: hide "No Show")
+
+The Sales Calls page now has a row of toggle chips (one per `call_result`) to filter the Analyzed
+Calls list by result. All results are ON by default **except "No Show"**, so the noisy no-shows are
+hidden out of the box; toggle any combination.
+
+- **`routes/ci.py`** — `/ci/calls` `call_result` filter now accepts a comma-separated list (IN clause),
+  mirroring how `call_type` already works; single value still does an exact match.
+- **`sales-calls/page.tsx`** — result chips seeded from `/ci/calls/facets`, default-selected to
+  everything except "No Show". The list refetches on toggle; only sends `call_result` when a strict
+  subset is selected (all/none = no filter). Empty-selection and no-match states handled.
+
+`tsc` + ESLint clean, `next build` passes.
+
+
 ### Added — Sales Calls page rebuilt to the mockup (KPI cards, expandable call cards, Analytics page)
 
 Rebuilt `/sales-calls` to match the screen-4 design: the upload widget (kept) + **4 KPI cards** +

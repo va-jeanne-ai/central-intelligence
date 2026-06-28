@@ -385,7 +385,11 @@ async def list_calls(
         description="Filter by call_type. Accepts a single value or a comma-separated "
         "list (e.g. 'Sales,Discovery'); matches any of the given types.",
     ),
-    call_result: str | None = Query(None, description="Filter by exact call_result."),
+    call_result: str | None = Query(
+        None,
+        description="Filter by call_result. Accepts a single value or a comma-separated "
+        "list (e.g. 'Booked,Pending'); matches any of the given results.",
+    ),
     call_owner: str | None = Query(None, description="Filter by exact call_owner."),
     source: str | None = Query(None, description="Filter by provenance ('wgr' / 'ci_upload')."),
     search: str | None = Query(None, description="Case-insensitive match on call_id or owner."),
@@ -411,7 +415,13 @@ async def list_calls(
         if types:
             _both(Call.call_type.in_(types))
     if call_result:
-        _both(Call.call_result == call_result)
+        # Accept a single value or a comma-separated list (multi-select on the
+        # Sales Calls page) — matches any of the given results.
+        results = [r.strip() for r in call_result.split(",") if r.strip()]
+        if len(results) == 1:
+            _both(Call.call_result == results[0])
+        elif results:
+            _both(Call.call_result.in_(results))
     if call_owner:
         _both(Call.call_owner == call_owner)
     if source:
