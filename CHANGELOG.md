@@ -7,6 +7,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Sales Calls page rebuilt to the mockup (KPI cards, expandable call cards, Analytics page)
+
+Rebuilt `/sales-calls` to match the screen-4 design: the upload widget (kept) + **4 KPI cards** +
+an **"Analyzed Calls"** list of **expandable cards** (replacing the plain table — the full sortable
+table still lives at `/calls`). Plus a new **Analytics** page.
+
+- **Backend `routes/ci.py`** — new `GET /ci/calls/stats` (Total Calls, This Month + MoM delta,
+  Pain Points Found = insights of type Pain/Objection/Belief, Content Ideas) and
+  `GET /ci/calls/analytics` (calls/month trend, result breakdown, top pain-point signals, top owners).
+  The `/ci/calls` list now also returns per-call `pain_points_count`, `content_ideas_count`,
+  `duration_minutes`, and a `transcript_excerpt` — batched (no N+1). Both new routes declared before
+  `/calls/{call_id}` so the literal paths aren't captured by the dynamic route.
+- **`sales-calls/page.tsx`** — KPI row + expandable call cards: each shows owner/type/date, a colored
+  result badge (mapped from real `call_result` values), an "N pain points" badge, and on expand a
+  transcript excerpt + two-column **Extracted Pain Points / Content Ideas Generated** (lazy-loaded
+  from `/ci/calls/{id}`). Header gains an **Analytics** button.
+- **`sales-calls/analytics/page.tsx`** (new) — calls-per-month bar chart (hover values), result
+  breakdown + top owners bar lists, and top pain-point signals.
+
+Verified against real data (214 calls, 232 pain points, 286 ideas; analytics May 7 / Jun 206).
+`tsc` + ESLint clean, `next build` passes (43 routes).
+
+
 ### Added — hover tooltips + animation on the Weekly Snapshot sparkline
 
 Hovering a bar in the dashboard's Weekly Performance Snapshot sparkline now shows its value and week

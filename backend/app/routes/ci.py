@@ -8,7 +8,7 @@ Implements 13 REST endpoints for the CI subsystem plus two data sync bridges:
 
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -52,9 +52,13 @@ from app.schemas.ci import (
     AnalyzeCallResponse,
     CallDetail,
     CallDetailResponse,
+    CallAnalytics,
     CallFacets,
     CallListResponse,
+    CallStats,
     CallSummary,
+    LabeledCount,
+    TimeBucket,
     ContentIdeaBrief,
     ContentIdeaDetail,
     ContentIdeaListResponse,
@@ -255,6 +259,124 @@ _CALL_SORTABLE = {
     "source": Call.source,
 }
 
+# Insight types that count as "pain points" (drives the Pain Points KPI + badge).
+_PAIN_TYPES = ("Pain", "Objection", "Belief")
+
+# Max chars for the one-line transcript excerpt shown on the call card.
+_EXCERPT_LEN = 240
+
+
+def _excerpt(transcript: str | None) -> str | None:
+    """First ~240 chars of the transcript, single-spaced, for the card preview."""
+    if not transcript:
+        return None
+    text_ = " ".join(transcript.split())
+    return text_[:_EXCERPT_LEN] + ("…" if len(text_) > _EXCERPT_LEN else "")
+
+
+@router.get("/calls/stats", response_model=CallStats)
+async def call_stats(session: AsyncSession = Depends(get_session)):
+    """KPI tiles for the Sales Calls page: totals + this-month + pain points + ideas."""
+    total = (await session.execute(
+        select(func.count()).select_from(Call).where(Call.deleted_at.is_(None))
+    )).scalar_one()
+
+    # This month / last month on call date, for the count + delta. Boundaries
+    # computed in Python (UTC) so we don't depend on a SQL interval expression.
+    now = datetime.now(tz=timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last_month_start = (month_start - timedelta(days=1)).replace(day=1)
+    this_month = (await session.execute(
+        select(func.count()).select_from(Call)
+        .where(Call.deleted_at.is_(None), Call.date >= month_start)
+    )).scalar_one()
+    last_month = (await session.execute(
+        select(func.count()).select_from(Call)
+        .where(
+            Call.deleted_at.is_(None),
+            Call.date >= last_month_start,
+            Call.date < month_start,
+        )
+    )).scalar_one()
+
+    pain = (await session.execute(
+        select(func.count()).select_from(Insight)
+        .where(Insight.insight_type.in_(_PAIN_TYPES))
+    )).scalar_one()
+
+    ideas = (await session.execute(
+        select(func.count()).select_from(ContentIdea)
+    )).scalar_one()
+
+    return CallStats(
+        total_calls=total,
+        calls_this_month=this_month,
+        pain_points_found=pain,
+        content_ideas=ideas,
+        this_month_delta=this_month - last_month,
+    )
+
+
+@router.get("/calls/analytics", response_model=CallAnalytics)
+async def call_analytics(session: AsyncSession = Depends(get_session)):
+    """Aggregates for the Sales Calls Analytics page: calls/month trend, result
+    breakdown, top pain-point signals, and most active call owners."""
+    # Calls per month, last 6 months (incl. current), in chronological order.
+    now = datetime.now(tz=timezone.utc)
+    months: list[datetime] = []
+    cursor = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    for _ in range(6):
+        months.append(cursor)
+        cursor = (cursor - timedelta(days=1)).replace(day=1)
+    months.reverse()  # oldest → newest
+
+    calls_by_month: list[TimeBucket] = []
+    for i, m_start in enumerate(months):
+        m_end = months[i + 1] if i + 1 < len(months) else None
+        clause = [Call.deleted_at.is_(None), Call.date >= m_start]
+        if m_end is not None:
+            clause.append(Call.date < m_end)
+        cnt = (await session.execute(
+            select(func.count()).select_from(Call).where(*clause)
+        )).scalar_one()
+        calls_by_month.append(TimeBucket(label=m_start.strftime("%b"), value=cnt))
+
+    # Result breakdown (call_result distribution).
+    result_rows = (await session.execute(
+        select(Call.call_result, func.count())
+        .where(Call.deleted_at.is_(None), Call.call_result.is_not(None))
+        .group_by(Call.call_result)
+        .order_by(func.count().desc())
+    )).all()
+    result_breakdown = [LabeledCount(label=r or "—", count=c) for r, c in result_rows]
+
+    # Top pain-point signals (the actual signal text on pain-type insights).
+    pain_rows = (await session.execute(
+        select(Insight.signal, func.count())
+        .where(Insight.insight_type.in_(_PAIN_TYPES), Insight.signal.is_not(None))
+        .group_by(Insight.signal)
+        .order_by(func.count().desc())
+        .limit(10)
+    )).all()
+    top_pain_points = [LabeledCount(label=s, count=c) for s, c in pain_rows]
+
+    # Most active call owners.
+    owner_rows = (await session.execute(
+        select(Call.call_owner, func.count())
+        .where(Call.deleted_at.is_(None), Call.call_owner.is_not(None))
+        .group_by(Call.call_owner)
+        .order_by(func.count().desc())
+        .limit(8)
+    )).all()
+    top_call_owners = [LabeledCount(label=o, count=c) for o, c in owner_rows]
+
+    return CallAnalytics(
+        calls_by_month=calls_by_month,
+        result_breakdown=result_breakdown,
+        top_pain_points=top_pain_points,
+        top_call_owners=top_call_owners,
+    )
+
 
 @router.get("/calls", response_model=CallListResponse)
 async def list_calls(
@@ -316,12 +438,33 @@ async def list_calls(
     result = await session.execute(stmt)
     calls = result.scalars().all()
 
-    # Get insight counts per call
+    # Batch the per-call counts for just this page's call ids (avoids N+1).
+    call_ids = [c.id for c in calls]
+    insight_counts: dict[str, int] = {}
+    pain_counts: dict[str, int] = {}
+    idea_counts: dict[str, int] = {}
+    if call_ids:
+        rows = (await session.execute(
+            select(
+                Insight.call_id,
+                func.count().label("total"),
+                func.count().filter(Insight.insight_type.in_(_PAIN_TYPES)).label("pain"),
+            )
+            .where(Insight.call_id.in_(call_ids))
+            .group_by(Insight.call_id)
+        )).all()
+        for cid, total, pain in rows:
+            insight_counts[cid] = total
+            pain_counts[cid] = pain
+        idea_rows = (await session.execute(
+            select(ContentIdea.call_id, func.count())
+            .where(ContentIdea.call_id.in_(call_ids))
+            .group_by(ContentIdea.call_id)
+        )).all()
+        idea_counts = {cid: n for cid, n in idea_rows}
+
     data = []
     for c in calls:
-        ins_count = (await session.execute(
-            select(func.count()).select_from(Insight).where(Insight.call_id == c.id)
-        )).scalar_one()
         data.append(CallSummary(
             call_id=c.id,
             date=c.date,
@@ -330,7 +473,11 @@ async def list_calls(
             call_owner=c.call_owner,
             transcript_quality=c.transcript_quality,
             processed_date=c.processed_date,
-            insights_count=ins_count,
+            insights_count=insight_counts.get(c.id, 0),
+            pain_points_count=pain_counts.get(c.id, 0),
+            content_ideas_count=idea_counts.get(c.id, 0),
+            duration_minutes=c.call_duration_minutes,
+            transcript_excerpt=_excerpt(c.transcript_text),
             source=c.source,
             created_at=c.created_at,
         ))
