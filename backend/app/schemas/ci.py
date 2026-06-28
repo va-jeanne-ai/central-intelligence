@@ -66,10 +66,22 @@ class CallSummary(BaseModel):
     date: datetime | None = None
     call_type: str | None = None
     call_result: str | None = None
+    # The rep/CSR who conducted the call (NOT the prospect).
     call_owner: str | None = None
+    # The lead/prospect on the call (the person they're talking to). Resolved
+    # from calls.lead_id → leads; null when the call isn't linked to a lead.
+    lead_id: str | None = None
+    lead_name: str | None = None
     transcript_quality: str | None = None
     processed_date: datetime | None = None
     insights_count: int = 0
+    # Pain-type insights (Pain / Objection / Belief) — drives the "N pain
+    # points" badge on the Sales Calls card.
+    pain_points_count: int = 0
+    content_ideas_count: int = 0
+    # Duration (minutes) + a short transcript excerpt for the card preview.
+    duration_minutes: float | None = None
+    transcript_excerpt: str | None = None
     # Provenance: 'wgr' = mirrored from the client DB; else CI-analyzed.
     source: str | None = None
     # When CI ingested the row ("Date Added"), distinct from `date` (call date).
@@ -79,6 +91,41 @@ class CallSummary(BaseModel):
 class CallListResponse(BaseModel):
     data: list[CallSummary]
     pagination: PaginationMeta
+
+
+class CallStats(BaseModel):
+    """KPI tiles for the Sales Calls page."""
+
+    total_calls: int = 0
+    calls_this_month: int = 0
+    # "Pain Points Found" — insights of type Pain / Objection / Belief.
+    pain_points_found: int = 0
+    content_ideas: int = 0
+    # Month-over-month delta for the "This Month" tile.
+    this_month_delta: int = 0
+
+
+class TimeBucket(BaseModel):
+    """One month's call count for the analytics trend chart."""
+
+    label: str  # e.g. "Jan", "Feb"
+    value: int = 0
+
+
+class LabeledCount(BaseModel):
+    """A label + count, for result breakdown and top-signal charts."""
+
+    label: str
+    count: int = 0
+
+
+class CallAnalytics(BaseModel):
+    """Data for the Sales Calls Analytics page."""
+
+    calls_by_month: list[TimeBucket] = Field(default_factory=list)
+    result_breakdown: list[LabeledCount] = Field(default_factory=list)
+    top_pain_points: list[LabeledCount] = Field(default_factory=list)
+    top_call_owners: list[LabeledCount] = Field(default_factory=list)
 
 
 class CallFacets(BaseModel):
@@ -129,6 +176,9 @@ class UpdateCallRequest(BaseModel):
     call_type: str | None = None
     call_owner: str | None = None
     call_result: str | None = None
+    # Connect (or re-connect) the call to a lead. UUID string; "" clears the
+    # link. Resolved/validated in the route (it's a UUID FK, not a plain str).
+    lead_id: str | None = None
 
 
 class UpdateInsightRequest(BaseModel):

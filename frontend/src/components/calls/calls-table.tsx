@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,7 +16,9 @@ export interface CallSummary {
   date: string | null;
   call_type: string | null;
   call_result: string | null;
-  call_owner: string | null;
+  call_owner: string | null; // the rep/CSR who ran the call
+  lead_id: string | null; // the lead/prospect on the call
+  lead_name: string | null;
   transcript_quality: string | null;
   processed_date: string | null;
   insights_count: number;
@@ -134,6 +136,95 @@ function SortableHeader({
   );
 }
 
+// ─── Multi-select filter dropdown ───────────────────────────────────────────────
+
+function MultiSelect({
+  label,
+  options,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  label: string; // e.g. "Types", "Results"
+  options: string[];
+  selected: Set<string>;
+  onToggle: (value: string) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  // Close on outside click.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const count = selected.size;
+  const buttonLabel = count === 0 ? `All ${label}` : `${label}: ${count}`;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm border rounded-lg bg-white transition-colors ${
+          count > 0
+            ? "border-accent-300 text-accent-700"
+            : "border-gray-200 text-gray-600 hover:border-gray-300"
+        }`}
+      >
+        {buttonLabel}
+        <span className="text-[9px] text-gray-400" aria-hidden>▼</span>
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-56 max-h-72 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+              {label}
+            </span>
+            {count > 0 && (
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-[11px] text-gray-400 hover:text-gray-600"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {options.length === 0 ? (
+            <p className="px-3 py-2 text-[12px] text-gray-400">No options.</p>
+          ) : (
+            options.map((opt) => {
+              const checked = selected.has(opt);
+              return (
+                <label
+                  key={opt}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggle(opt)}
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-accent-600 focus:ring-accent-400"
+                  />
+                  <span className="truncate">{opt}</span>
+                </label>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Badges ─────────────────────────────────────────────────────────────────────
 
 function ProvenanceTag({ source }: { source: string | null }) {
@@ -175,10 +266,10 @@ export function CallsTable({
   const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
     usePagination(`calls:${lockedCallType ?? "all"}`);
 
-  // Filters
+  // Filters. Type + Result are multi-select (empty Set = no filter / "all").
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [resultFilter, setResultFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [resultFilter, setResultFilter] = useState<Set<string>>(new Set());
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -195,8 +286,8 @@ export function CallsTable({
 
   const hasFilters =
     search !== "" ||
-    typeFilter !== "all" ||
-    resultFilter !== "all" ||
+    typeFilter.size > 0 ||
+    resultFilter.size > 0 ||
     sourceFilter !== "all" ||
     dateFrom !== "" ||
     dateTo !== "";
@@ -210,10 +301,24 @@ export function CallsTable({
     }
   }
 
+  // Toggle one value in a multi-select filter Set (returns a fresh Set so the
+  // fetch effect's deps see a new reference).
+  function toggleIn(
+    setter: React.Dispatch<React.SetStateAction<Set<string>>>,
+    value: string,
+  ) {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
+
   function clearFilters() {
     setSearch("");
-    setTypeFilter("all");
-    setResultFilter("all");
+    setTypeFilter(new Set());
+    setResultFilter(new Set());
     setSourceFilter("all");
     setDateFrom("");
     setDateTo("");
@@ -227,10 +332,10 @@ export function CallsTable({
       params.set("limit", String(pageSize));
       params.set("sort_by", sortBy);
       params.set("sort_dir", sortDir);
-      // Sales Calls locks the type set; otherwise honor the dropdown.
+      // Sales Calls locks the type set; otherwise honor the multi-select.
       if (lockedCallType) params.set("call_type", lockedCallType);
-      else if (typeFilter !== "all") params.set("call_type", typeFilter);
-      if (resultFilter !== "all") params.set("call_result", resultFilter);
+      else if (typeFilter.size > 0) params.set("call_type", Array.from(typeFilter).join(","));
+      if (resultFilter.size > 0) params.set("call_result", Array.from(resultFilter).join(","));
       if (sourceFilter !== "all") params.set("source", sourceFilter);
       if (search.trim() !== "") params.set("search", search.trim());
       if (dateFrom) params.set("date_from", dateFrom);
@@ -339,32 +444,22 @@ export function CallsTable({
           </div>
 
           {!hideTypeFilter && (
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
-            >
-              <option value="all">All Types</option>
-              {facets.call_type.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+            <MultiSelect
+              label="Types"
+              options={facets.call_type}
+              selected={typeFilter}
+              onToggle={(v) => toggleIn(setTypeFilter, v)}
+              onClear={() => setTypeFilter(new Set())}
+            />
           )}
 
-          <select
-            value={resultFilter}
-            onChange={(e) => setResultFilter(e.target.value)}
-            className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
-          >
-            <option value="all">All Results</option>
-            {facets.call_result.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
+          <MultiSelect
+            label="Results"
+            options={facets.call_result}
+            selected={resultFilter}
+            onToggle={(v) => toggleIn(setResultFilter, v)}
+            onClear={() => setResultFilter(new Set())}
+          />
 
           <select
             value={sourceFilter}
@@ -466,6 +561,10 @@ export function CallsTable({
                     sortDir={sortDir}
                     onSort={toggleSort}
                   />
+                  {/* Lead (prospect) — not a Call column, so non-sortable. */}
+                  <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    Lead
+                  </th>
                   <SortableHeader
                     label="Owner"
                     column="call_owner"
@@ -516,6 +615,18 @@ export function CallsTable({
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {call.call_result ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      {call.lead_id && call.lead_name ? (
+                        <Link
+                          href={`/leads/${call.lead_id}`}
+                          className="font-medium text-accent-700 hover:text-accent-800 hover:underline"
+                        >
+                          {call.lead_name}
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                       {call.call_owner ?? "—"}
