@@ -7,6 +7,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — data-intelligence engine foundation: metric registry + snapshot store (Sales)
+
+First build toward the new north star (data-analysis + statistical recommendations over
+pooled data — `New Documents/north-star-data-intelligence.md`). This is the foundation:
+*what we measure* + *track it over time*. Recommendations build on top next.
+
+- **`app/analytics/registry.py`** (new) — declarative catalog of outcome metrics. Each
+  metric declares its area, label, unit, direction, and the SQL that computes one
+  `value` + `sample_size` over a `:since` window — purely from the real tables, no
+  heuristics. Ships 5 Sales metrics (lead→close rate, avg call score, appointment show
+  rate, closed-sales count, revenue collected). All SQL verified vs. live schema + data:
+  closed_sales.lead_id joins `leads.external_id` (raw WGR string, not the UUID); real
+  appointment statuses are completed/cancelled/scheduled/no_show.
+- **`models/analytics.py` (`MetricSnapshot`) + migration `q8b9c0d1e2f3`** — append-only
+  `metric_snapshots` timeseries (metric_key, area, window 7d/30d/90d/all, scope, value,
+  sample_size, unit, captured_date/at). Unique on (key, window, scope, captured_date) so a
+  day's snapshot is idempotent. This is the previously-missing "track progress over time"
+  store. Applied to the DB.
+- **`app/analytics/snapshots.py` + `tasks/metric_snapshots.py`** — recompute-from-scratch
+  compute (generalizes the `market_signals` pattern) + a Celery task, scheduled daily at
+  03:50 UTC after the nightly syncs.
+
+`sample_size` is captured alongside every value so the (next) recommendation layer can
+refuse to draw conclusions from thin data. Verified end-to-end against real Sales data
+(20 snapshot rows, sane values, idempotent re-run). App boots, beat registered, WGR tests green.
+
+
 ### Added — editable member detail (CI overrides that survive the WGR sync)
 
 Members come from `sales_reps`, which the WGR sync overwrites on every run — so editing it directly
