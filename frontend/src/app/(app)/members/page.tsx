@@ -255,7 +255,7 @@ function DetailPanel({ repId }: { repId: string }) {
               {detail.call_history.map((call) => (
                 <Link
                   key={call.call_id}
-                  href={`/sales-calls/${call.call_id}`}
+                  href={`/sales-calls/${call.call_id}?from=members`}
                   className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-[13px] hover:bg-gray-100 transition-colors"
                 >
                   <span className="flex items-center gap-2 text-gray-700">

@@ -252,7 +252,8 @@ function ProvenanceTag({ source }: { source: string | null }) {
 export function CallsTable({
   lockedCallType,
   hideTypeFilter = false,
-  detailHref = (id) => `/sales-calls/${id}`,
+  // ?from=calls so the call-detail breadcrumb links back to All Calls.
+  detailHref = (id) => `/sales-calls/${id}?from=calls`,
   refreshKey = 0,
 }: CallsTableProps) {
   const { isLoading: authLoading } = useAuth();

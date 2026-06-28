@@ -1785,7 +1785,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                           className="px-4 py-2.5 flex items-center justify-between text-[13px]"
                         >
                           <Link
-                            href={`/sales-calls/${c.id}`}
+                            href={`/sales-calls/${c.id}?from=leads`}
                             className="text-accent-600 hover:text-accent-700"
                           >
                             {c.call_type ?? "Call"} — {formatDate(c.date)}

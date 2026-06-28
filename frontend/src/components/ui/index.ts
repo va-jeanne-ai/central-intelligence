@@ -20,6 +20,8 @@ export { FilterBar } from "./filter-bar";
 export { HistoryItem, HistoryList } from "./history-item";
 export { SuggestionPanel } from "./suggestion-panel";
 export { Pagination, PAGE_SIZE_OPTIONS, DEFAULT_PAGE_SIZE } from "./pagination";
+export { Breadcrumbs, ORIGINS, resolveOrigin } from "./breadcrumbs";
+export type { Origin } from "./breadcrumbs";
 
 // ─── Existing ────────────────────────────────────────────────────────────────
 export { Skeleton } from "./skeleton";
