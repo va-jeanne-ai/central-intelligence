@@ -1229,7 +1229,7 @@ export default function LeadsPage() {
       value: formatNumber(stats.kpis.leads_this_week),
       badgeLabel: "—",
       badgeDirection: "up" as const,
-      subtitle: "Last 7 days",
+      subtitle: "Entered, last 7 days",
       borderColor: "#F59E0B",
     },
     {

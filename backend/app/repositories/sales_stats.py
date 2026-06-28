@@ -112,12 +112,15 @@ async def compute_lead_stats(
     )
     all_time_total: int = _int(row.scalar())
 
-    # ---- 2. Leads created in the last 7 days --------------------------------
+    # ---- 2. Leads ENTERED in the last 7 days --------------------------------
+    # Counts on entry_date (the lead's funnel-entry date), not created_at — the
+    # latter is sync time and bunches all rows into the backfill window, which
+    # overstated "this week". A fixed rolling 7-day window (not the range).
     row = await session.execute(
         text(
             "SELECT COUNT(*) FROM leads "
             "WHERE deleted_at IS NULL "
-            "  AND created_at >= NOW() - INTERVAL '7 days'"
+            "  AND entry_date >= (NOW() - INTERVAL '7 days')::date"
         )
     )
     leads_this_week: int = _int(row.scalar())

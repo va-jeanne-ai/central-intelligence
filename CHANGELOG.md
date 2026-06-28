@@ -7,6 +7,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Fixed — "This Week" KPI counted sync date, not entry date
+
+Audited the three lead KPIs. **Conversion Rate** and **Active Applications** were correct (right math,
+consistently range-scoped). **"This Week"** was the odd one — it counted `created_at` (sync time), which
+bunches every backfilled row into the sync window (it showed 164, but `created_at` only spans the
+Jun 17–28 sync), disagreeing with the page's entry-date basis.
+
+- **`repositories/sales_stats.py`** — `leads_this_week` now counts `entry_date >= today - 7 days` (real
+  funnel entries in the last 7 days), down from 164 → **127**. Still a fixed rolling 7-day window (not the
+  selected range). Conversion Rate / Active Applications unchanged.
+- **`leads/page.tsx`** — subtitle "Last 7 days" → "Entered, last 7 days".
+
+Verified: This Week 127, Conversion 0.03%, Active Applications 108. `tsc` + tests + `next build` pass.
+
+
 ### Fixed — "Total Leads" KPI showed the range count but was labeled "All time"
 
 After the entry-date range work scoped the report numbers, the "Total Leads" card kept its "All time"
