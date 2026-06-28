@@ -26,6 +26,7 @@ interface LeadsStatsResponse {
     leads_this_week: number;
     conversion_rate: number;
     active_applications: number;
+    avg_deal_value: number; // avg amount_collected per closed sale (in range)
   };
   lead_volume: { label: string; value: number }[];
   source_breakdown: { source: string; count: number; percentage: number }[];
@@ -93,6 +94,7 @@ const EMPTY_STATS: LeadsStatsResponse = {
     leads_this_week: 0,
     conversion_rate: 0,
     active_applications: 0,
+    avg_deal_value: 0,
   },
   lead_volume: [],
   source_breakdown: [],
@@ -601,26 +603,34 @@ function SourceDonutChart({
 function SalesFunnel({
   stages,
   rangeText,
+  avgDealValue,
 }: {
   stages: { stage: string; count: number; percentage: number }[];
   rangeText: string;
+  avgDealValue: number;
 }) {
-  // Derive display properties from API data
-  const funnelStages = stages.map((stage, i) => {
-    const color = FUNNEL_COLORS[stage.stage] ?? "#6B7280";
-    const widthPercent = Math.max(stage.percentage * 0.9, 10);
-    const conversionRate =
+  // Each stage's bar width tapers down the funnel (relative to the top stage),
+  // floored so a thin stage stays readable. Step conversion = stage / prev.
+  const top = stages[0]?.count ?? 0;
+  const funnelStages = stages.map((stage, i) => ({
+    ...stage,
+    color: FUNNEL_COLORS[stage.stage] ?? "#6B7280",
+    widthPercent: top > 0 ? Math.max((stage.count / top) * 100, 22) : 100,
+    stepRate:
       i > 0 && stages[i - 1].count > 0
         ? ((stage.count / stages[i - 1].count) * 100).toFixed(1) + "%"
-        : undefined;
+        : undefined,
+  }));
 
-    return { ...stage, color, widthPercent, conversionRate };
-  });
-
-  // Overall conversion: last stage / first stage
+  // Overall conversion: last stage / first stage.
   const overallConversion =
     funnelStages.length >= 2 && funnelStages[0].count > 0
       ? ((funnelStages[funnelStages.length - 1].count / funnelStages[0].count) * 100).toFixed(2) + "%"
+      : "—";
+
+  const dealValueText =
+    avgDealValue > 0
+      ? `$${Math.round(avgDealValue).toLocaleString()}`
       : "—";
 
   return (
@@ -635,60 +645,47 @@ function SalesFunnel({
       </div>
 
       <div className="flex gap-5">
-        {/* Funnel bars */}
-        <div className="flex-1 flex flex-col gap-1">
+        {/* Funnel — centered, tapering bars with inline label + step % */}
+        <div className="flex-1 flex flex-col items-center">
           {funnelStages.map((stage, i) => (
-            <div key={stage.stage}>
-              {/* Arrow between stages */}
+            <div key={stage.stage} className="w-full flex flex-col items-center">
+              {/* Down-arrow connector between stages */}
               {i > 0 && (
-                <div className="flex items-center gap-3 my-0.5 pl-2">
-                  <span className="text-gray-300 text-sm font-bold leading-none">▼</span>
-                  <span className="text-[11px] font-semibold text-gray-400">
-                    {stage.conversionRate} conversion
-                  </span>
-                </div>
-              )}
-
-              {/* Bar row */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 w-24 flex-shrink-0">
-                  {stage.stage}
+                <span className="text-gray-300 text-xs leading-none my-1.5" aria-hidden>
+                  ▼
                 </span>
-                <div className="flex-1 bg-gray-100 rounded-full h-7 relative overflow-hidden">
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full flex items-center pl-3 transition-all duration-500"
-                    style={{
-                      width: `${stage.widthPercent}%`,
-                      backgroundColor: stage.color,
-                    }}
-                  >
-                    <span className="text-xs font-bold text-white tabular-nums">
-                      {stage.count.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
+              )}
+              <div
+                className="rounded-lg h-12 flex items-center justify-center gap-2 px-4 text-white transition-all duration-500"
+                style={{ width: `${stage.widthPercent}%`, backgroundColor: stage.color }}
+              >
+                <span className="text-lg font-extrabold tabular-nums">
+                  {stage.count.toLocaleString()}
+                </span>
+                <span className="text-[13px] font-medium opacity-95">{stage.stage}</span>
+                {stage.stepRate && (
+                  <span className="text-[11px] font-semibold opacity-80">{stage.stepRate}</span>
+                )}
               </div>
             </div>
           ))}
         </div>
 
-        {/* Side panel */}
-        <div className="flex-shrink-0 w-36 border-l border-gray-100 pl-5 flex flex-col justify-center gap-4">
+        {/* Right rail — overall conversion + avg deal value */}
+        <div className="flex-shrink-0 w-36 border-l border-gray-200 pl-5 flex flex-col justify-center gap-5">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
               Overall Conv.
             </p>
-            <p className="text-lg font-bold text-gray-900">
-              {overallConversion}
-            </p>
+            <p className="text-2xl font-extrabold text-gray-900 leading-none">{overallConversion}</p>
+            <p className="text-[11px] text-gray-500 mt-1">Lead to sale</p>
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
               Avg Deal Value
             </p>
-            <p className="text-lg font-bold text-gray-900">
-              —
-            </p>
+            <p className="text-2xl font-extrabold text-emerald-600 leading-none">{dealValueText}</p>
+            <p className="text-[11px] text-gray-500 mt-1">Per closed sale</p>
           </div>
         </div>
       </div>
@@ -1342,7 +1339,11 @@ export default function LeadsPage() {
         {isLoading ? (
           <FunnelSkeleton />
         ) : (
-          <SalesFunnel stages={stats.funnel} rangeText={rangeLabel(entryFrom, entryTo)} />
+          <SalesFunnel
+            stages={stats.funnel}
+            rangeText={rangeLabel(entryFrom, entryTo)}
+            avgDealValue={stats.kpis.avg_deal_value}
+          />
         )}
 
         {/* Lead Records Table */}

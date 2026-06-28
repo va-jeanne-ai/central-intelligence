@@ -58,6 +58,7 @@ class LeadsKpiResponse(BaseModel):
     leads_this_week: int = 0
     conversion_rate: float = 0.0
     active_applications: int = 0
+    avg_deal_value: float = 0.0  # avg amount_collected per closed sale (in range)
 
 
 # ---------------------------------------------------------------------------

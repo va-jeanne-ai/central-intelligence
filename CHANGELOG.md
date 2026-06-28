@@ -7,6 +7,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Changed — Sales Funnel Overview restyled to the mockup + Avg Deal Value wired
+
+Restyled the funnel on /leads to match the design: centered, **tapering** stage bars (width ∝ count,
+floored for legibility) with the count + stage label + step-conversion % **inline inside each bar**,
+centered ▼ connectors, and a right rail showing **Overall Conv.** ("Lead to sale") and **Avg Deal
+Value** ("Per closed sale", green). Was previously left-aligned gray-track bars with Avg Deal Value
+showing "—".
+
+- **`repositories/sales_stats.py`** + **`schemas/leads.py`** — KPIs gain `avg_deal_value`: avg
+  `closed_sales.amount_collected`, range-scoped via the sale's lead `entry_date`. closed_sales.lead_id
+  holds the raw WGR id, so it joins on `leads.external_id` (not the CI UUID).
+- **`leads/page.tsx`** — `SalesFunnel` rewritten to the tapering layout; rail wired to `avg_deal_value`.
+
+Verified: all-time Avg Deal Value $5,680 (71 sales); range-scoped (current week shows $0 when no sales
+entered that week). `tsc` + ESLint clean, `next build` passes.
+
+
 ### Fixed — "This Week" KPI counted sync date, not entry date
 
 Audited the three lead KPIs. **Conversion Rate** and **Active Applications** were correct (right math,

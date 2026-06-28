@@ -153,12 +153,33 @@ async def compute_lead_stats(
     )
     active_applications: int = _int(row.scalar())
 
+    # ---- 4b. Avg deal value — avg amount_collected on closed sales (in range) --
+    # Scoped via the sale's lead entry_date so it tracks the same window as the
+    # rest of the report. closed_sales.lead_id holds the raw WGR id (varchar), so
+    # join on leads.external_id (same as sales_activities), NOT the CI UUID.
+    row = await session.execute(
+        text(
+            f"""
+            SELECT AVG(cs.amount_collected)
+            FROM closed_sales cs
+            JOIN leads l ON l.external_id = cs.lead_id
+            WHERE l.deleted_at IS NULL
+              AND cs.amount_collected IS NOT NULL
+              {range_sql.replace('entry_date', 'l.entry_date')}
+            """
+        ),
+        params,
+    )
+    avg_deal_raw = row.scalar()
+    avg_deal_value: float = round(float(avg_deal_raw), 2) if avg_deal_raw is not None else 0.0
+
     kpis = {
         "total_leads": total_leads,  # range-scoped (in the selected window)
         "all_time_total": all_time_total,  # unscoped, for the headline KPI
         "leads_this_week": leads_this_week,
         "conversion_rate": conversion_rate,
         "active_applications": active_applications,
+        "avg_deal_value": avg_deal_value,  # range-scoped, for the funnel rail
     }
 
     # ---- 5. Lead volume — 8 weeks ending at the range end, by entry_date -----
