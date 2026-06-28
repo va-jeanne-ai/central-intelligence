@@ -55,6 +55,34 @@ function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
 
+/** Current week as YYYY-MM-DD bounds, Monday→Sunday (local time). */
+function currentWeekRange(): { from: string; to: string } {
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const now = new Date();
+  const dow = (now.getDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - dow);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { from: iso(monday), to: iso(sunday) };
+}
+
+/** "Jun 22 – Jun 28, 2026" style label for a YYYY-MM-DD range (or "All time"). */
+function rangeLabel(from: string, to: string): string {
+  if (!from && !to) return "All time";
+  const fmt = (s: string) =>
+    s
+      ? new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : "…";
+  if (from && to) return `${fmt(from)} – ${fmt(to)}`;
+  return from ? `From ${fmt(from)}` : `Until ${fmt(to)}`;
+}
+
 // ─── Empty fallback state ─────────────────────────────────────────────────────
 
 const EMPTY_STATS: LeadsStatsResponse = {
@@ -519,8 +547,10 @@ function SourceDonutChart({
 
 function SalesFunnel({
   stages,
+  rangeText,
 }: {
   stages: { stage: string; count: number; percentage: number }[];
+  rangeText: string;
 }) {
   // Derive display properties from API data
   const funnelStages = stages.map((stage, i) => {
@@ -548,7 +578,7 @@ function SalesFunnel({
       {/* Card header */}
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-sm font-bold text-gray-900">Sales Funnel Overview</h2>
-        <span className="text-xs text-gray-400">All time • Updated live</span>
+        <span className="text-xs text-gray-400">{rangeText} • by entry date</span>
       </div>
 
       <div className="flex gap-5">
@@ -1004,8 +1034,10 @@ export default function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [sourceFilter, setSourceFilter] = useState<FilterSource>("all");
   // Entry-date range filter (YYYY-MM-DD strings from <input type="date">).
-  const [entryFrom, setEntryFrom] = useState("");
-  const [entryTo, setEntryTo] = useState("");
+  // Defaults to the current week (Mon–Sun) so the funnel/KPIs/table open scoped
+  // to "this week" rather than all-time; cleared via Clear filters.
+  const [entryFrom, setEntryFrom] = useState(() => currentWeekRange().from);
+  const [entryTo, setEntryTo] = useState(() => currentWeekRange().to);
   // Column sort. Defaults match the API default (entry-date, newest first).
   const [sortBy, setSortBy] = useState<SortColumn>("entry_date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -1024,7 +1056,9 @@ export default function LeadsPage() {
     }
   };
 
-  // Fetch stats once on mount (after auth hydrates)
+  // Fetch stats (after auth hydrates). Re-runs when the entry-date range
+  // changes so the funnel / KPIs / charts stay scoped to the same window the
+  // table uses — filtered on entry_date, not created/sync date.
   useEffect(() => {
     if (authLoading) return;
 
@@ -1032,7 +1066,14 @@ export default function LeadsPage() {
 
     async function fetchStats(): Promise<void> {
       try {
-        const data = await apiClient.get<LeadsStatsResponse>("/leads/stats", { silent: true });
+        const params = new URLSearchParams();
+        if (entryFrom) params.set("entry_from", entryFrom);
+        if (entryTo) params.set("entry_to", entryTo);
+        const qs = params.toString();
+        const data = await apiClient.get<LeadsStatsResponse>(
+          `/leads/stats${qs ? `?${qs}` : ""}`,
+          { silent: true },
+        );
         if (!cancelled) {
           setStats(data);
         }
@@ -1050,7 +1091,7 @@ export default function LeadsPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading]);
+  }, [authLoading, entryFrom, entryTo]);
 
   // Fetch leads whenever filters change, with debounce on search
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1246,7 +1287,7 @@ export default function LeadsPage() {
         {isLoading ? (
           <FunnelSkeleton />
         ) : (
-          <SalesFunnel stages={stats.funnel} />
+          <SalesFunnel stages={stats.funnel} rangeText={rangeLabel(entryFrom, entryTo)} />
         )}
 
         {/* Lead Records Table */}

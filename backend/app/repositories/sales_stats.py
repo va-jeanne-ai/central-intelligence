@@ -17,6 +17,7 @@ Status vocabulary (DB values, lowercased):
 from __future__ import annotations
 
 import logging
+from datetime import date
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,9 +53,21 @@ def _week_label(weeks_ago: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def compute_lead_stats(session: AsyncSession) -> dict:
+async def compute_lead_stats(
+    session: AsyncSession,
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> dict:
     """Aggregate lead data into KPIs, an 8-week volume series, source
     breakdown, and a four-stage sales funnel.
+
+    ``date_from`` / ``date_to`` (ISO ``YYYY-MM-DD``) scope the *report* numbers
+    — total, funnel, conversion, active applications, and source breakdown — to
+    leads whose **entry_date** (the upstream funnel-entry date, NOT created_at /
+    sync date) falls in [from, to] inclusive. Omitting them reports all-time.
+    The 8-week ``lead_volume`` sparkline and ``leads_this_week`` KPI stay
+    time-relative (they're rolling windows, not part of the ranged report).
 
     Returns a plain dict (not a Pydantic model) so both the leads route and
     the agent tooling can consume it:
@@ -67,9 +80,35 @@ async def compute_lead_stats(session: AsyncSession) -> dict:
         }
     """
 
-    # ---- 1. Total leads (non-deleted) ---------------------------------------
+    # entry_date range clause + bind params, applied to every "report" query so
+    # the funnel/KPIs/source all reflect the same window. `entry_date` is ~99%
+    # populated; rows with a NULL entry_date are excluded when a range is set.
+    # entry_date is a DATE column; asyncpg needs an actual date object for the
+    # bind param (it won't coerce an ISO string). Parse here; bad input is
+    # ignored rather than erroring the whole report.
+    range_sql = ""
+    params: dict[str, object] = {}
+
+    def _as_date(v: str | None) -> date | None:
+        if not v:
+            return None
+        try:
+            return date.fromisoformat(v)
+        except ValueError:
+            return None
+
+    d_from, d_to = _as_date(date_from), _as_date(date_to)
+    if d_from is not None:
+        range_sql += " AND entry_date >= :date_from"
+        params["date_from"] = d_from
+    if d_to is not None:
+        range_sql += " AND entry_date <= :date_to"
+        params["date_to"] = d_to
+
+    # ---- 1. Total leads (non-deleted, in range) -----------------------------
     row = await session.execute(
-        text("SELECT COUNT(*) FROM leads WHERE deleted_at IS NULL")
+        text(f"SELECT COUNT(*) FROM leads WHERE deleted_at IS NULL{range_sql}"),
+        params,
     )
     total_leads: int = _int(row.scalar())
 
@@ -83,13 +122,15 @@ async def compute_lead_stats(session: AsyncSession) -> dict:
     )
     leads_this_week: int = _int(row.scalar())
 
-    # ---- 3. Conversion rate — status 'sale' in DB ---------------------------
+    # ---- 3. Conversion rate — status 'sale' in DB (in range) ----------------
     row = await session.execute(
         text(
             "SELECT COUNT(*) FROM leads "
             "WHERE deleted_at IS NULL "
             "  AND LOWER(status) = 'sale'"
-        )
+            f"{range_sql}"
+        ),
+        params,
     )
     sold_count: int = _int(row.scalar())
 
@@ -97,13 +138,15 @@ async def compute_lead_stats(session: AsyncSession) -> dict:
     if total_leads > 0:
         conversion_rate = round((sold_count / total_leads) * 100, 2)
 
-    # ---- 4. Active applications — qualified + appointment-set ---------------
+    # ---- 4. Active applications — qualified + appointment-set (in range) ----
     row = await session.execute(
         text(
             "SELECT COUNT(*) FROM leads "
             "WHERE deleted_at IS NULL "
             "  AND LOWER(status) IN ('qualified', 'appointment-set')"
-        )
+            f"{range_sql}"
+        ),
+        params,
     )
     active_applications: int = _int(row.scalar())
 
@@ -136,19 +179,20 @@ async def compute_lead_stats(session: AsyncSession) -> dict:
         for w in range(7, -1, -1)  # oldest (Wk 1) → newest (Now)
     ]
 
-    # ---- 6. Source breakdown ------------------------------------------------
+    # ---- 6. Source breakdown (in range) -------------------------------------
     row = await session.execute(
         text(
-            """
+            f"""
             SELECT
                 COALESCE(LOWER(source), 'other') AS src,
                 COUNT(*) AS cnt
             FROM leads
-            WHERE deleted_at IS NULL
+            WHERE deleted_at IS NULL{range_sql}
             GROUP BY src
             ORDER BY cnt DESC
             """
-        )
+        ),
+        params,
     )
     source_rows = row.fetchall()
 
@@ -166,9 +210,11 @@ async def compute_lead_stats(session: AsyncSession) -> dict:
     #   Applications — qualified + appointment-set  (everyone who qualified)
     #   Sales        — sale (closed_won in API vocabulary)
 
+    # WHERE scopes all stages to the same entry_date window; deleted_at lives in
+    # each CASE too (harmless belt-and-braces) — the WHERE is what the range hooks.
     row = await session.execute(
         text(
-            """
+            f"""
             SELECT
                 SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END)                        AS all_leads,
                 SUM(CASE WHEN deleted_at IS NULL AND LOWER(status) = 'appointment-set'
@@ -178,8 +224,10 @@ async def compute_lead_stats(session: AsyncSession) -> dict:
                 SUM(CASE WHEN deleted_at IS NULL AND LOWER(status) = 'sale'
                          THEN 1 ELSE 0 END)                                                 AS sales
             FROM leads
+            WHERE deleted_at IS NULL{range_sql}
             """
-        )
+        ),
+        params,
     )
     funnel_row = row.fetchone()
     f_all = _int(funnel_row[0]) if funnel_row else 0

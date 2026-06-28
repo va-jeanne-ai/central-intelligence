@@ -357,16 +357,23 @@ async def list_leads(
     ),
 )
 async def get_leads_stats(
+    entry_from: str | None = None,
+    entry_to: str | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> LeadsStatsResponse:
     """Compute and return aggregated lead statistics.
+
+    ``entry_from`` / ``entry_to`` (ISO ``YYYY-MM-DD``) scope the report numbers
+    (total, funnel, conversion, active apps, source breakdown) to leads whose
+    **entry_date** is in range — same param names the lead list uses, so the
+    table and the funnel/KPIs stay in sync.
 
     Delegates to ``compute_lead_stats`` (app.repositories.sales_stats) so the
     KPI / volume / source / funnel aggregation has a single source of truth
     shared with the Sales department surfaces. This route just adapts the
     plain dict into the ``LeadsStatsResponse`` schema the frontend expects.
     """
-    data = await compute_lead_stats(session)
+    data = await compute_lead_stats(session, date_from=entry_from, date_to=entry_to)
 
     kpis = LeadsKpiResponse(**data["kpis"])
     lead_volume = [LeadVolumePoint(**p) for p in data["lead_volume"]]

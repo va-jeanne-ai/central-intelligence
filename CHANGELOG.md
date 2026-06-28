@@ -7,6 +7,27 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — date range on Sales Funnel Overview (scoped by entry_date)
+
+The Sales Funnel (and the KPIs/source breakdown) were always "All time" and ignored the date filter,
+so they could disagree with the table. Now the leads page's "Entered" date-range picker drives the
+**report** numbers too — funnel, conversion, active applications, source breakdown — all filtered on
+**`entry_date`** (the lead's actual funnel-entry date, not created/sync date). Defaults to the
+**current week** (Mon–Sun) instead of all-time; clearing filters reverts to all-time.
+
+- **`repositories/sales_stats.py`** — `compute_lead_stats(date_from, date_to)` adds an `entry_date`
+  range clause to the total/funnel/conversion/active-apps/source queries (dates parsed to `date`
+  objects; bad input ignored). The 8-week sparkline + "This Week" KPI stay rolling-window metrics.
+- **`routes/leads.py`** — `GET /leads/stats` takes `entry_from` / `entry_to` (same param names as the
+  list) and passes them through.
+- **`leads/page.tsx`** — entry range defaults to the current week via the existing calendar pickers;
+  the stats fetch re-runs on range change; the funnel header now shows the active range
+  ("Jun 22 – Jun 28, 2026 • by entry date") instead of "All time".
+
+Verified end-to-end: current week → Leads 107 / Appointments 9 / Applications 11; all-time →
+11,721 / 81 / 108 / 3. `tsc` + ESLint clean, `next build` passes.
+
+
 ### Fixed — Sales Funnel (and KPIs) counted 0 appointments/applications/sales
 
 The funnel showed leads with "Appointment Set" status as 0 Appointments. Root cause: WGR's
