@@ -16,6 +16,7 @@ No GHL push (fulfillment members aren't CRM-synced in this pass).
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -25,6 +26,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.repositories.fulfillment_stats import compute_member_stats
+from app.schemas.team import (
+    CallHistoryRow,
+    PerformanceBar,
+    SubmissionRow,
+    TeamListResponse,
+    TeamMemberDetail,
+    TeamMemberRow,
+    TeamStats,
+)
 from app.schemas.members import (
     CreateMemberNoteRequest,
     CreateMemberRequest,
@@ -206,6 +216,202 @@ def _parse_enrollment_date(value: str | None) -> "datetime | None":
         return _dt.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+
+# ===========================================================================
+# Team (Members sourced from sales_reps) — the Members page is the team roster
+# ===========================================================================
+# Each "member" is a rep the leads talk to. Calls link to a rep by name
+# (calls.call_owner = sales_reps.full_name) since CI's calls table has no
+# rep_id; scores/EOD reports link by rep_id.
+
+
+@router.get("/members/team-stats", response_model=TeamStats, summary="Team KPI tiles")
+async def team_stats(session: AsyncSession = Depends(get_session)):
+    """KPIs for the Members (team) page: total / active / at-risk / calls this month."""
+    total = _int((await session.execute(text("SELECT COUNT(*) FROM sales_reps"))).scalar())
+    active = _int((await session.execute(
+        text("SELECT COUNT(*) FROM sales_reps WHERE LOWER(status) = 'active'")
+    )).scalar())
+    # At-risk = anyone not active (probation / terminated) — they "need attention".
+    at_risk = _int((await session.execute(
+        text("SELECT COUNT(*) FROM sales_reps WHERE LOWER(status) <> 'active'")
+    )).scalar())
+    # Calls run by the team this month (calls.call_owner matched to a rep name).
+    calls_this_month = _int((await session.execute(text(
+        """
+        SELECT COUNT(*) FROM calls c
+        WHERE c.deleted_at IS NULL
+          AND c.date >= date_trunc('month', now())
+          AND c.call_owner IN (SELECT full_name FROM sales_reps)
+        """
+    ))).scalar())
+    # Active delta = reps hired this month vs last month (a light MoM signal).
+    hired_this = _int((await session.execute(text(
+        "SELECT COUNT(*) FROM sales_reps WHERE hired_at >= date_trunc('month', now())"
+    ))).scalar())
+    hired_last = _int((await session.execute(text(
+        "SELECT COUNT(*) FROM sales_reps "
+        "WHERE hired_at >= date_trunc('month', now()) - interval '1 month' "
+        "  AND hired_at < date_trunc('month', now())"
+    ))).scalar())
+
+    return TeamStats(
+        total_members=total,
+        active_members=active,
+        at_risk_members=at_risk,
+        calls_this_month=calls_this_month,
+        active_delta=hired_this - hired_last,
+    )
+
+
+@router.get("/members/team", response_model=TeamListResponse, summary="Team directory")
+async def team_directory(
+    search: str | None = Query(None, description="Match rep name/email."),
+    status: str | None = Query(None, description="Filter by status."),
+    session: AsyncSession = Depends(get_session),
+):
+    """The Member Directory — every rep with their call count, sorted by activity."""
+    where = ["1 = 1"]
+    params: dict[str, object] = {}
+    if search:
+        where.append("(sr.full_name ILIKE :q OR sr.email ILIKE :q)")
+        params["q"] = f"%{search.strip()}%"
+    if status and status != "all":
+        where.append("LOWER(sr.status) = :status")
+        params["status"] = status.lower()
+
+    rows = (await session.execute(text(
+        f"""
+        SELECT
+            sr.rep_id, sr.full_name, sr.email, sr.role, sr.status,
+            sr.hired_at, sr.capabilities,
+            (SELECT COUNT(*) FROM calls c
+             WHERE c.deleted_at IS NULL AND c.call_owner = sr.full_name) AS calls_count
+        FROM sales_reps sr
+        WHERE {" AND ".join(where)}
+        ORDER BY calls_count DESC, sr.full_name ASC
+        """
+    ), params)).mappings().all()
+
+    members = [
+        TeamMemberRow(
+            rep_id=r["rep_id"],
+            name=r["full_name"],
+            email=r["email"],
+            role=r["role"],
+            status=r["status"],
+            hired_at=r["hired_at"].isoformat() if r["hired_at"] else None,
+            capabilities=list(r["capabilities"] or []),
+            calls_count=_int(r["calls_count"]),
+        )
+        for r in rows
+    ]
+    return TeamListResponse(members=members, total=len(members))
+
+
+@router.get(
+    "/members/team/{rep_id}",
+    response_model=TeamMemberDetail,
+    summary="Team member (rep) detail panel",
+)
+async def team_member_detail(
+    rep_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Detail panel for one rep: header facts, performance bars (call scores +
+    closed sales), recent EOD reports (submissions), and call history."""
+    rep = (await session.execute(text(
+        "SELECT rep_id, full_name, email, role, status, hired_at, capabilities "
+        "FROM sales_reps WHERE rep_id = :id"
+    ), {"id": rep_id})).mappings().first()
+    if rep is None:
+        raise HTTPException(status_code=404, detail="Team member not found")
+
+    name = rep["full_name"]
+    hired_at = rep["hired_at"]
+    days_active = (
+        (datetime.now(tz=timezone.utc) - hired_at).days if hired_at else None
+    )
+
+    # ---- Performance bars ----
+    performance: list[PerformanceBar] = []
+    # Avg call score (0–10 scale → percent).
+    score_row = (await session.execute(text(
+        "SELECT AVG(score) avg_score, COUNT(*) n FROM sales_call_scores "
+        "WHERE rep_id = :id AND score IS NOT NULL"
+    ), {"id": rep_id})).mappings().first()
+    if score_row and score_row["n"]:
+        avg = float(score_row["avg_score"])
+        performance.append(PerformanceBar(
+            label="Avg Call Score",
+            percent=round(min(avg / 10 * 100, 100), 1),
+            detail=f"{avg:.1f}/10 over {score_row['n']} scored calls",
+        ))
+    # Calls this month vs a soft target of 40 (a light "weekly submissions"-style bar).
+    cm = _int((await session.execute(text(
+        "SELECT COUNT(*) FROM calls WHERE deleted_at IS NULL AND call_owner = :name "
+        "AND date >= date_trunc('month', now())"
+    ), {"name": name})).scalar())
+    performance.append(PerformanceBar(
+        label="Calls This Month",
+        percent=round(min(cm / 40 * 100, 100), 1),
+        detail=f"{cm} calls",
+    ))
+    # Closed sales (count) as a deals bar vs a soft target of 10.
+    cs = _int((await session.execute(text(
+        "SELECT COUNT(*) FROM closed_sales WHERE rep_id = :id"
+    ), {"id": rep_id})).scalar())
+    performance.append(PerformanceBar(
+        label="Closed Sales",
+        percent=round(min(cs / 10 * 100, 100), 1),
+        detail=f"{cs} deals",
+    ))
+
+    # ---- Recent submissions (EOD reports) ----
+    sub_rows = (await session.execute(text(
+        "SELECT report_type, report_date, slack_delivered_at FROM sales_eod_reports "
+        "WHERE rep_id = :id ORDER BY report_date DESC NULLS LAST LIMIT 6"
+    ), {"id": rep_id})).mappings().all()
+    recent_submissions = [
+        SubmissionRow(
+            label=f"{(s['report_type'] or 'EOD').capitalize()} report",
+            date=s["report_date"].isoformat() if s["report_date"] else None,
+            delivered=s["slack_delivered_at"] is not None,
+        )
+        for s in sub_rows
+    ]
+
+    # ---- Call history ----
+    call_rows = (await session.execute(text(
+        "SELECT id, call_type, call_result, date FROM calls "
+        "WHERE deleted_at IS NULL AND call_owner = :name "
+        "ORDER BY date DESC NULLS LAST LIMIT 8"
+    ), {"name": name})).mappings().all()
+    call_history = [
+        CallHistoryRow(
+            call_id=c["id"],
+            call_type=c["call_type"],
+            call_result=c["call_result"],
+            date=c["date"].isoformat() if c["date"] else None,
+        )
+        for c in call_rows
+    ]
+
+    return TeamMemberDetail(
+        rep_id=rep_id,
+        name=name,
+        email=rep["email"],
+        role=rep["role"],
+        status=rep["status"],
+        hired_at=hired_at.isoformat() if hired_at else None,
+        days_active=days_active,
+        capabilities=list(rep["capabilities"] or []),
+        performance=performance,
+        recent_submissions=recent_submissions,
+        call_history=call_history,
+    )
 
 
 @router.post("/members", response_model=MemberRecord, status_code=201)
