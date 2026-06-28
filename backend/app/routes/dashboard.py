@@ -20,7 +20,7 @@ Column/table reference
 ----------------------
 - leads            : id (uuid), name, status, source, created_at, deleted_at
 - members          : id (uuid), status, membership_status, created_at, deleted_at
-- calls            : id (text), date, call_type, scheduled_at, deleted_at, created_at
+- calls            : id (text), date, call_type, deleted_at, created_at
 - content_ideas    : id (text), status, created_at, deleted_at
 - insights         : id (text), created_at  (no soft-delete column)
 - market_signals   : id (int), signal, signal_family, last_7_days, total_mentions
@@ -187,29 +187,23 @@ async def get_dashboard_stats(
     # 2. FULFILLMENT stats
     # ------------------------------------------------------------------
 
+    # Members = the team roster, sourced from sales_reps — the SAME source as the
+    # Members page (routes/members.py::team_stats). The legacy `members` table is
+    # empty (no upstream feed), which previously made the dashboard show 0 while the
+    # Members page showed the real roster. Mirror that page exactly so they agree:
+    # Active = status 'active'; At-Risk = everyone else (probation / terminated).
+    row = await session.execute(text("SELECT COUNT(*) FROM sales_reps"))
+    total_members: int = _int(row.scalar())
+
     row = await session.execute(
-        text(
-            "SELECT COUNT(*) FROM members "
-            "WHERE deleted_at IS NULL AND LOWER(status) = 'active'"
-        )
+        text("SELECT COUNT(*) FROM sales_reps WHERE LOWER(status) = 'active'")
     )
     active_members: int = _int(row.scalar())
 
     row = await session.execute(
-        text(
-            "SELECT COUNT(*) FROM members "
-            "WHERE deleted_at IS NULL AND LOWER(status) = 'paused'"
-        )
+        text("SELECT COUNT(*) FROM sales_reps WHERE LOWER(status) <> 'active'")
     )
-    paused_members: int = _int(row.scalar())
-
-    row = await session.execute(
-        text(
-            "SELECT COUNT(*) FROM members "
-            "WHERE deleted_at IS NULL AND LOWER(status) = 'graduated'"
-        )
-    )
-    graduated_members: int = _int(row.scalar())
+    at_risk_members: int = _int(row.scalar())
 
     # Calls this week (coaching / fulfillment calls, all types)
     row = await session.execute(
@@ -222,10 +216,10 @@ async def get_dashboard_stats(
     calls_this_week: int = _int(row.scalar())
 
     fulfillment_stats = [
-        StatCard(label="Active Members", value=str(active_members), sub="enrolled"),
-        StatCard(label="Paused", value=str(paused_members), sub="on hold"),
+        StatCard(label="Active Members", value=str(active_members), sub="on the team"),
+        StatCard(label="At-Risk", value=str(at_risk_members), sub="need attention"),
         StatCard(label="Calls This Week", value=str(calls_this_week), sub="sessions"),
-        StatCard(label="Graduated", value=str(graduated_members), sub="completed"),
+        StatCard(label="Total Members", value=str(total_members), sub="roster"),
     ]
 
     # ------------------------------------------------------------------
@@ -436,14 +430,12 @@ async def _query_recommendation_metrics(session: AsyncSession) -> dict:
     stale_count = _int(stale_row[0]) if stale_row else 0
     stale_avg_days = _int(stale_row[1]) if stale_row else 0
 
-    # 3. Member status breakdown
+    # 3. Member status breakdown — from sales_reps (the team roster), matching the
+    # Members page + the fulfillment cards. The legacy `members` table is empty, so
+    # the old query left this breakdown blank and the "active members" weekly-focus
+    # item never fired. Map the roster's status to the 'active' key this consumer reads.
     row = await session.execute(
-        text(
-            "SELECT membership_status, COUNT(*) AS cnt "
-            "FROM members "
-            "WHERE deleted_at IS NULL "
-            "GROUP BY membership_status"
-        )
+        text("SELECT LOWER(status) AS status, COUNT(*) AS cnt FROM sales_reps GROUP BY LOWER(status)")
     )
     members_by_status = {r[0]: _int(r[1]) for r in row.fetchall()}
 
@@ -453,7 +445,7 @@ async def _query_recommendation_metrics(session: AsyncSession) -> dict:
             "SELECT call_type, COUNT(*) AS cnt "
             "FROM calls "
             "WHERE deleted_at IS NULL "
-            "  AND scheduled_at >= NOW() - INTERVAL '7 days' "
+            "  AND date >= NOW() - INTERVAL '7 days' "  # calls has `date`, not `scheduled_at`
             "GROUP BY call_type"
         )
     )
