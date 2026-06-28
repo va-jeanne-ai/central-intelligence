@@ -7,6 +7,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Changed — Lead Volume chart now follows entry_date + the selected range
+
+The "Lead Volume — Last 8 Weeks" chart on /leads bucketed on `created_at` (sync date) and was anchored
+to "now", ignoring the entry-date range. Now it buckets on **`entry_date`** and the 8-week window ends
+at the **selected range's end** (`entry_to`), falling back to today when unset — so it stays a real
+8-week trend while following the entered date, consistent with the funnel/KPIs.
+
+- **`repositories/sales_stats.py`** — lead-volume query rewritten to bucket on `entry_date` relative to
+  an anchor (range end or today); the newest bar reads "Now" only when the anchor is actually today
+  (else "Wk 8"). Removed the now-unused `_week_label` helper.
+- **`leads/page.tsx`** — chart header gains a "by entry date" subtitle; it already re-fetched on range
+  change (shares the stats payload).
+
+Verified: current-week anchor shows the 8 weeks of entry-date volume up to this week; a past range end
+anchors there with no misleading "Now". `tsc` + ESLint clean, `next build` passes.
+
+
 ### Added — date range on Sales Funnel Overview (scoped by entry_date)
 
 The Sales Funnel (and the KPIs/source breakdown) were always "All time" and ignored the date filter,

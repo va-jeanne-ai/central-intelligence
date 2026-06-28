@@ -38,14 +38,6 @@ def _int(value: object) -> int:
         return 0
 
 
-def _week_label(weeks_ago: int) -> str:
-    """Return a compact week label.
-
-    weeks_ago=7 → 'Wk 1' (oldest), weeks_ago=0 → 'Now' (current).
-    """
-    if weeks_ago == 0:
-        return "Now"
-    return f"Wk {8 - weeks_ago}"
 
 
 # ---------------------------------------------------------------------------
@@ -157,26 +149,39 @@ async def compute_lead_stats(
         "active_applications": active_applications,
     }
 
-    # ---- 5. Lead volume — last 8 calendar weeks -----------------------------
+    # ---- 5. Lead volume — 8 weeks ending at the range end, by entry_date -----
+    # Bucketed on entry_date (not created_at) and anchored to the selected
+    # range's end (date_to), falling back to today when no end is set. This
+    # keeps it a real 8-week trend while following the entered-date window.
+    vol_anchor = d_to or date.today()
     row = await session.execute(
         text(
             """
             SELECT
-                FLOOR(EXTRACT(EPOCH FROM (NOW() - created_at)) / 604800)::int AS weeks_ago,
+                FLOOR((CAST(:anchor AS date) - entry_date) / 7)::int AS weeks_ago,
                 COUNT(*) AS cnt
             FROM leads
             WHERE deleted_at IS NULL
-              AND created_at >= NOW() - INTERVAL '8 weeks'
+              AND entry_date IS NOT NULL
+              AND entry_date >  CAST(:anchor AS date) - INTERVAL '8 weeks'
+              AND entry_date <= CAST(:anchor AS date)
             GROUP BY weeks_ago
             ORDER BY weeks_ago DESC
             """
-        )
+        ),
+        {"anchor": vol_anchor},
     )
     volume_map: dict[int, int] = {r[0]: _int(r[1]) for r in row.fetchall()}
 
+    # The newest bucket is "Now" only when the anchor really is today; for a
+    # past range end it's just the last week (Wk 8).
+    anchor_is_today = vol_anchor == date.today()
     lead_volume: list[dict] = [
-        {"label": _week_label(w), "value": volume_map.get(w, 0)}
-        for w in range(7, -1, -1)  # oldest (Wk 1) → newest (Now)
+        {
+            "label": "Now" if (w == 0 and anchor_is_today) else f"Wk {8 - w}",
+            "value": volume_map.get(w, 0),
+        }
+        for w in range(7, -1, -1)  # oldest (Wk 1) → newest (anchor week)
     ]
 
     # ---- 6. Source breakdown (in range) -------------------------------------

@@ -279,9 +279,12 @@ function LeadVolumeChart({ data }: { data: { label: string; value: number }[] })
       className="bg-white rounded-xl border border-gray-200 shadow-sm p-5"
       aria-label="Lead volume chart — last 8 weeks"
     >
-      <h2 className="text-sm font-bold text-gray-900 mb-4">
-        Lead Volume — Last 8 Weeks
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-bold text-gray-900">
+          Lead Volume — Last 8 Weeks
+        </h2>
+        <span className="text-xs text-gray-400">by entry date</span>
+      </div>
       <svg
         viewBox={`0 0 ${chartW} ${chartH}`}
         className="w-full"
