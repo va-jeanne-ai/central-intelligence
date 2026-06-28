@@ -44,6 +44,8 @@ from app.database import get_session
 from app.repositories.sales_stats import compute_lead_stats
 from app.schemas.appointments import AppointmentRecord, LeadAppointmentsResponse
 from app.schemas.leads import (
+    ConversationMessageRow,
+    ConversationsResponse,
     CreateNoteRequest,
     DocumentRow,
     DocumentsResponse,
@@ -63,6 +65,8 @@ from app.schemas.leads import (
     LeadRecord,
     LeadsKpiResponse,
     LeadsStatsResponse,
+    LeadTagRow,
+    LeadTagsResponse,
     LeadVolumePoint,
     NoteRow,
     SourceBreakdownItem,
@@ -187,6 +191,10 @@ _API_TO_DB_STATUSES: dict[str, list[str]] = {
     "contacted": ["contacted"],
     "qualified": ["qualified"],
     "stale": ["stale"],
+    # Composite filter for the funnel's "Applications" stage — matches the
+    # funnel definition in sales_stats.py (qualified + appointment-set). The
+    # list endpoint already handles multi-value via an IN clause.
+    "applications": ["qualified", "appointment-set"],
 }
 
 
@@ -353,16 +361,23 @@ async def list_leads(
     ),
 )
 async def get_leads_stats(
+    entry_from: str | None = None,
+    entry_to: str | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> LeadsStatsResponse:
     """Compute and return aggregated lead statistics.
+
+    ``entry_from`` / ``entry_to`` (ISO ``YYYY-MM-DD``) scope the report numbers
+    (total, funnel, conversion, active apps, source breakdown) to leads whose
+    **entry_date** is in range — same param names the lead list uses, so the
+    table and the funnel/KPIs stay in sync.
 
     Delegates to ``compute_lead_stats`` (app.repositories.sales_stats) so the
     KPI / volume / source / funnel aggregation has a single source of truth
     shared with the Sales department surfaces. This route just adapts the
     plain dict into the ``LeadsStatsResponse`` schema the frontend expects.
     """
-    data = await compute_lead_stats(session)
+    data = await compute_lead_stats(session, date_from=entry_from, date_to=entry_to)
 
     kpis = LeadsKpiResponse(**data["kpis"])
     lead_volume = [LeadVolumePoint(**p) for p in data["lead_volume"]]
@@ -821,6 +836,130 @@ async def get_lead_documents(
         for r in file_rows_sorted
     ]
     return DocumentsResponse(files=files)
+
+
+def _activity_direction(activity_type: str | None) -> str:
+    """Derive inbound/outbound from the activity_type suffix.
+
+    WGR labels every activity ``*_inbound`` / ``*_outbound`` (e.g.
+    ``sms_inbound``, ``social_dm_outbound``, ``call_inbound``). Anything
+    that doesn't match falls back to ``unknown`` so the UI can still
+    render it neutrally.
+    """
+    if not activity_type:
+        return "unknown"
+    if activity_type.endswith("_inbound"):
+        return "inbound"
+    if activity_type.endswith("_outbound"):
+        return "outbound"
+    return "unknown"
+
+
+@router.get("/leads/{lead_id}/conversations", response_model=ConversationsResponse)
+async def get_lead_conversations(
+    lead_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> ConversationsResponse:
+    """Return this lead's omni-channel conversation log (SMS, IG/FB DMs, email, calls).
+
+    Sourced from ``sales_activities``. Note the join key: that table stores the
+    RAW upstream WGR id (``LEAD_xxx``) in ``lead_id`` — NOT the CI UUID — so we
+    resolve the lead's ``external_id`` and match on it. Messages come back
+    oldest-first so the thread reads top-to-bottom.
+    """
+    uid = _parse_lead_uuid(lead_id)
+
+    row = (await session.execute(
+        text(
+            "SELECT external_id FROM leads "
+            "WHERE id = :id AND deleted_at IS NULL"
+        ),
+        {"id": str(uid)},
+    )).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    external_id = (row.get("external_id") or "").strip()
+    if not external_id:
+        # CI-native leads (no WGR upstream id) have no sales_activities rows.
+        return ConversationsResponse(messages=[], total=0, channels=[])
+
+    activity_rows = (await session.execute(
+        text("""
+            SELECT
+                activity_id::text AS id,
+                channel,
+                activity_type,
+                body,
+                occurred_at,
+                duration_seconds
+            FROM sales_activities
+            WHERE lead_id = :external_id
+            ORDER BY occurred_at ASC NULLS LAST
+        """),
+        {"external_id": external_id},
+    )).mappings().all()
+
+    messages = [
+        ConversationMessageRow(
+            id=r["id"],
+            channel=r["channel"],
+            activity_type=r["activity_type"],
+            direction=_activity_direction(r["activity_type"]),
+            body=r["body"],
+            occurred_at=(r["occurred_at"].isoformat() if r["occurred_at"] else None),
+            duration_seconds=r["duration_seconds"],
+        )
+        for r in activity_rows
+    ]
+
+    # Distinct channels present, preserving first-seen order, for UI filter chips.
+    channels: list[str] = []
+    for m in messages:
+        if m.channel and m.channel not in channels:
+            channels.append(m.channel)
+
+    return ConversationsResponse(messages=messages, total=len(messages), channels=channels)
+
+
+@router.get("/leads/{lead_id}/tags", response_model=LeadTagsResponse)
+async def get_lead_tags(
+    lead_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> LeadTagsResponse:
+    """Return tags for this lead, aggregated across its calls' insights.
+
+    Chain: ``lead → calls → insights → insight_tags``. Distinct tags ordered by
+    frequency (most-mentioned first). Returns empty for leads with no tagged
+    calls — including any whose calls predate the calls.lead_id sync fix.
+    """
+    uid = _parse_lead_uuid(lead_id)
+
+    # Confirm the lead exists (404 parity with the other sub-endpoints).
+    exists = (await session.execute(
+        text("SELECT 1 FROM leads WHERE id = :id AND deleted_at IS NULL"),
+        {"id": str(uid)},
+    )).first()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    tag_rows = (await session.execute(
+        text("""
+            SELECT it.tag AS tag, COUNT(*) AS count
+            FROM calls c
+            JOIN insights i ON i.call_id = c.id
+            JOIN insight_tags it ON it.insight_id = i.id
+            WHERE c.lead_id = :id
+              AND c.deleted_at IS NULL
+              AND it.tag IS NOT NULL
+            GROUP BY it.tag
+            ORDER BY COUNT(*) DESC, it.tag ASC
+        """),
+        {"id": str(uid)},
+    )).mappings().all()
+
+    tags = [LeadTagRow(tag=r["tag"], count=r["count"]) for r in tag_rows]
+    return LeadTagsResponse(tags=tags, total=len(tags))
 
 
 @router.post("/leads/{lead_id}/sync-documents", status_code=202)

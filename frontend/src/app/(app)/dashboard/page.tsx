@@ -49,6 +49,8 @@ interface SparklineProps {
 }
 
 function Sparkline({ data }: SparklineProps) {
+  const [hovered, setHovered] = useState<number | null>(null);
+
   if (data.length === 0) {
     return (
       <div className="flex items-end gap-1 h-10" role="img" aria-label="No sparkline data available">
@@ -68,17 +70,37 @@ function Sparkline({ data }: SparklineProps) {
     >
       {data.map((d, i) => {
         const isLast = i === data.length - 1;
+        const isHovered = hovered === i;
         const heightPercent = Math.round((d.value / max) * 100);
 
         return (
           <div
             key={i}
-            className={`flex-1 rounded-sm transition-all ${
-              isLast ? "bg-amber-600" : "bg-gray-200"
-            }`}
-            style={{ height: `${heightPercent}%` }}
-            aria-hidden="true"
-          />
+            className="relative flex-1 h-full flex items-end"
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            {/* Tooltip — value + label above the hovered bar */}
+            {isHovered && (
+              <div className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap rounded-md bg-gray-800 px-2 py-1 text-[11px] font-semibold text-white shadow-md">
+                {d.value.toLocaleString()} · {d.label}
+                <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+              </div>
+            )}
+            <div
+              className={`w-full rounded-sm cursor-pointer transition-all duration-150 origin-bottom ${
+                isHovered
+                  ? isLast
+                    ? "bg-amber-500 scale-y-105"
+                    : "bg-gray-400 scale-y-105"
+                  : isLast
+                    ? "bg-amber-600"
+                    : "bg-gray-200"
+              }`}
+              style={{ height: `${heightPercent}%` }}
+              aria-hidden="true"
+            />
+          </div>
         );
       })}
     </div>

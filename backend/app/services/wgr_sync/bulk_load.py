@@ -124,7 +124,7 @@ _PLAN: list[tuple[str, str, Callable, tuple[str, ...]]] = [
     ("offers", "offers", mapping.map_offer, ("offer_id",)),
     ("sales_reps", "sales_reps", mapping.map_sales_rep, ("rep_id",)),
     ("sales_scorecard_categories", "sales_scorecard_categories", mapping.map_scorecard_category, ("category_id",)),
-    ("calls", "calls", mapping.map_call, ("id",)),
+    # calls handled by _load_calls (resolves lead_id FK) — runs before insights.
     ("insights", "insights", mapping.map_insight, ("id",)),
     ("content_ideas", "content_ideas", mapping.map_content_idea, ("id",)),
     ("sales_strike_rules", "sales_strike_rules", mapping.map_strike_rule, ("rule_id",)),
@@ -166,6 +166,9 @@ def run_backfill(since: Optional[str] = None) -> dict[str, int]:
     try:
         # 1. leads first — conflict on the partial unique index (source, external_id).
         counts["leads"] = _load_leads(conn, since)
+        # 1b. calls — resolves lead_id FK (needs leads) and must run before
+        #     insights (whose FK targets calls). Pulled out of _PLAN.
+        counts["calls"] = _load_calls(conn, since)
         # 2. native-PK family.
         for wgr_table, ci_table, map_fn, pk in _PLAN:
             counts[ci_table] = _load_native(conn, wgr_table, ci_table, map_fn, pk, since)
@@ -378,6 +381,37 @@ def _load_native_with_inject(conn, wgr_table, ci_table, map_fn, pk, since, injec
     conflict = _conflict_clause_for(ci_table, _remap(dict(first)), pk)
     return _load_table(conn, wgr_table=wgr_table, ci_table=ci_table, map_fn=map_fn,
                        conflict_sql=conflict, since=since, inject=inject)
+
+
+def _load_calls(conn, since) -> int:
+    """Calls loader: native ON-CONFLICT upsert (CI id = WGR call_id) PLUS lead_id
+    FK resolution (WGR 'LEAD_xxx' → CI lead UUID), so the lead → calls → insights
+    → insight_tags chain that powers per-lead tags isn't broken. Mirrors the
+    async ``upsert.sync_calls`` so the two sync paths stay in agreement.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT external_id, id FROM leads WHERE source='wgr'")
+        lead_map = {ext: lid for ext, lid in cur.fetchall()}
+
+    # Peek one mapped row (with lead_id injected) to build the conflict clause.
+    first: dict | None = None
+    for raw in reader.read_table("calls", since=since):
+        m = mapping.map_call(raw)
+        if m is not None:
+            first = dict(m)
+            first["lead_id"] = lead_map.get(first.pop("_wgr_lead_id", None))
+            break
+    if first is None:
+        logger.info("bulk_load calls: no rows")
+        return 0
+
+    def inject(m: dict) -> None:
+        m["lead_id"] = lead_map.get(m.pop("_wgr_lead_id", None))
+
+    conflict = _conflict_clause_for("calls", _remap(first), ("id",))
+    return _load_table(conn, wgr_table="calls", ci_table="calls",
+                       map_fn=mapping.map_call, conflict_sql=conflict,
+                       since=since, inject=inject)
 
 
 def _load_appointments(conn, since) -> int:

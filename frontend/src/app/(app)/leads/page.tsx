@@ -21,10 +21,12 @@ interface LeadsListResponse {
 
 interface LeadsStatsResponse {
   kpis: {
-    total_leads: number;
+    total_leads: number; // scoped to the selected entry-date range
+    all_time_total: number; // unscoped total, headline of the Total Leads card
     leads_this_week: number;
     conversion_rate: number;
     active_applications: number;
+    avg_deal_value: number; // avg amount_collected per closed sale (in range)
   };
   lead_volume: { label: string; value: number }[];
   source_breakdown: { source: string; count: number; percentage: number }[];
@@ -55,14 +57,44 @@ function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
 
+/** Current week as YYYY-MM-DD bounds, Monday→Sunday (local time). */
+function currentWeekRange(): { from: string; to: string } {
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const now = new Date();
+  const dow = (now.getDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - dow);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { from: iso(monday), to: iso(sunday) };
+}
+
+/** "Jun 22 – Jun 28, 2026" style label for a YYYY-MM-DD range (or "All time"). */
+function rangeLabel(from: string, to: string): string {
+  if (!from && !to) return "All time";
+  const fmt = (s: string) =>
+    s
+      ? new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : "…";
+  if (from && to) return `${fmt(from)} – ${fmt(to)}`;
+  return from ? `From ${fmt(from)}` : `Until ${fmt(to)}`;
+}
+
 // ─── Empty fallback state ─────────────────────────────────────────────────────
 
 const EMPTY_STATS: LeadsStatsResponse = {
   kpis: {
     total_leads: 0,
+    all_time_total: 0,
     leads_this_week: 0,
     conversion_rate: 0,
     active_applications: 0,
+    avg_deal_value: 0,
   },
   lead_volume: [],
   source_breakdown: [],
@@ -217,6 +249,8 @@ function LeadsKpiCard({
 // ─── Lead Volume Line Chart ───────────────────────────────────────────────────
 
 function LeadVolumeChart({ data }: { data: { label: string; value: number }[] }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+
   const values = data.map((d) => d.value);
   const min = data.length > 0 ? Math.min(...values) : 0;
   const max = data.length > 0 ? Math.max(...values) : 1;
@@ -251,14 +285,18 @@ function LeadVolumeChart({ data }: { data: { label: string; value: number }[] })
       className="bg-white rounded-xl border border-gray-200 shadow-sm p-5"
       aria-label="Lead volume chart — last 8 weeks"
     >
-      <h2 className="text-sm font-bold text-gray-900 mb-4">
-        Lead Volume — Last 8 Weeks
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-bold text-gray-900">
+          Lead Volume — Last 8 Weeks
+        </h2>
+        <span className="text-xs text-gray-400">by entry date</span>
+      </div>
       <svg
         viewBox={`0 0 ${chartW} ${chartH}`}
         className="w-full"
         style={{ height: 160 }}
-        aria-hidden="true"
+        role="img"
+        aria-label="Lead volume over the last 8 weeks by entry date"
       >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -301,15 +339,16 @@ function LeadVolumeChart({ data }: { data: { label: string; value: number }[] })
         {/* Data points */}
         {data.map((d, i) => {
           const isLast = i === data.length - 1;
+          const isHovered = hovered === i;
           const cx = toX(i);
           const cy = toY(d.value);
           return (
             <g key={i}>
-              {isLast && (
+              {(isLast || isHovered) && (
                 <circle
                   cx={cx}
                   cy={cy}
-                  r="7"
+                  r={isHovered ? 8 : 7}
                   fill="#BFDBFE"
                   opacity="0.6"
                 />
@@ -317,8 +356,8 @@ function LeadVolumeChart({ data }: { data: { label: string; value: number }[] })
               <circle
                 cx={cx}
                 cy={cy}
-                r={isLast ? 4 : 3}
-                fill={isLast ? "#1D4ED8" : "#3B82F6"}
+                r={isHovered ? 5 : isLast ? 4 : 3}
+                fill={isLast || isHovered ? "#1D4ED8" : "#3B82F6"}
                 stroke="white"
                 strokeWidth="1.5"
               />
@@ -344,6 +383,50 @@ function LeadVolumeChart({ data }: { data: { label: string; value: number }[] })
             </text>
           );
         })}
+
+        {/* Hover tooltip — value + label above the hovered point */}
+        {hovered !== null && data[hovered] && (() => {
+          const d = data[hovered];
+          const cx = toX(hovered);
+          const cy = toY(d.value);
+          const text = `${d.value} · ${d.label}`;
+          const boxW = Math.max(46, text.length * 6.2);
+          const boxH = 22;
+          // Keep the tooltip inside the chart horizontally.
+          const bx = Math.min(Math.max(cx - boxW / 2, 2), chartW - boxW - 2);
+          const by = Math.max(cy - boxH - 10, 2);
+          return (
+            <g pointerEvents="none">
+              <rect x={bx} y={by} width={boxW} height={boxH} rx="5" fill="#1F2937" />
+              <text
+                x={bx + boxW / 2}
+                y={by + boxH / 2 + 4}
+                textAnchor="middle"
+                fontSize="11"
+                fontWeight="600"
+                fill="#FFFFFF"
+              >
+                {text}
+              </text>
+            </g>
+          );
+        })()}
+
+        {/* Invisible, forgiving hit-areas — drive the hover state per point */}
+        {data.map((d, i) => (
+          <circle
+            key={`hit-${i}`}
+            cx={toX(i)}
+            cy={toY(d.value)}
+            r="14"
+            fill="transparent"
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+            style={{ cursor: "pointer" }}
+          >
+            <title>{`${d.value} leads — ${d.label}`}</title>
+          </circle>
+        ))}
       </svg>
     </div>
   );
@@ -517,27 +600,49 @@ function SourceDonutChart({
 
 // ─── Sales Funnel ─────────────────────────────────────────────────────────────
 
+// Each funnel stage → the table status filter that reflects it. "Leads" clears
+// the filter (all); the rest map to API status values (Applications is the
+// composite qualified+appointment-set filter).
+const FUNNEL_STAGE_TO_FILTER: Record<string, FilterStatus> = {
+  Leads: "all",
+  Appointments: "appointment_set",
+  Applications: "applications",
+  Sales: "closed_won",
+};
+
 function SalesFunnel({
   stages,
+  rangeText,
+  avgDealValue,
+  onStageClick,
 }: {
   stages: { stage: string; count: number; percentage: number }[];
+  rangeText: string;
+  avgDealValue: number;
+  onStageClick: (filter: FilterStatus) => void;
 }) {
-  // Derive display properties from API data
-  const funnelStages = stages.map((stage, i) => {
-    const color = FUNNEL_COLORS[stage.stage] ?? "#6B7280";
-    const widthPercent = Math.max(stage.percentage * 0.9, 10);
-    const conversionRate =
+  // Each stage's bar width tapers down the funnel (relative to the top stage),
+  // floored so a thin stage stays readable. Step conversion = stage / prev.
+  const top = stages[0]?.count ?? 0;
+  const funnelStages = stages.map((stage, i) => ({
+    ...stage,
+    color: FUNNEL_COLORS[stage.stage] ?? "#6B7280",
+    widthPercent: top > 0 ? Math.max((stage.count / top) * 100, 22) : 100,
+    stepRate:
       i > 0 && stages[i - 1].count > 0
         ? ((stage.count / stages[i - 1].count) * 100).toFixed(1) + "%"
-        : undefined;
+        : undefined,
+  }));
 
-    return { ...stage, color, widthPercent, conversionRate };
-  });
-
-  // Overall conversion: last stage / first stage
+  // Overall conversion: last stage / first stage.
   const overallConversion =
     funnelStages.length >= 2 && funnelStages[0].count > 0
       ? ((funnelStages[funnelStages.length - 1].count / funnelStages[0].count) * 100).toFixed(2) + "%"
+      : "—";
+
+  const dealValueText =
+    avgDealValue > 0
+      ? `$${Math.round(avgDealValue).toLocaleString()}`
       : "—";
 
   return (
@@ -548,64 +653,55 @@ function SalesFunnel({
       {/* Card header */}
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-sm font-bold text-gray-900">Sales Funnel Overview</h2>
-        <span className="text-xs text-gray-400">All time • Updated live</span>
+        <span className="text-xs text-gray-400">{rangeText} • by entry date</span>
       </div>
 
       <div className="flex gap-5">
-        {/* Funnel bars */}
-        <div className="flex-1 flex flex-col gap-1">
+        {/* Funnel — centered, tapering bars with inline label + step % */}
+        <div className="flex-1 flex flex-col items-center">
           {funnelStages.map((stage, i) => (
-            <div key={stage.stage}>
-              {/* Arrow between stages */}
+            <div key={stage.stage} className="w-full flex flex-col items-center">
+              {/* Down-arrow connector between stages */}
               {i > 0 && (
-                <div className="flex items-center gap-3 my-0.5 pl-2">
-                  <span className="text-gray-300 text-sm font-bold leading-none">▼</span>
-                  <span className="text-[11px] font-semibold text-gray-400">
-                    {stage.conversionRate} conversion
-                  </span>
-                </div>
-              )}
-
-              {/* Bar row */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 w-24 flex-shrink-0">
-                  {stage.stage}
+                <span className="text-gray-300 text-xs leading-none my-1.5" aria-hidden>
+                  ▼
                 </span>
-                <div className="flex-1 bg-gray-100 rounded-full h-7 relative overflow-hidden">
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full flex items-center pl-3 transition-all duration-500"
-                    style={{
-                      width: `${stage.widthPercent}%`,
-                      backgroundColor: stage.color,
-                    }}
-                  >
-                    <span className="text-xs font-bold text-white tabular-nums">
-                      {stage.count.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              )}
+              <button
+                type="button"
+                onClick={() => onStageClick(FUNNEL_STAGE_TO_FILTER[stage.stage] ?? "all")}
+                title={`Show ${stage.stage} in the table`}
+                aria-label={`Filter table to ${stage.count.toLocaleString()} ${stage.stage}`}
+                className="rounded-lg h-12 flex items-center justify-center gap-2 px-4 text-white transition-all duration-200 hover:brightness-110 hover:-translate-y-px hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 cursor-pointer"
+                style={{ width: `${stage.widthPercent}%`, backgroundColor: stage.color }}
+              >
+                <span className="text-lg font-extrabold tabular-nums">
+                  {stage.count.toLocaleString()}
+                </span>
+                <span className="text-[13px] font-medium opacity-95">{stage.stage}</span>
+                {stage.stepRate && (
+                  <span className="text-[11px] font-semibold opacity-80">{stage.stepRate}</span>
+                )}
+              </button>
             </div>
           ))}
         </div>
 
-        {/* Side panel */}
-        <div className="flex-shrink-0 w-36 border-l border-gray-100 pl-5 flex flex-col justify-center gap-4">
+        {/* Right rail — overall conversion + avg deal value */}
+        <div className="flex-shrink-0 w-36 border-l border-gray-200 pl-5 flex flex-col justify-center gap-5">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
               Overall Conv.
             </p>
-            <p className="text-lg font-bold text-gray-900">
-              {overallConversion}
-            </p>
+            <p className="text-2xl font-extrabold text-gray-900 leading-none">{overallConversion}</p>
+            <p className="text-[11px] text-gray-500 mt-1">Lead to sale</p>
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
               Avg Deal Value
             </p>
-            <p className="text-lg font-bold text-gray-900">
-              —
-            </p>
+            <p className="text-2xl font-extrabold text-emerald-600 leading-none">{dealValueText}</p>
+            <p className="text-[11px] text-gray-500 mt-1">Per closed sale</p>
           </div>
         </div>
       </div>
@@ -721,7 +817,10 @@ function LeadTableRow({ lead }: { lead: Lead }) {
 
 // ─── Filter Bar ───────────────────────────────────────────────────────────────
 
-type FilterStatus = "all" | LeadStatus;
+// "applications" is a composite filter (qualified + appointment-set) used by the
+// funnel's Applications stage and the matching dropdown option — not a real
+// per-lead status, so it's added on top of LeadStatus.
+type FilterStatus = "all" | LeadStatus | "applications";
 type FilterSource = "all" | LeadSource;
 
 // ─── Column sort ──────────────────────────────────────────────────────────────
@@ -844,6 +943,8 @@ function FilterBar({
         className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
       >
         <option value="all">All Statuses</option>
+        {/* Composite filter matching the funnel's Applications stage. */}
+        <option value="applications">Applications (qualified + booked)</option>
         {(Object.keys(STATUS_CONFIG) as LeadStatus[]).map((key) => (
           <option key={key} value={key}>
             {STATUS_CONFIG[key].label}
@@ -1004,8 +1105,10 @@ export default function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [sourceFilter, setSourceFilter] = useState<FilterSource>("all");
   // Entry-date range filter (YYYY-MM-DD strings from <input type="date">).
-  const [entryFrom, setEntryFrom] = useState("");
-  const [entryTo, setEntryTo] = useState("");
+  // Defaults to the current week (Mon–Sun) so the funnel/KPIs/table open scoped
+  // to "this week" rather than all-time; cleared via Clear filters.
+  const [entryFrom, setEntryFrom] = useState(() => currentWeekRange().from);
+  const [entryTo, setEntryTo] = useState(() => currentWeekRange().to);
   // Column sort. Defaults match the API default (entry-date, newest first).
   const [sortBy, setSortBy] = useState<SortColumn>("entry_date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -1024,7 +1127,9 @@ export default function LeadsPage() {
     }
   };
 
-  // Fetch stats once on mount (after auth hydrates)
+  // Fetch stats (after auth hydrates). Re-runs when the entry-date range
+  // changes so the funnel / KPIs / charts stay scoped to the same window the
+  // table uses — filtered on entry_date, not created/sync date.
   useEffect(() => {
     if (authLoading) return;
 
@@ -1032,7 +1137,14 @@ export default function LeadsPage() {
 
     async function fetchStats(): Promise<void> {
       try {
-        const data = await apiClient.get<LeadsStatsResponse>("/leads/stats", { silent: true });
+        const params = new URLSearchParams();
+        if (entryFrom) params.set("entry_from", entryFrom);
+        if (entryTo) params.set("entry_to", entryTo);
+        const qs = params.toString();
+        const data = await apiClient.get<LeadsStatsResponse>(
+          `/leads/stats${qs ? `?${qs}` : ""}`,
+          { silent: true },
+        );
         if (!cancelled) {
           setStats(data);
         }
@@ -1050,7 +1162,10 @@ export default function LeadsPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading]);
+  }, [authLoading, entryFrom, entryTo]);
+
+  // Scroll target for funnel-bar clicks → the records table.
+  const leadsTableRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch leads whenever filters change, with debounce on search
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1122,10 +1237,12 @@ export default function LeadsPage() {
   const kpiCards = [
     {
       label: "Total Leads",
-      value: formatNumber(stats.kpis.total_leads),
+      value: formatNumber(stats.kpis.all_time_total),
       badgeLabel: "—",
       badgeDirection: "up" as const,
-      subtitle: "All time",
+      // Headline is the true all-time total; subtitle shows how many fall in the
+      // selected entry-date range so both numbers are visible without ambiguity.
+      subtitle: `All time · ${formatNumber(stats.kpis.total_leads)} in range`,
       borderColor: "#3B82F6",
     },
     {
@@ -1133,7 +1250,7 @@ export default function LeadsPage() {
       value: formatNumber(stats.kpis.leads_this_week),
       badgeLabel: "—",
       badgeDirection: "up" as const,
-      subtitle: "Last 7 days",
+      subtitle: "Entered, last 7 days",
       borderColor: "#F59E0B",
     },
     {
@@ -1246,10 +1363,20 @@ export default function LeadsPage() {
         {isLoading ? (
           <FunnelSkeleton />
         ) : (
-          <SalesFunnel stages={stats.funnel} />
+          <SalesFunnel
+            stages={stats.funnel}
+            rangeText={rangeLabel(entryFrom, entryTo)}
+            avgDealValue={stats.kpis.avg_deal_value}
+            onStageClick={(filter) => {
+              setStatusFilter(filter);
+              // Bring the records table into view so the result is visible.
+              leadsTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          />
         )}
 
         {/* Lead Records Table */}
+        <div ref={leadsTableRef} className="scroll-mt-4" />
         {isLoading ? (
           <TableSkeleton />
         ) : (

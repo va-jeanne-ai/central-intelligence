@@ -149,6 +149,50 @@ interface DocumentsResponse {
   files: DocumentRow[];
 }
 
+interface ConversationMessageRow {
+  id: string;
+  channel: string | null;
+  activity_type: string | null;
+  direction: string; // inbound | outbound | unknown
+  body: string | null;
+  occurred_at: string | null;
+  duration_seconds: number | null;
+}
+
+interface ConversationsResponse {
+  messages: ConversationMessageRow[];
+  total: number;
+  channels: string[];
+}
+
+interface LeadTagRow {
+  tag: string;
+  count: number;
+}
+
+interface LeadTagsResponse {
+  tags: LeadTagRow[];
+  total: number;
+}
+
+// Channel → emoji for the message channel pill.
+function channelIcon(channel: string | null): string {
+  switch ((channel || "").toLowerCase()) {
+    case "sms":
+      return "💬";
+    case "instagram":
+      return "📸";
+    case "facebook":
+      return "📘";
+    case "email":
+      return "✉️";
+    case "phone":
+      return "📞";
+    default:
+      return "💭";
+  }
+}
+
 function mimeIcon(mime: string | null): string {
   if (!mime) return "📄";
   if (mime.includes("spreadsheet") || mime === "text/csv") return "📊";
@@ -624,6 +668,13 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [isSyncingDocuments, setIsSyncingDocuments] = useState(false);
 
+  // Omni-channel conversation log (SMS / IG+FB DMs / email / calls) from
+  // sales_activities. Read-only; populated by the WGR sync.
+  const [conversations, setConversations] = useState<ConversationMessageRow[]>([]);
+
+  // Tags aggregated from this lead's calls' insights.
+  const [tags, setTags] = useState<LeadTagRow[]>([]);
+
   // Calendar events — events where this lead's email is in attendees.
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventRow[]>([]);
   const [isSyncingEvents, setIsSyncingEvents] = useState(false);
@@ -685,6 +736,30 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
     }
   }, [leadId]);
 
+  const loadConversations = useCallback(async () => {
+    try {
+      const data = await apiClient.get<ConversationsResponse>(
+        `/leads/${leadId}/conversations`,
+        { silent: true },
+      );
+      setConversations(data.messages);
+    } catch {
+      // No synced activities for this lead; degrade silently.
+    }
+  }, [leadId]);
+
+  const loadTags = useCallback(async () => {
+    try {
+      const data = await apiClient.get<LeadTagsResponse>(
+        `/leads/${leadId}/tags`,
+        { silent: true },
+      );
+      setTags(data.tags);
+    } catch {
+      // No tagged calls for this lead; degrade silently.
+    }
+  }, [leadId]);
+
   const loadEvents = useCallback(async () => {
     try {
       const data = await apiClient.get<{
@@ -715,9 +790,11 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
     void loadHistory();
     void loadEmails();
     void loadDocuments();
+    void loadConversations();
+    void loadTags();
     void loadEvents();
     void loadAppointments();
-  }, [authLoading, load, loadHistory, loadEmails, loadDocuments, loadEvents, loadAppointments]);
+  }, [authLoading, load, loadHistory, loadEmails, loadDocuments, loadConversations, loadTags, loadEvents, loadAppointments]);
 
   // Poll the lead detail every 10s while at least one call is still being
   // analyzed. Once every call has processed_date set, the interval is
@@ -1075,6 +1152,39 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
             </CardBody>
           </Card>
         </div>
+
+        {/* Tags — aggregated from this lead's calls' insights (lead → calls →
+            insights → insight_tags). Always rendered so the section is
+            discoverable; empty state when the lead has no tagged calls. */}
+        <Card>
+          <CardHeader
+            title="Tags"
+            action={
+              <span className="text-[11px] text-gray-400">
+                {tags.length} tag{tags.length === 1 ? "" : "s"}
+              </span>
+            }
+          />
+          <CardBody>
+            {tags.length === 0 ? (
+              <p className="text-[13px] text-gray-400 italic">
+                No tags yet. Tags are extracted from this lead&apos;s analyzed calls.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {tags.map((t) => (
+                  <span
+                    key={t.tag}
+                    className="inline-flex items-center gap-1 rounded-full bg-accent-50 text-accent-700 px-2.5 py-1 text-[12px] font-medium"
+                  >
+                    {t.tag}
+                    {t.count > 1 && <span className="text-accent-500/70">· {t.count}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+          </CardBody>
+        </Card>
 
         {/* Initial Submission */}
         {submission && (
@@ -1517,6 +1627,71 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                   ))}
                 </HistoryList>
               )}
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Conversations — omni-channel message log (SMS / IG+FB DMs / email /
+            calls) from sales_activities, joined on the lead's upstream id.
+            Read-only; rendered as a chat timeline (outbound right, inbound left).
+            Only shown when there are messages so it doesn't clutter empty leads. */}
+        {conversations.length > 0 && (
+          <Card>
+            <CardHeader
+              title="Conversations"
+              action={
+                <span className="text-[11px] text-gray-400">
+                  {conversations.length} message{conversations.length === 1 ? "" : "s"}
+                </span>
+              }
+            />
+            <CardBody>
+              <div className="flex flex-col gap-2.5 max-h-[480px] overflow-y-auto pr-1">
+                {conversations.map((msg) => {
+                  const outbound = msg.direction === "outbound";
+                  // Sender from direction: outbound = our CSR/rep, inbound = the lead.
+                  const sender =
+                    msg.direction === "outbound"
+                      ? "CSR"
+                      : msg.direction === "inbound"
+                        ? "Lead"
+                        : null;
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col max-w-[78%] ${
+                        outbound ? "self-end items-end" : "self-start items-start"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-0.5 text-[10px] text-gray-400">
+                        {sender && (
+                          <span
+                            className={`font-semibold uppercase tracking-wide ${
+                              outbound ? "text-accent-600" : "text-gray-600"
+                            }`}
+                          >
+                            {sender}
+                          </span>
+                        )}
+                        <span aria-hidden>{channelIcon(msg.channel)}</span>
+                        <span className="uppercase tracking-wide">{msg.channel || "—"}</span>
+                        {msg.occurred_at && (
+                          <span title={formatDate(msg.occurred_at)}>· {relativeTime(msg.occurred_at)}</span>
+                        )}
+                      </div>
+                      <div
+                        className={`rounded-2xl px-3.5 py-2 text-[13px] leading-snug whitespace-pre-wrap break-words ${
+                          outbound
+                            ? "bg-accent-500 text-white rounded-br-sm"
+                            : "bg-gray-100 text-gray-800 rounded-bl-sm"
+                        }`}
+                      >
+                        {msg.body || <span className="italic opacity-70">(no message body)</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </CardBody>
           </Card>
         )}

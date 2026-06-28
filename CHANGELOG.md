@@ -7,6 +7,208 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — hover tooltips + animation on the Weekly Snapshot sparkline
+
+Hovering a bar in the dashboard's Weekly Performance Snapshot sparkline now shows its value and week
+label in a tooltip (with a little caret), and the bar grows slightly + brightens on hover. Implemented
+in **`dashboard/page.tsx`** `Sparkline`: a hovered-index state, a positioned tooltip per bar, and a
+`scale-y-105` + color-shift transition. `tsc` + ESLint clean, `next build` passes.
+
+
+### Fixed — Dashboard Weekly Performance Snapshot used sync date, not entry date
+
+Audited the dashboard snapshot. **Total Leads** (11,721) and **Calls This Week** (28) are accurate.
+**Active Members** shows 0 because the members table is genuinely empty (data gap, not a bug). The code
+bug: **"This Week"** and the **Lead Volume sparkline** counted `created_at` (sync time, which bunches
+all backfilled rows into the sync window) — the same issue fixed on /leads.
+
+- **`routes/dashboard.py`** — "This Week" (and its prev-week comparison) now count `entry_date` in the
+  last 7 days: **164 → 127**, consistent with /leads. The 8-week Lead Volume sparkline now buckets by
+  `entry_date` too (81/58/49/60/85/105/331/107), matching the /leads chart.
+
+Verified end-to-end via the dashboard route. `tsc` + `next build` pass.
+
+
+### Added — click a Sales Funnel stage to filter the table
+
+Funnel bars on /leads are now clickable: clicking a stage sets the table's status filter to match it
+and scrolls the records table into view. Stage → filter: Leads → all, Appointments → appointment_set,
+Applications → qualified + appointment-set, Sales → closed_won.
+
+- **`routes/leads.py`** — added an `applications` composite to `_API_TO_DB_STATUSES`
+  (`qualified` + `appointment-set`); the list endpoint already handled multi-value via an IN clause.
+  Verified counts match the funnel (applications 108, appointment_set 81, closed_won 3).
+- **`leads/page.tsx`** — funnel bars are buttons (hover lift + focus ring) wired to a stage→filter map;
+  the status dropdown gains an "Applications (qualified + booked)" option so it stays in sync; clicks
+  scroll to the table.
+
+`tsc` + ESLint clean, `next build` passes.
+
+
+### Changed — Sales Funnel Overview restyled to the mockup + Avg Deal Value wired
+
+Restyled the funnel on /leads to match the design: centered, **tapering** stage bars (width ∝ count,
+floored for legibility) with the count + stage label + step-conversion % **inline inside each bar**,
+centered ▼ connectors, and a right rail showing **Overall Conv.** ("Lead to sale") and **Avg Deal
+Value** ("Per closed sale", green). Was previously left-aligned gray-track bars with Avg Deal Value
+showing "—".
+
+- **`repositories/sales_stats.py`** + **`schemas/leads.py`** — KPIs gain `avg_deal_value`: avg
+  `closed_sales.amount_collected`, range-scoped via the sale's lead `entry_date`. closed_sales.lead_id
+  holds the raw WGR id, so it joins on `leads.external_id` (not the CI UUID).
+- **`leads/page.tsx`** — `SalesFunnel` rewritten to the tapering layout; rail wired to `avg_deal_value`.
+
+Verified: all-time Avg Deal Value $5,680 (71 sales); range-scoped (current week shows $0 when no sales
+entered that week). `tsc` + ESLint clean, `next build` passes.
+
+
+### Fixed — "This Week" KPI counted sync date, not entry date
+
+Audited the three lead KPIs. **Conversion Rate** and **Active Applications** were correct (right math,
+consistently range-scoped). **"This Week"** was the odd one — it counted `created_at` (sync time), which
+bunches every backfilled row into the sync window (it showed 164, but `created_at` only spans the
+Jun 17–28 sync), disagreeing with the page's entry-date basis.
+
+- **`repositories/sales_stats.py`** — `leads_this_week` now counts `entry_date >= today - 7 days` (real
+  funnel entries in the last 7 days), down from 164 → **127**. Still a fixed rolling 7-day window (not the
+  selected range). Conversion Rate / Active Applications unchanged.
+- **`leads/page.tsx`** — subtitle "Last 7 days" → "Entered, last 7 days".
+
+Verified: This Week 127, Conversion 0.03%, Active Applications 108. `tsc` + tests + `next build` pass.
+
+
+### Fixed — "Total Leads" KPI showed the range count but was labeled "All time"
+
+After the entry-date range work scoped the report numbers, the "Total Leads" card kept its "All time"
+label but displayed the range-scoped count (e.g. 107 for the default current-week range instead of
+11,721). Now the card shows the true all-time total as its headline with the in-range count as a
+subtitle, so both numbers are visible and honest.
+
+- **`repositories/sales_stats.py`** + **`schemas/leads.py`** — KPIs gain `all_time_total` (an unscoped
+  `COUNT(*)`) alongside the range-scoped `total_leads`.
+- **`leads/page.tsx`** — Total Leads card value = `all_time_total`, subtitle = "All time · N in range".
+  (The Source donut's center total stays `total_leads` — correct, since its segments are range-scoped too.)
+
+Verified: current-week range → headline 11,721 / subtitle "107 in range"; no range → both 11,721.
+`tsc` + ESLint clean, `next build` passes.
+
+
+### Added — hover tooltips on the Lead Volume chart points
+
+Hovering a point on the "Lead Volume — Last 8 Weeks" chart (/leads) now shows its value and week
+label in a small tooltip, with the point enlarging/highlighting. Implemented in
+**`leads/page.tsx`**: a hovered-index state, forgiving invisible hit-area circles per point (r=14)
+that drive it, an in-SVG tooltip box clamped to stay inside the chart, plus a native `<title>` per
+point for accessibility/touch. The chart's `aria-hidden` was removed and replaced with a proper
+`role="img"` label. `tsc` + ESLint clean, `next build` passes.
+
+
+### Changed — Lead Volume chart now follows entry_date + the selected range
+
+The "Lead Volume — Last 8 Weeks" chart on /leads bucketed on `created_at` (sync date) and was anchored
+to "now", ignoring the entry-date range. Now it buckets on **`entry_date`** and the 8-week window ends
+at the **selected range's end** (`entry_to`), falling back to today when unset — so it stays a real
+8-week trend while following the entered date, consistent with the funnel/KPIs.
+
+- **`repositories/sales_stats.py`** — lead-volume query rewritten to bucket on `entry_date` relative to
+  an anchor (range end or today); the newest bar reads "Now" only when the anchor is actually today
+  (else "Wk 8"). Removed the now-unused `_week_label` helper.
+- **`leads/page.tsx`** — chart header gains a "by entry date" subtitle; it already re-fetched on range
+  change (shares the stats payload).
+
+Verified: current-week anchor shows the 8 weeks of entry-date volume up to this week; a past range end
+anchors there with no misleading "Now". `tsc` + ESLint clean, `next build` passes.
+
+
+### Added — date range on Sales Funnel Overview (scoped by entry_date)
+
+The Sales Funnel (and the KPIs/source breakdown) were always "All time" and ignored the date filter,
+so they could disagree with the table. Now the leads page's "Entered" date-range picker drives the
+**report** numbers too — funnel, conversion, active applications, source breakdown — all filtered on
+**`entry_date`** (the lead's actual funnel-entry date, not created/sync date). Defaults to the
+**current week** (Mon–Sun) instead of all-time; clearing filters reverts to all-time.
+
+- **`repositories/sales_stats.py`** — `compute_lead_stats(date_from, date_to)` adds an `entry_date`
+  range clause to the total/funnel/conversion/active-apps/source queries (dates parsed to `date`
+  objects; bad input ignored). The 8-week sparkline + "This Week" KPI stay rolling-window metrics.
+- **`routes/leads.py`** — `GET /leads/stats` takes `entry_from` / `entry_to` (same param names as the
+  list) and passes them through.
+- **`leads/page.tsx`** — entry range defaults to the current week via the existing calendar pickers;
+  the stats fetch re-runs on range change; the funnel header now shows the active range
+  ("Jun 22 – Jun 28, 2026 • by entry date") instead of "All time".
+
+Verified end-to-end: current week → Leads 107 / Appointments 9 / Applications 11; all-time →
+11,721 / 81 / 108 / 3. `tsc` + ESLint clean, `next build` passes.
+
+
+### Fixed — Sales Funnel (and KPIs) counted 0 appointments/applications/sales
+
+The funnel showed leads with "Appointment Set" status as 0 Appointments. Root cause: WGR's
+`pipeline_stage` arrives Title-Cased (`Appointment Set`, `Applied`, `Closed`, `Lead`) and `map_lead`
+stored it raw, but the funnel/KPI SQL in `sales_stats.py` (and `routes/leads.py::_DB_TO_API_STATUS`)
+match CI's canonical lowercase-hyphen vocabulary (`appointment-set`, `qualified`, `sale`, `new`) — so
+nothing matched and every downstream stage counted 0.
+
+- **`services/wgr_sync/mapping.py`** — new `map_lead_status` normalizes WGR `pipeline_stage` →
+  canonical CI status (`Appointment Set`→`appointment-set`, `Applied`→`qualified`, `Closed`→`sale`,
+  `Lead`→`new`; unknown values pass through lowercased; blank→None). `map_lead` now uses it.
+- **Backfill** — one-time UPDATE applying the same mapping to existing leads (817 rows changed). The
+  funnel now reads **Leads 11,721 → Appointments 81 → Applications 108 → Sales 3**, and the KPIs
+  (`conversion_rate`, `active_applications` = 108) reflect real data (were 0).
+- **`tests/test_wgr_mapping.py`** — `test_map_lead_status` covers the mapping + end-to-end via `map_lead`.
+
+No frontend change needed — the existing `_DB_TO_API_STATUS` layer maps the now-correct DB values to
+the UI vocabulary (`appointment-set`→`appointment_set`, `sale`→`closed_won`).
+
+
+### Changed — lead conversation sender labels + always-visible Tags card
+
+- **Conversations** now label each message **CSR** (outbound — our rep/business) or **Lead** (inbound),
+  derived from the direction (verified against real data: outbound carries a `rep_id`, inbound is the
+  lead's reply). Positioning was already CSR-right / lead-left; this adds the explicit text label.
+- **Tags card** now always renders on the lead detail page (was hidden when empty), with a "No tags yet"
+  empty state so the section is discoverable even on leads without tagged calls.
+
+
+### Added — "jump to page" input on all paginated tables
+
+The shared `Pagination` component now includes a "Go to" page-number input next to Prev/Next, so
+users can jump directly to a page instead of clicking through. Local draft state (commits on Enter or
+blur, clamped to [1, totalPages]) avoids a fetch per keystroke; it re-syncs to the live page when the
+page changes elsewhere (Prev/Next/filter reset). Shown only when there's more than one page. Lands on
+all 8 tables that use the component (Leads, Calls, Appointments, Members, Tech SOS, Goals, Insights,
+Coaching Calls) via the single `frontend/src/components/ui/pagination.tsx` change.
+
+
+### Added — per-lead Conversations & Tags on the lead detail page
+
+Surfaced two things the data already supported but the UI never showed.
+
+- **Conversations** — `GET /api/v1/leads/{id}/conversations` returns the lead's omni-channel message
+  log (SMS / Instagram + Facebook DMs / email / calls) from `sales_activities`, joined on the lead's
+  upstream id (`sales_activities.lead_id` stores the raw `LEAD_xxx` string, matched to
+  `leads.external_id` — NOT the CI UUID). `direction` derived from the `activity_type` suffix.
+  The lead detail page renders it as a chat timeline (outbound right, inbound left, channel pills).
+  Verified: lead Carii returns 55 messages across email/sms/phone in order. No sync change needed.
+- **Tags** — `GET /api/v1/leads/{id}/tags` aggregates tags via `lead → calls → insights →
+  insight_tags`, distinct tags by frequency. Rendered as accent pills on the lead detail page.
+
+### Fixed — WGR sync dropped `calls.lead_id`, breaking lead→tag traceability
+
+WGR `calls` carry `lead_id` (213/213) but `map_call` never copied it, so all 214 CI `calls.lead_id`
+were NULL and the `lead → calls → insights → insight_tags` chain (needed for per-lead tags) was
+broken. Fixed in **both** sync paths so an incremental run can't re-NULL what the backfill fixes:
+
+- `services/wgr_sync/mapping.py` — `map_call` now carries `_wgr_lead_id` (mirrors `map_appointment`).
+- `services/wgr_sync/upsert.py` — new `sync_calls` resolves `_wgr_lead_id` → CI lead UUID per batch;
+  removed calls from `_NATIVE_PLAN`, called before insights in `sync_all`.
+- `services/wgr_sync/bulk_load.py` — new `_load_calls` does the same for the backfill CLI path.
+- Ran `scripts/backfill_wgr --yes`: `calls.lead_id` now 213/214 populated; **55 leads** reach tags
+  (was 0). CI `Call.lead_id` column already existed — no migration.
+
+`tsc` + ESLint clean, `next build` passes, existing WGR tests green.
+
+
 ### Fixed — /leads Source Breakdown donut rendered blank for a single source
 
 The donut built each slice as an SVG arc (`A`) wedge. A single source at 100% (the live data — all leads currently come from `wgr`) has coincident start/end points, so the arc path collapsed and the donut showed **nothing**. Two smaller bugs compounded it: real integration sources (`wgr`, `facebook_ads`, …) aren't in the enum-keyed `SOURCE_COLORS`/`SOURCE_CONFIG`, so they fell back to gray with the raw lowercase label.
