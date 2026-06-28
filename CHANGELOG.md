@@ -7,6 +7,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — dedicated member (rep) detail page at /members/{rep_id}
+
+The Members directory only opened a right-side panel; now each member has a full detail page too. The
+stale `/members/[member_id]` page (which queried the empty legacy members table) was rebuilt to serve
+the team roster — sourced from `/members/team/{rep_id}`, the same endpoint the panel uses.
+
+- **`components/members/team-member.tsx`** (new) — shared helpers (Avatar, status pills, formatters)
+  + the Performance / Submissions / Call History sections, so the panel and the full page render
+  identically with no duplication.
+- **`members/[member_id]/page.tsx`** — rebuilt: a Member breadcrumb, a header card (avatar, role,
+  status, capabilities, "Ask Director"), and Performance + Recent Submissions + Call History.
+- **`members/page.tsx`** — the side panel now has a **"View full detail →"** link to the page, and
+  uses the shared sections.
+
+`tsc` + ESLint clean, `next build` passes (verified against real rep data).
+
+
 ### Added — breadcrumbs on call detail pages (back to where you came from)
 
 The call detail pages had a hardcoded "← Back to calls" that always went to /sales-calls, even when the
