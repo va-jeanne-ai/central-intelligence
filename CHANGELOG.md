@@ -7,6 +7,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — hover tooltips + animation on the Weekly Snapshot sparkline
+
+Hovering a bar in the dashboard's Weekly Performance Snapshot sparkline now shows its value and week
+label in a tooltip (with a little caret), and the bar grows slightly + brightens on hover. Implemented
+in **`dashboard/page.tsx`** `Sparkline`: a hovered-index state, a positioned tooltip per bar, and a
+`scale-y-105` + color-shift transition. `tsc` + ESLint clean, `next build` passes.
+
+
 ### Fixed — Dashboard Weekly Performance Snapshot used sync date, not entry date
 
 Audited the dashboard snapshot. **Total Leads** (11,721) and **Calls This Week** (28) are accurate.
