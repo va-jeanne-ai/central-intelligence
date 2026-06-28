@@ -7,6 +7,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — "jump to page" input on all paginated tables
+
+The shared `Pagination` component now includes a "Go to" page-number input next to Prev/Next, so
+users can jump directly to a page instead of clicking through. Local draft state (commits on Enter or
+blur, clamped to [1, totalPages]) avoids a fetch per keystroke; it re-syncs to the live page when the
+page changes elsewhere (Prev/Next/filter reset). Shown only when there's more than one page. Lands on
+all 8 tables that use the component (Leads, Calls, Appointments, Members, Tech SOS, Goals, Insights,
+Coaching Calls) via the single `frontend/src/components/ui/pagination.tsx` change.
+
+
 ### Added — per-lead Conversations & Tags on the lead detail page
 
 Surfaced two things the data already supported but the UI never showed.

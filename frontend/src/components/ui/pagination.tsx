@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 /**
  * Molecule: Pagination
  *
@@ -23,6 +25,60 @@ interface PaginationProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   className?: string;
+}
+
+/** "Go to page N" input. Local draft state so typing doesn't fire a fetch per
+ *  keystroke; commits (clamped to [1, totalPages]) on Enter or blur. Resets to
+ *  the live page whenever the page changes elsewhere (Prev/Next/filter reset). */
+function JumpToPage({
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(page));
+
+  useEffect(() => {
+    setDraft(String(page));
+  }, [page]);
+
+  const commit = () => {
+    const parsed = parseInt(draft, 10);
+    if (Number.isNaN(parsed)) {
+      setDraft(String(page)); // revert garbage
+      return;
+    }
+    const clamped = Math.max(1, Math.min(totalPages, parsed));
+    setDraft(String(clamped));
+    if (clamped !== page) onPageChange(clamped);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 text-sm text-gray-500">
+      <label htmlFor="jump-page">Go to</label>
+      <input
+        id="jump-page"
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={totalPages}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        aria-label={`Jump to page (1 to ${totalPages})`}
+        className="w-14 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-700 text-center focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+    </div>
+  );
 }
 
 export function Pagination({
@@ -86,6 +142,9 @@ export function Pagination({
         >
           Next →
         </button>
+        {totalPages > 1 && (
+          <JumpToPage page={page} totalPages={totalPages} onPageChange={onPageChange} />
+        )}
       </div>
     </div>
   );
