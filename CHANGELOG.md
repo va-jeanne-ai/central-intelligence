@@ -7,6 +7,27 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Fixed — dashboard member counts (showed 0 while the Members page showed 3)
+
+The dashboard read member stats from the legacy `members` table, which is **empty** (no
+upstream feed) — so "Active Members" was 0, while the Members page (rebuilt to source from
+`sales_reps`) correctly showed 3. Re-sourced the dashboard from `sales_reps` so the two agree.
+
+- **`routes/dashboard.py`** — the fulfillment cards + the `kpis.active_members` value now
+  come from `sales_reps` (Active = status 'active' → 3; At-Risk = everyone else → 4; Total
+  → 7), mirroring `members.py::team_stats`. Replaced the "Paused/Graduated" cards (always 0
+  from the empty table) with "At-Risk/Total". The weekly-focus `members_by_status` breakdown
+  now reads `sales_reps` too, so its "active members" item actually fires.
+- Also fixed two pre-existing schema-drift bugs uncovered in the same file: the
+  recent-calls-by-type query referenced a non-existent `calls.scheduled_at` (the column is
+  `date`), and a stale docstring listing it.
+
+Verified: the main `/dashboard/stats` endpoint now returns Active=3 / At-Risk=4 / Total=7,
+matching the Members page. (Note: a separate `_query_recommendation_metrics` helper that
+powers other recommendation endpoints still has unrelated schema drift, e.g.
+`pain_points.description` — left for a focused follow-up.)
+
+
 ### Added — data-intelligence engine: trends, recommendations, Insights dashboard, CI chat
 
 Completes the engine on top of the metric registry + snapshot store: statistical
@@ -63,7 +84,6 @@ pooled data — `New Documents/north-star-data-intelligence.md`). This is the fo
 `sample_size` is captured alongside every value so the (next) recommendation layer can
 refuse to draw conclusions from thin data. Verified end-to-end against real Sales data
 (20 snapshot rows, sane values, idempotent re-run). App boots, beat registered, WGR tests green.
-
 
 ### Added — editable member detail (CI overrides that survive the WGR sync)
 
