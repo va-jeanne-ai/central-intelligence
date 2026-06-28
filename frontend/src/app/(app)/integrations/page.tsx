@@ -60,7 +60,7 @@ function IntegrationCard({ p }: { p: IntegrationSummary }) {
         <div className="flex items-center justify-between text-[11px] text-gray-400">
           <span>{p.connected ? formatLastSynced(p.last_synced_at) : isComingSoon ? "Coming soon" : "Not connected"}</span>
           {!isComingSoon && (
-            <span className="text-indigo-600 font-medium">{p.connected ? "Manage →" : "Connect →"}</span>
+            <span className="text-accent-600 font-medium">{p.connected ? "Manage →" : "Connect →"}</span>
           )}
         </div>
       </CardBody>

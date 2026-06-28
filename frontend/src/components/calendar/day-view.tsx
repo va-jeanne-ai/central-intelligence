@@ -32,18 +32,18 @@ export function DayView({ anchorDate, events }: DayViewProps) {
       <div
         className={
           "px-5 py-3 border-b border-gray-200 " +
-          (isToday ? "bg-indigo-50" : "bg-gray-50")
+          (isToday ? "bg-accent-50" : "bg-gray-50")
         }
       >
         <div
           className={
             "text-[20px] font-semibold leading-none " +
-            (isToday ? "text-indigo-700" : "text-gray-800")
+            (isToday ? "text-accent-700" : "text-gray-800")
           }
         >
           {formatDayHeader(anchorDate)}
           {isToday && (
-            <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-indigo-500">
+            <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-accent-500">
               Today
             </span>
           )}

@@ -196,7 +196,7 @@ export const LEADS_KPI_STATS: LeadsKpiStat[] = [
     badgeLabel: "9%",
     badgeDirection: "up",
     subtitle: "Mar 24 – Mar 30",
-    borderColor: "#6366F1",
+    borderColor: "#F59E0B",
   },
   {
     label: "Conversion Rate",
@@ -244,7 +244,7 @@ export interface SourceSegment {
 }
 
 export const SOURCE_BREAKDOWN: SourceSegment[] = [
-  { label: "Webinar", percentage: 45, count: 561, color: "#6366F1" },
+  { label: "Webinar", percentage: 45, count: 561, color: "#F59E0B" },
   { label: "VSL", percentage: 30, count: 374, color: "#3B82F6" },
   { label: "Opt-in", percentage: 25, count: 312, color: "#10B981" },
 ];
@@ -282,7 +282,7 @@ export const FUNNEL_STAGES: FunnelStage[] = [
   {
     label: "Applications",
     count: 198,
-    color: "#6366F1",
+    color: "#F59E0B",
     widthPercent: 48,
     conversionRate: "40.7%",
   },

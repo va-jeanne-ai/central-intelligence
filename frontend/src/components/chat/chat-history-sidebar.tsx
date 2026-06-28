@@ -97,7 +97,7 @@ export function ChatHistorySidebar({
           <button
             type="button"
             onClick={onNewChat}
-            className="w-full text-[13px] font-semibold px-3 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white transition-colors"
+            className="w-full text-[13px] font-semibold px-3 py-2 rounded-lg bg-accent-500 hover:bg-accent-600 text-white transition-colors"
           >
             + New chat
           </button>
@@ -122,7 +122,7 @@ export function ChatHistorySidebar({
                       className={
                         "group flex items-start gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors " +
                         (isActive
-                          ? "bg-indigo-100 hover:bg-indigo-100"
+                          ? "bg-accent-100 hover:bg-accent-100"
                           : "hover:bg-gray-100")
                       }
                       onClick={() => onSelectSession(s.id)}
@@ -131,7 +131,7 @@ export function ChatHistorySidebar({
                         <div
                           className={
                             "text-[13px] font-medium truncate " +
-                            (isActive ? "text-indigo-900" : "text-gray-700")
+                            (isActive ? "text-accent-900" : "text-gray-700")
                           }
                           title={s.title}
                         >

@@ -1,7 +1,7 @@
 /**
  * Atom: Button
  *
- * Primary (indigo bg) and ghost (outline) button variants.
+ * Primary (accent bg) and ghost (outline) button variants.
  * Matches mockup's .btn, .btn-primary, .btn-ghost.
  */
 
@@ -28,7 +28,7 @@ interface ButtonAsLinkProps extends ButtonBaseProps {
 type ButtonProps = ButtonAsButtonProps | ButtonAsLinkProps;
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: "bg-indigo-500 hover:bg-indigo-600 text-white border-transparent",
+  primary: "bg-accent-500 hover:bg-accent-600 text-white border-transparent",
   ghost: "bg-transparent hover:bg-gray-100 text-gray-700 border-gray-200",
   danger: "bg-red-500 hover:bg-red-600 text-white border-transparent",
 };
@@ -68,7 +68,7 @@ export function Button({
 /**
  * Atom: CopyButton
  *
- * Small indigo copy button matching mockup's .copy-btn.
+ * Small accent copy button matching mockup's .copy-btn.
  */
 export function CopyButton({
   text,
@@ -87,7 +87,7 @@ export function CopyButton({
     <button
       type="button"
       onClick={handleCopy}
-      className={`px-2.5 py-1 text-[11px] font-semibold rounded bg-indigo-500 text-white hover:bg-indigo-600 transition-colors ${className}`}
+      className={`px-2.5 py-1 text-[11px] font-semibold rounded bg-accent-500 text-white hover:bg-accent-600 transition-colors ${className}`}
     >
       {label}
     </button>

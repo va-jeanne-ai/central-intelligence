@@ -263,8 +263,8 @@ export function FreshnessPanel() {
             flight, even before the user has run a freshness check, because the
             running state is re-hydrated from localStorage on mount. */}
         {isSyncingWgr && (
-          <div className="mb-3 flex items-center gap-2 rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-[12px] text-indigo-700">
-            <Spinner className="text-indigo-600" />
+          <div className="mb-3 flex items-center gap-2 rounded-md border border-accent-100 bg-accent-50 px-3 py-2 text-[12px] text-accent-700">
+            <Spinner className="text-accent-600" />
             <span>WGR sync in progress… this keeps running if you refresh or leave the page.</span>
           </div>
         )}

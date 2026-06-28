@@ -58,7 +58,7 @@ function SourcePill({ source }: { source: string | null }) {
   const styles: Record<string, string> = {
     mailchimp: "bg-emerald-50 text-emerald-700 border-emerald-200",
     seed: "bg-amber-50 text-amber-700 border-amber-200",
-    manual: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    manual: "bg-accent-50 text-accent-700 border-accent-200",
   };
   const cls = styles[source] ?? "bg-gray-100 text-gray-600 border-gray-200";
   return (
@@ -179,7 +179,7 @@ function CampaignDetail({ c }: { c: EmailCampaignRow }) {
                 href={c.archive_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                className="text-[11px] text-accent-600 hover:text-accent-700 underline underline-offset-2"
               >
                 Open in Mailchimp ↗
               </a>
@@ -198,7 +198,7 @@ function CampaignDetail({ c }: { c: EmailCampaignRow }) {
             href={c.archive_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[11px] text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+            className="text-[11px] text-accent-600 hover:text-accent-700 underline underline-offset-2"
           >
             Open in Mailchimp ↗
           </a>
@@ -322,7 +322,7 @@ function DraftRow({
                   }
                 }}
                 onBlur={() => void saveRename()}
-                className="text-sm font-medium text-gray-900 border border-indigo-300 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-300/50 min-w-[200px]"
+                className="text-sm font-medium text-gray-900 border border-accent-300 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-accent-300/50 min-w-[200px]"
               />
             ) : (
               <button

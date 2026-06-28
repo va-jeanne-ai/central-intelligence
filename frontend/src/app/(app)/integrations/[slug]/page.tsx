@@ -64,7 +64,7 @@ function InstagramSetupStepsCard() {
   const [showSetupSteps, setShowSetupSteps] = useState(true);
 
   const linkClass =
-    "text-indigo-600 hover:text-indigo-700 underline underline-offset-2";
+    "text-accent-600 hover:text-accent-700 underline underline-offset-2";
 
   return (
     <Card>
@@ -74,7 +74,7 @@ function InstagramSetupStepsCard() {
           <button
             type="button"
             onClick={() => setShowSetupSteps((v) => !v)}
-            className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+            className="text-[12px] font-medium text-accent-600 hover:text-accent-700"
           >
             {showSetupSteps ? "Hide" : "Show"}
           </button>
@@ -192,7 +192,7 @@ function FacebookSetupStepsCard() {
   const [showSetupSteps, setShowSetupSteps] = useState(true);
 
   const linkClass =
-    "text-indigo-600 hover:text-indigo-700 underline underline-offset-2";
+    "text-accent-600 hover:text-accent-700 underline underline-offset-2";
 
   return (
     <Card>
@@ -202,7 +202,7 @@ function FacebookSetupStepsCard() {
           <button
             type="button"
             onClick={() => setShowSetupSteps((v) => !v)}
-            className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+            className="text-[12px] font-medium text-accent-600 hover:text-accent-700"
           >
             {showSetupSteps ? "Hide" : "Show"}
           </button>
@@ -423,7 +423,7 @@ function GoogleWorkspaceConnectCard() {
           <button
             type="button"
             onClick={() => setShowSetupSteps((v) => !v)}
-            className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+            className="text-[12px] font-medium text-accent-600 hover:text-accent-700"
           >
             {showSetupSteps ? "Hide" : "Show"}
           </button>
@@ -442,7 +442,7 @@ function GoogleWorkspaceConnectCard() {
                   href="https://console.cloud.google.com/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                  className="text-accent-600 hover:text-accent-700 underline underline-offset-2"
                 >
                   Google Cloud Console
                 </a>{" "}
@@ -451,7 +451,7 @@ function GoogleWorkspaceConnectCard() {
                   href="https://console.cloud.google.com/apis/library/gmail.googleapis.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                  className="text-accent-600 hover:text-accent-700 underline underline-offset-2"
                 >
                   Gmail API
                 </a>
@@ -460,7 +460,7 @@ function GoogleWorkspaceConnectCard() {
                   href="https://console.cloud.google.com/apis/library/drive.googleapis.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                  className="text-accent-600 hover:text-accent-700 underline underline-offset-2"
                 >
                   Google Drive API
                 </a>
@@ -469,7 +469,7 @@ function GoogleWorkspaceConnectCard() {
                   href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                  className="text-accent-600 hover:text-accent-700 underline underline-offset-2"
                 >
                   Google Calendar API
                 </a>
@@ -481,7 +481,7 @@ function GoogleWorkspaceConnectCard() {
                   href="https://console.cloud.google.com/apis/credentials/consent"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                  className="text-accent-600 hover:text-accent-700 underline underline-offset-2"
                 >
                   OAuth consent screen
                 </a>{" "}
@@ -511,7 +511,7 @@ function GoogleWorkspaceConnectCard() {
                   href="https://console.cloud.google.com/apis/credentials"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                  className="text-accent-600 hover:text-accent-700 underline underline-offset-2"
                 >
                   Credentials
                 </a>{" "}
@@ -542,7 +542,7 @@ function GoogleWorkspaceConnectCard() {
                   href="https://www.voyageai.com/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                  className="text-accent-600 hover:text-accent-700 underline underline-offset-2"
                 >
                   Voyage AI
                 </a>{" "}
@@ -882,7 +882,7 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
       <>
         <Header title="Integration" />
         <main className="flex-1 overflow-y-auto p-7 space-y-4">
-          <Link href="/integrations" className="text-sm text-indigo-600 hover:text-indigo-700 underline underline-offset-2">
+          <Link href="/integrations" className="text-sm text-accent-600 hover:text-accent-700 underline underline-offset-2">
             ← Back to integrations
           </Link>
           <p className="text-sm text-red-700">{error ?? "Integration not found."}</p>
@@ -905,7 +905,7 @@ export default function IntegrationDetailPage({ params }: { params: { slug: stri
       <main className="flex-1 overflow-y-auto p-7 space-y-6 max-w-3xl">
         <Link
           href="/integrations"
-          className="inline-block text-xs font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+          className="inline-block text-xs font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
         >
           ← Back to integrations
         </Link>

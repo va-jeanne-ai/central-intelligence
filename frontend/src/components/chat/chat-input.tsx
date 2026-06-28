@@ -102,7 +102,7 @@ export function ChatInput({ onSend, isDisabled = false }: ChatInputProps) {
             "flex-1 resize-none rounded-3xl bg-gray-50 border border-gray-200 px-4 py-2.5",
             "text-sm text-gray-800 placeholder-gray-400 leading-relaxed outline-none",
             "transition-colors duration-150 overflow-y-hidden",
-            "focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100",
+            "focus:border-accent-400 focus:bg-white focus:ring-2 focus:ring-accent-100",
             isDisabled ? "opacity-50 cursor-not-allowed" : "",
           ]
             .filter(Boolean)
@@ -125,7 +125,7 @@ export function ChatInput({ onSend, isDisabled = false }: ChatInputProps) {
             .filter(Boolean)
             .join(" ")}
           style={{
-            backgroundColor: canSend ? "#6366F1" : "#D1D5DB",
+            backgroundColor: canSend ? "#F59E0B" : "#D1D5DB",
           }}
         >
           <SendIcon />

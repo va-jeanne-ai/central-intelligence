@@ -279,7 +279,7 @@ export default function OffersPage() {
           <KpiCard
             label="Total Offers"
             value={data ? (data.total ?? allOffers.length).toLocaleString() : "—"}
-            borderColor="#6366F1"
+            borderColor="#F59E0B"
           />
           <KpiCard
             label="Conversion Rate"

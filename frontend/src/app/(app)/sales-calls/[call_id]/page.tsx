@@ -272,13 +272,13 @@ function InlineTextEdit({
           if (e.key === "Enter") void commit();
           if (e.key === "Escape") setIsEditing(false);
         }}
-        className={`border border-indigo-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-300/50 ${inputClassName}`}
+        className={`border border-accent-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-accent-300/50 ${inputClassName}`}
       />
       <button
         type="button"
         onClick={() => void commit()}
         disabled={isSaving}
-        className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+        className="text-[12px] font-medium text-accent-600 hover:text-accent-700"
       >
         {isSaving ? "…" : "Save"}
       </button>
@@ -360,14 +360,14 @@ function InlineTextareaEdit({
           // Cmd+Enter / Ctrl+Enter to save (Enter alone is a newline in a textarea)
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void commit();
         }}
-        className={`w-full border border-indigo-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300/50 ${className}`}
+        className={`w-full border border-accent-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-300/50 ${className}`}
       />
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => void commit()}
           disabled={isSaving}
-          className="text-[13px] font-medium px-3 py-1 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-200 disabled:cursor-not-allowed text-white"
+          className="text-[13px] font-medium px-3 py-1 rounded-lg bg-accent-500 hover:bg-accent-600 disabled:bg-accent-200 disabled:cursor-not-allowed text-white"
         >
           {isSaving ? "Saving…" : "Save"}
         </button>
@@ -421,7 +421,7 @@ function InsightRow({ insight: ins, onSaveField, onDelete }: InsightRowProps) {
   return (
     <div className="px-5 py-3 group">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+        <span className="text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-accent-50 text-accent-700 border border-accent-200">
           <InlineTextEdit
             value={ins.insight_type}
             placeholder="type"
@@ -481,7 +481,7 @@ function InsightRow({ insight: ins, onSaveField, onDelete }: InsightRowProps) {
           <button
             type="button"
             onClick={() => setExpanded((e) => !e)}
-            className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1"
+            className="text-[12px] font-medium text-accent-600 hover:text-accent-700 inline-flex items-center gap-1"
           >
             <span
               className={`inline-block transition-transform ${expanded ? "rotate-90" : ""}`}
@@ -496,7 +496,7 @@ function InsightRow({ insight: ins, onSaveField, onDelete }: InsightRowProps) {
             <div className="mt-3 grid sm:grid-cols-2 gap-x-6 gap-y-4 rounded-lg bg-gray-50 border border-gray-100 p-4">
               {psychFields.length > 0 && (
                 <div className="space-y-3">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-500">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-accent-500">
                     Psychology
                   </p>
                   <dl className="space-y-3">
@@ -735,7 +735,7 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
       <>
         <Header title="Call detail" />
         <main className="flex-1 overflow-y-auto p-7 space-y-4">
-          <Link href="/sales-calls" className="text-[15px] text-indigo-600 hover:text-indigo-700 underline underline-offset-2">
+          <Link href="/sales-calls" className="text-[15px] text-accent-600 hover:text-accent-700 underline underline-offset-2">
             ← Back to calls
           </Link>
           <p className="text-[15px] text-red-700">{error ?? "Call not found."}</p>
@@ -759,7 +759,7 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
         {/* Back link */}
         <Link
           href="/sales-calls"
-          className="inline-block text-[13px] font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+          className="inline-block text-[13px] font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
         >
           ← Back to calls
         </Link>
@@ -813,7 +813,7 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
             <button
               type="button"
               onClick={() => void downloadTranscript(call.call_id)}
-              className="text-[13px] font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+              className="text-[13px] font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
             >
               Download transcript
             </button>
@@ -821,7 +821,7 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
               type="button"
               onClick={() => void handleReanalyze()}
               disabled={isReanalyzing}
-              className="text-[13px] font-medium px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-200 disabled:cursor-not-allowed text-white transition-colors"
+              className="text-[13px] font-medium px-3 py-1.5 rounded-lg bg-accent-500 hover:bg-accent-600 disabled:bg-accent-200 disabled:cursor-not-allowed text-white transition-colors"
             >
               {isReanalyzing ? "Re-analyzing…" : "Re-analyze"}
             </button>

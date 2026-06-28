@@ -33,8 +33,8 @@ const MONTH_NAMES = [
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getContentColor(type: string | null): string {
-  if (type === null) return "#6366F1";
-  return CONTENT_TYPE_COLORS[type.toLowerCase() as ContentType] ?? "#6366F1";
+  if (type === null) return "#F59E0B";
+  return CONTENT_TYPE_COLORS[type.toLowerCase() as ContentType] ?? "#F59E0B";
 }
 
 function formatDate(iso: string): string {
@@ -100,7 +100,7 @@ function PromoModal({ initial, title, onClose, onSubmit, isSubmitting }: PromoMo
   }
 
   const inputClass =
-    "text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-full";
+    "text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent w-full";
   const labelClass = "text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-1";
 
   return (
@@ -250,7 +250,7 @@ function PromoModal({ initial, title, onClose, onSubmit, isSubmitting }: PromoMo
               type="button"
               onClick={() => void onSubmit(form)}
               disabled={isSubmitting || form.name.trim() === "" || form.start_date === "" || form.end_date === ""}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-200 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors duration-150 active:scale-95 shadow-sm"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-600 hover:bg-accent-700 disabled:bg-accent-200 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors duration-150 active:scale-95 shadow-sm"
             >
               {isSubmitting ? "Saving..." : "Save"}
             </button>
@@ -338,7 +338,7 @@ function CalendarView({ promotions, onEdit }: CalendarViewProps) {
           <select
             value={month}
             onChange={(e) => setMonth(Number(e.target.value))}
-            className="text-sm font-bold text-gray-900 bg-transparent cursor-pointer focus:outline-none hover:text-indigo-600 transition-colors border-none p-0 pr-5"
+            className="text-sm font-bold text-gray-900 bg-transparent cursor-pointer focus:outline-none hover:text-accent-600 transition-colors border-none p-0 pr-5"
           >
             {MONTH_NAMES.map((name, i) => (
               <option key={i} value={i}>{name}</option>
@@ -347,7 +347,7 @@ function CalendarView({ promotions, onEdit }: CalendarViewProps) {
           <select
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            className="text-sm font-bold text-gray-900 bg-transparent cursor-pointer focus:outline-none hover:text-indigo-600 transition-colors border-none p-0 pr-5"
+            className="text-sm font-bold text-gray-900 bg-transparent cursor-pointer focus:outline-none hover:text-accent-600 transition-colors border-none p-0 pr-5"
           >
             {Array.from({ length: 11 }, (_, i) => today.getFullYear() - 2 + i).map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -395,7 +395,7 @@ function CalendarView({ promotions, onEdit }: CalendarViewProps) {
                   <span
                     className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full mb-1 ${
                       isToday
-                        ? "bg-indigo-600 text-white font-bold"
+                        ? "bg-accent-600 text-white font-bold"
                         : "text-gray-500"
                     }`}
                   >
@@ -458,7 +458,7 @@ function ListView({ promotions, onEdit, onDelete }: ListViewProps) {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent-500"
         >
           <option value="all">All Status</option>
           {PROMO_STATUSES.map((s) => (
@@ -468,7 +468,7 @@ function ListView({ promotions, onEdit, onDelete }: ListViewProps) {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent-500"
         >
           <option value="all">All Types</option>
           {CONTENT_TYPES.map((t) => (
@@ -530,7 +530,7 @@ function ListView({ promotions, onEdit, onDelete }: ListViewProps) {
                         p.status === "active" ? "text-emerald-600" :
                         p.status === "completed" ? "text-gray-400" :
                         p.status === "cancelled" ? "text-red-500" :
-                        "text-indigo-600"
+                        "text-accent-600"
                       }`}>
                         {p.status}
                       </span>
@@ -747,7 +747,7 @@ export default function PromoCalendarPage() {
                 onClick={() => setView("calendar")}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                   view === "calendar"
-                    ? "bg-indigo-600 text-white"
+                    ? "bg-accent-600 text-white"
                     : "bg-white text-gray-600 hover:bg-gray-50"
                 }`}
               >
@@ -758,7 +758,7 @@ export default function PromoCalendarPage() {
                 onClick={() => setView("list")}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors border-l border-gray-200 ${
                   view === "list"
-                    ? "bg-indigo-600 text-white"
+                    ? "bg-accent-600 text-white"
                     : "bg-white text-gray-600 hover:bg-gray-50"
                 }`}
               >

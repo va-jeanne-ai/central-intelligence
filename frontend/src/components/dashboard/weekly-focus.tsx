@@ -20,12 +20,12 @@ interface WeeklyFocusResponse {
 
 // ─── Shell ─────────────────────────────────────────────────────────────────────
 // Shared chrome so the loading, empty, and populated states stay visually
-// identical (same indigo CI accent as the recommendations widget).
+// identical (same gold CI accent as the recommendations widget).
 
 function FocusShell({ children }: { children: React.ReactNode }) {
   return (
     <aside
-      className="bg-indigo-50 border border-indigo-200 rounded-xl p-5 flex flex-col gap-4 shadow-sm"
+      className="bg-accent-50 border border-accent-200 rounded-xl p-5 flex flex-col gap-4 shadow-sm"
       aria-label="This Week's Focus"
     >
       <div className="flex flex-col gap-0.5">
@@ -33,13 +33,13 @@ function FocusShell({ children }: { children: React.ReactNode }) {
           <span className="text-lg leading-none" role="img" aria-label="Crown">
             👑
           </span>
-          <h2 className="text-sm font-bold text-indigo-900">This Week&apos;s Focus</h2>
+          <h2 className="text-sm font-bold text-accent-900">This Week&apos;s Focus</h2>
         </div>
-        <p className="text-xs text-indigo-700 ml-7">
+        <p className="text-xs text-accent-700 ml-7">
           Cross-department priorities, synthesized for you
         </p>
       </div>
-      <hr className="border-indigo-200" />
+      <hr className="border-accent-200" />
       {children}
     </aside>
   );
@@ -53,10 +53,10 @@ function FocusSkeleton() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="flex items-start gap-3">
-            <div className="w-5 h-5 rounded-full bg-indigo-200/60 animate-pulse flex-shrink-0" />
+            <div className="w-5 h-5 rounded-full bg-accent-200/60 animate-pulse flex-shrink-0" />
             <div className="flex-1 space-y-1.5 pt-0.5">
-              <div className="h-3 w-2/3 bg-indigo-200/60 rounded animate-pulse" />
-              <div className="h-3 w-full bg-indigo-200/40 rounded animate-pulse" />
+              <div className="h-3 w-2/3 bg-accent-200/60 rounded animate-pulse" />
+              <div className="h-3 w-full bg-accent-200/40 rounded animate-pulse" />
             </div>
           </div>
         ))}
@@ -109,7 +109,7 @@ export function WeeklyFocus() {
   if (focus.length === 0) {
     return (
       <FocusShell>
-        <p className="text-xs text-indigo-700">
+        <p className="text-xs text-accent-700">
           No focus priorities available right now.
         </p>
       </FocusShell>
@@ -119,7 +119,7 @@ export function WeeklyFocus() {
   return (
     <FocusShell>
       {summary && (
-        <p className="text-sm font-semibold text-indigo-900 leading-snug -mt-1">
+        <p className="text-sm font-semibold text-accent-900 leading-snug -mt-1">
           {summary}
         </p>
       )}
@@ -127,17 +127,17 @@ export function WeeklyFocus() {
         {focus.map((item, index) => (
           <li key={`${item.title}-${index}`} className="flex items-start gap-3">
             <span
-              className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 text-[10px] font-bold mt-0.5"
+              className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-accent-200 text-accent-800 text-[10px] font-bold mt-0.5"
               aria-hidden="true"
             >
               {index + 1}
             </span>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-indigo-900 leading-snug">
+              <p className="text-sm font-semibold text-accent-900 leading-snug">
                 {item.title}
               </p>
               {item.detail && (
-                <p className="text-xs text-indigo-700 leading-snug mt-0.5">
+                <p className="text-xs text-accent-700 leading-snug mt-0.5">
                   {item.detail}
                 </p>
               )}

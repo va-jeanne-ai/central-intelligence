@@ -84,8 +84,8 @@ const STATUS_CONFIG: Record<
   },
   graduated: {
     label: "Graduated",
-    dotColor: "#6366F1",
-    badgeClasses: "bg-indigo-50 text-indigo-700",
+    dotColor: "#F59E0B",
+    badgeClasses: "bg-accent-50 text-accent-700",
   },
   churned: {
     label: "Churned",

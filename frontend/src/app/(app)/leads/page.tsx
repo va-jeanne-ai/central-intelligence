@@ -34,7 +34,7 @@ interface LeadsStatsResponse {
 // ─── Color maps ───────────────────────────────────────────────────────────────
 
 const SOURCE_COLORS: Record<string, string> = {
-  webinar: "#6366F1",
+  webinar: "#F59E0B",
   vsl: "#3B82F6",
   "opt-in": "#10B981",
   ads: "#9CA3AF",
@@ -45,7 +45,7 @@ const SOURCE_COLORS: Record<string, string> = {
 const FUNNEL_COLORS: Record<string, string> = {
   Leads: "#3B82F6",
   Appointments: "#8B5CF6",
-  Applications: "#6366F1",
+  Applications: "#F59E0B",
   Sales: "#10B981",
 };
 
@@ -114,8 +114,8 @@ const STATUS_CONFIG: Record<
   },
   stale: {
     label: "Stale",
-    dotColor: "#6366F1",
-    badgeClasses: "bg-indigo-50 text-indigo-700",
+    dotColor: "#F59E0B",
+    badgeClasses: "bg-accent-50 text-accent-700",
   },
 };
 
@@ -123,7 +123,7 @@ const SOURCE_CONFIG: Record<
   LeadSource,
   { label: string; badgeClasses: string }
 > = {
-  webinar: { label: "Webinar", badgeClasses: "bg-indigo-50 text-indigo-700" },
+  webinar: { label: "Webinar", badgeClasses: "bg-accent-50 text-accent-700" },
   vsl: { label: "VSL", badgeClasses: "bg-blue-50 text-blue-700" },
   "opt-in": { label: "Opt-in", badgeClasses: "bg-green-50 text-green-700" },
   ads: { label: "Ads", badgeClasses: "bg-gray-100 text-gray-600" },
@@ -351,6 +351,20 @@ function LeadVolumeChart({ data }: { data: { label: string; value: number }[] })
 
 // ─── Source Breakdown Donut Chart ─────────────────────────────────────────────
 
+// Stable palette for source colors not in SOURCE_COLORS (real integrations send
+// sources like 'wgr', 'facebook_ads', … that the enum map doesn't cover). Hashed
+// by source string so a given source always gets the same color across renders.
+const SOURCE_FALLBACK_PALETTE = [
+  "#F59E0B", "#3B82F6", "#10B981", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316", "#6366F1",
+];
+
+function colorForSource(source: string): string {
+  if (SOURCE_COLORS[source]) return SOURCE_COLORS[source];
+  let hash = 0;
+  for (let i = 0; i < source.length; i++) hash = (hash * 31 + source.charCodeAt(i)) | 0;
+  return SOURCE_FALLBACK_PALETTE[Math.abs(hash) % SOURCE_FALLBACK_PALETTE.length];
+}
+
 function SourceDonutChart({
   segments,
   total,
@@ -362,10 +376,26 @@ function SourceDonutChart({
   const cy = 80;
   const r = 58;
   const innerR = 38;
+  const ringWidth = r - innerR;
+  const midR = (r + innerR) / 2;
+  const circumference = 2 * Math.PI * midR;
 
-  // Build arc segments
+  // Resolve color + label once per segment (label via the shared resolver so
+  // unknown sources like 'wgr' get prettified instead of shown raw).
+  const items = segments.map((seg) => ({
+    ...seg,
+    color: colorForSource(seg.source),
+    label: resolveSource(seg.source).label,
+  }));
+
+  // A single segment at (near) 100% can't be drawn as one SVG arc — the start
+  // and end points coincide and the path collapses to nothing. Render a plain
+  // stroked ring in that case so a 100%-one-source donut isn't blank.
+  const isFullCircle = items.length === 1 && items[0].percentage >= 99.95;
+
+  // Build wedge paths for the multi-segment case.
   let cumulativePercent = 0;
-  const arcs = segments.map((seg) => {
+  const arcs = items.map((seg) => {
     const startAngle = (cumulativePercent / 100) * 2 * Math.PI - Math.PI / 2;
     cumulativePercent += seg.percentage;
     const endAngle = (cumulativePercent / 100) * 2 * Math.PI - Math.PI / 2;
@@ -389,10 +419,7 @@ function SourceDonutChart({
       "Z",
     ].join(" ");
 
-    const color = SOURCE_COLORS[seg.source] ?? "#6B7280";
-    const label = SOURCE_CONFIG[seg.source as LeadSource]?.label ?? seg.source;
-
-    return { ...seg, d, color, label };
+    return { ...seg, d };
   });
 
   return (
@@ -412,15 +439,28 @@ function SourceDonutChart({
             height="160"
             aria-hidden="true"
           >
-            {arcs.map((arc, i) => (
-              <path
-                key={i}
-                d={arc.d}
-                fill={arc.color}
-                stroke="white"
-                strokeWidth="2"
+            {isFullCircle ? (
+              // Single-source 100%: stroked ring (arc paths can't draw a full circle).
+              <circle
+                cx={cx}
+                cy={cy}
+                r={midR}
+                fill="none"
+                stroke={items[0].color}
+                strokeWidth={ringWidth}
+                strokeDasharray={circumference}
               />
-            ))}
+            ) : (
+              arcs.map((arc, i) => (
+                <path
+                  key={i}
+                  d={arc.d}
+                  fill={arc.color}
+                  stroke="white"
+                  strokeWidth="2"
+                />
+              ))
+            )}
             {/* Center text */}
             <text
               x={cx}
@@ -446,25 +486,29 @@ function SourceDonutChart({
 
         {/* Legend */}
         <div className="flex flex-col gap-2.5 flex-1">
-          {arcs.map((arc) => (
-            <div key={arc.source} className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: arc.color }}
-                />
-                <span className="text-xs text-gray-600">{arc.label}</span>
+          {items.length === 0 ? (
+            <p className="text-xs text-gray-400">No source data.</p>
+          ) : (
+            items.map((item) => (
+              <div key={item.source} className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-xs text-gray-600 truncate">{item.label}</span>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <span className="text-xs font-bold text-gray-900">
+                    {item.percentage.toFixed(1)}%
+                  </span>
+                  <span className="text-xs text-gray-400 ml-1">
+                    ({item.count.toLocaleString()})
+                  </span>
+                </div>
               </div>
-              <div className="text-right">
-                <span className="text-xs font-bold text-gray-900">
-                  {arc.percentage.toFixed(1)}%
-                </span>
-                <span className="text-xs text-gray-400 ml-1">
-                  ({arc.count.toLocaleString()})
-                </span>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -578,7 +622,7 @@ function ScoreBar({ score }: { score: number }) {
       : score >= 60
       ? "#3B82F6"
       : score >= 40
-      ? "#6366F1"
+      ? "#F59E0B"
       : "#EF4444";
 
   return (
@@ -630,7 +674,7 @@ function LeadTableRow({ lead }: { lead: Lead }) {
       role="link"
       tabIndex={0}
       aria-label={`Open lead ${lead.name ?? "unnamed"}`}
-      className="border-b border-gray-50 hover:bg-gray-50/60 focus:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-300 cursor-pointer transition-colors"
+      className="border-b border-gray-50 hover:bg-gray-50/60 focus:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-300 cursor-pointer transition-colors"
     >
       {/* Name + Email */}
       <td className="px-5 py-3.5">
@@ -1090,7 +1134,7 @@ export default function LeadsPage() {
       badgeLabel: "—",
       badgeDirection: "up" as const,
       subtitle: "Last 7 days",
-      borderColor: "#6366F1",
+      borderColor: "#F59E0B",
     },
     {
       label: "Conversion Rate",

@@ -425,7 +425,7 @@ export function CallsTable({
               <button
                 type="button"
                 onClick={clearFilters}
-                className="text-xs font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                className="text-xs font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
               >
                 Clear filters
               </button>
@@ -493,7 +493,7 @@ export function CallsTable({
                       <td className="px-4 py-3">
                         <Link
                           href={detailHref(call.call_id)}
-                          className="text-sm font-medium text-gray-900 hover:text-indigo-700"
+                          className="text-sm font-medium text-gray-900 hover:text-accent-700"
                         >
                           {call.call_type ?? "Call"}
                         </Link>
@@ -503,7 +503,7 @@ export function CallsTable({
                       {!showTypeColumn ? (
                         <Link
                           href={detailHref(call.call_id)}
-                          className="font-medium text-gray-900 hover:text-indigo-700"
+                          className="font-medium text-gray-900 hover:text-accent-700"
                         >
                           {formatDate(call.date)}
                         </Link>
@@ -530,7 +530,7 @@ export function CallsTable({
                       <button
                         type="button"
                         onClick={() => void downloadTranscript(call.call_id)}
-                        className="text-xs font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                        className="text-xs font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
                       >
                         Transcript
                       </button>

@@ -74,7 +74,7 @@ function Sparkline({ data }: SparklineProps) {
           <div
             key={i}
             className={`flex-1 rounded-sm transition-all ${
-              isLast ? "bg-indigo-400" : "bg-gray-200"
+              isLast ? "bg-amber-600" : "bg-gray-200"
             }`}
             style={{ height: `${heightPercent}%` }}
             aria-hidden="true"
@@ -101,11 +101,11 @@ function WeeklySnapshot({ kpis, leadVolume }: WeeklySnapshotProps) {
       {/* Section header */}
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold text-gray-900">Weekly Performance Snapshot</h2>
-        <span className="text-xs text-gray-400 font-medium">Mar 24 – Mar 30</span>
+        <span className="text-xs text-gray-400 font-medium">vs last week</span>
       </div>
 
-      {/* KPI mini-cards */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* KPI mini-cards — 4-col per mockup screen 1 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard
           label="Total Leads"
           value={formatNumber(kpis.total_leads)}
@@ -139,7 +139,7 @@ function WeeklySnapshot({ kpis, leadVolume }: WeeklySnapshotProps) {
       {/* Divider */}
       <div className="border-t border-gray-100 pt-3 flex flex-col gap-2">
         <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-          Leads — last 8 weeks
+          Lead Volume — Last 8 Weeks
         </span>
         <Sparkline data={leadVolume} />
       </div>
@@ -170,7 +170,7 @@ function DashboardSkeleton() {
       {/* Schedule brief + weekly-focus skeleton (2-column) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-sky-50 border border-sky-200 rounded-xl p-5 h-28 animate-pulse" />
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-5 h-28 animate-pulse" />
+        <div className="bg-accent-50 border border-accent-200 rounded-xl p-5 h-28 animate-pulse" />
       </div>
 
       {/* Bottom 2-column skeleton */}
@@ -276,8 +276,8 @@ export default function DashboardPage() {
             <WeeklyFocus />
           </div>
 
-          {/* Bottom 2-column layout */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Bottom layout — snapshot flexes, CI widget fixed 380px (mockup) */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_380px]">
             <WeeklySnapshot kpis={stats.kpis} leadVolume={stats.lead_volume} />
             <CIWidget />
           </div>
