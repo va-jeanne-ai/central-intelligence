@@ -245,6 +245,8 @@ function LeadsKpiCard({
 // ─── Lead Volume Line Chart ───────────────────────────────────────────────────
 
 function LeadVolumeChart({ data }: { data: { label: string; value: number }[] }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+
   const values = data.map((d) => d.value);
   const min = data.length > 0 ? Math.min(...values) : 0;
   const max = data.length > 0 ? Math.max(...values) : 1;
@@ -289,7 +291,8 @@ function LeadVolumeChart({ data }: { data: { label: string; value: number }[] })
         viewBox={`0 0 ${chartW} ${chartH}`}
         className="w-full"
         style={{ height: 160 }}
-        aria-hidden="true"
+        role="img"
+        aria-label="Lead volume over the last 8 weeks by entry date"
       >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -332,15 +335,16 @@ function LeadVolumeChart({ data }: { data: { label: string; value: number }[] })
         {/* Data points */}
         {data.map((d, i) => {
           const isLast = i === data.length - 1;
+          const isHovered = hovered === i;
           const cx = toX(i);
           const cy = toY(d.value);
           return (
             <g key={i}>
-              {isLast && (
+              {(isLast || isHovered) && (
                 <circle
                   cx={cx}
                   cy={cy}
-                  r="7"
+                  r={isHovered ? 8 : 7}
                   fill="#BFDBFE"
                   opacity="0.6"
                 />
@@ -348,8 +352,8 @@ function LeadVolumeChart({ data }: { data: { label: string; value: number }[] })
               <circle
                 cx={cx}
                 cy={cy}
-                r={isLast ? 4 : 3}
-                fill={isLast ? "#1D4ED8" : "#3B82F6"}
+                r={isHovered ? 5 : isLast ? 4 : 3}
+                fill={isLast || isHovered ? "#1D4ED8" : "#3B82F6"}
                 stroke="white"
                 strokeWidth="1.5"
               />
@@ -375,6 +379,50 @@ function LeadVolumeChart({ data }: { data: { label: string; value: number }[] })
             </text>
           );
         })}
+
+        {/* Hover tooltip — value + label above the hovered point */}
+        {hovered !== null && data[hovered] && (() => {
+          const d = data[hovered];
+          const cx = toX(hovered);
+          const cy = toY(d.value);
+          const text = `${d.value} · ${d.label}`;
+          const boxW = Math.max(46, text.length * 6.2);
+          const boxH = 22;
+          // Keep the tooltip inside the chart horizontally.
+          const bx = Math.min(Math.max(cx - boxW / 2, 2), chartW - boxW - 2);
+          const by = Math.max(cy - boxH - 10, 2);
+          return (
+            <g pointerEvents="none">
+              <rect x={bx} y={by} width={boxW} height={boxH} rx="5" fill="#1F2937" />
+              <text
+                x={bx + boxW / 2}
+                y={by + boxH / 2 + 4}
+                textAnchor="middle"
+                fontSize="11"
+                fontWeight="600"
+                fill="#FFFFFF"
+              >
+                {text}
+              </text>
+            </g>
+          );
+        })()}
+
+        {/* Invisible, forgiving hit-areas — drive the hover state per point */}
+        {data.map((d, i) => (
+          <circle
+            key={`hit-${i}`}
+            cx={toX(i)}
+            cy={toY(d.value)}
+            r="14"
+            fill="transparent"
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+            style={{ cursor: "pointer" }}
+          >
+            <title>{`${d.value} leads — ${d.label}`}</title>
+          </circle>
+        ))}
       </svg>
     </div>
   );

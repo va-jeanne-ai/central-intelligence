@@ -7,6 +7,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — hover tooltips on the Lead Volume chart points
+
+Hovering a point on the "Lead Volume — Last 8 Weeks" chart (/leads) now shows its value and week
+label in a small tooltip, with the point enlarging/highlighting. Implemented in
+**`leads/page.tsx`**: a hovered-index state, forgiving invisible hit-area circles per point (r=14)
+that drive it, an in-SVG tooltip box clamped to stay inside the chart, plus a native `<title>` per
+point for accessibility/touch. The chart's `aria-hidden` was removed and replaced with a proper
+`role="img"` label. `tsc` + ESLint clean, `next build` passes.
+
+
 ### Changed — Lead Volume chart now follows entry_date + the selected range
 
 The "Lead Volume — Last 8 Weeks" chart on /leads bucketed on `created_at` (sync date) and was anchored
