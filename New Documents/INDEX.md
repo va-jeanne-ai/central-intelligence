@@ -13,6 +13,8 @@
 | [api-contract-enhanced.md](./api-contract-enhanced.md) | 13.2K words | API contract, versioning, SDKs, testing | API developers, frontend teams |
 | [data-schema-enhanced.md](./data-schema-enhanced.md) | 12.8K words | Database design, migration, performance | Backend developers, DevOps, DBAs |
 | [critical-fixes-enhanced.md](./critical-fixes-enhanced.md) | 15.4K words | Implementation tracking, testing, planning | Engineering managers, developers, QA |
+| [north-star-data-intelligence.md](./north-star-data-intelligence.md) | — | **NEW DIRECTION** — data-analysis + statistical recommendation engine (the current goal) | Everyone — read first for "what's next" |
+| [status-rebaseline.md](./status-rebaseline.md) | — | Current build state vs. 8-sprint plan, drift, gaps (as of 2026-06-29) | Anyone needing the feature-completeness picture |
 | [README.md](./README.md) | 3.2K words | Overview, usage guide, relationships | Everyone (start here!) |
 
 ---
