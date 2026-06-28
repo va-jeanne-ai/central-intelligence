@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/ui/kpi-card";
+import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
@@ -442,6 +444,67 @@ function AddMemberModal({
   );
 }
 
+// ─── Fulfillment tools + Director CTA (moved from the old /fulfillment page) ─────
+
+const FULFILLMENT_TOOLS = [
+  { label: "Coaching Calls", href: "/coaching-calls", icon: "🎯" },
+  { label: "Accountability", href: "/accountability", icon: "✅" },
+  { label: "Tech SOS", href: "/tech-sos", icon: "🛠" },
+];
+
+function FulfillmentToolsCard() {
+  return (
+    <Card>
+      <CardHeader title="Fulfillment Tools" noBorder />
+      <CardBody className="pt-0">
+        <div className="grid grid-cols-3 gap-1">
+          {FULFILLMENT_TOOLS.map((tool) => (
+            <Link
+              key={tool.href}
+              href={tool.href}
+              className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-orange-50 hover:text-orange-700 transition-colors duration-150"
+            >
+              <span className="text-base leading-none" aria-hidden="true">
+                {tool.icon}
+              </span>
+              <span>{tool.label}</span>
+            </Link>
+          ))}
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function FulfillmentDirectorCtaCard() {
+  return (
+    <div className="bg-orange-50 border border-orange-200 rounded-xl p-5 flex flex-col items-start gap-4">
+      <div className="flex items-center gap-3">
+        <div
+          className="flex items-center justify-center w-12 h-12 rounded-full flex-shrink-0 shadow-sm"
+          style={{ background: "linear-gradient(135deg, #F97316 0%, #EA580C 100%)" }}
+          aria-hidden="true"
+        >
+          <span className="text-xl leading-none">🏆</span>
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-gray-900">Fulfillment Director</h2>
+          <p className="text-xs text-orange-700 font-medium mt-0.5">
+            AI-powered client-success intelligence
+          </p>
+        </div>
+      </div>
+      <p className="text-sm text-gray-600 leading-relaxed">
+        Get AI-powered member-progress insights, coaching wins, and retention
+        signals from your dedicated Fulfillment Director agent.
+      </p>
+      <Button variant="primary" href="/fulfillment-director">
+        Start Conversation <span aria-hidden="true">→</span>
+      </Button>
+    </div>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function MembersPage() {
@@ -612,6 +675,12 @@ export default function MembersPage() {
             ))}
           </div>
         )}
+
+        {/* Fulfillment tools + Director CTA (consolidated from /fulfillment) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <FulfillmentToolsCard />
+          <FulfillmentDirectorCtaCard />
+        </div>
 
         {/* Members Table */}
         {isLoading ? (

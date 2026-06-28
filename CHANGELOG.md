@@ -7,6 +7,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Removed — /fulfillment page (consolidated into /members)
+
+`/fulfillment` was a thin summary (4 KPIs + a tools card + a Fulfillment Director CTA) that `/members`
+already covered — same KPIs, plus the full member table. Consolidated into `/members` (mirrors the
+earlier `/sales`→`/leads` move).
+
+- **`members/page.tsx`** — gained the **Fulfillment Tools** card (links to Coaching Calls /
+  Accountability / Tech SOS — dropped the self-referential "Members" link) and the **Fulfillment
+  Director** CTA, between the KPI row and the table.
+- **`fulfillment/page.tsx`** — reduced to `redirect("/members")` so old links keep working (151 B stub).
+- **`sidebar.tsx`** — removed the "Fulfillment Overview" nav entry; Members/Director/etc. remain.
+- **`header.tsx`** — the Fulfillment-Director action rule now keys on `/fulfillment-director` (specific)
+  instead of bare `/fulfillment`; `/members` etc. still trigger it.
+- Left untouched: the `/fulfillment/summary` backend endpoint and `/fulfillment-director`.
+
+`tsc` + ESLint clean, `next build` passes (`/fulfillment` → 151 B redirect).
+
+
 ### Changed — Type + Result filters on the Calls table are now multi-select
 
 The Type and Result filters in `CallsTable` (the All Calls page) were single-select dropdowns; they're

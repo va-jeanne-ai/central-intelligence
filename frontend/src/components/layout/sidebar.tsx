@@ -71,7 +71,6 @@ const NAV_SECTIONS: NavSection[] = [
     department: "fulfillment",
     collapsible: true,
     entries: [
-      { label: "Fulfillment Overview", icon: "📊", href: "/fulfillment", department: "fulfillment" },
       { label: "Fulfillment Director", icon: "🏆", href: "/fulfillment-director", department: "fulfillment" },
       { label: "Members", icon: "👥", href: "/members", department: "fulfillment" },
       { label: "Coaching Calls", icon: "🎯", href: "/coaching-calls", department: "fulfillment" },
