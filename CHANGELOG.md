@@ -7,6 +7,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — "Lead" column on the All Calls table (/calls)
+
+The All Calls table now has a **Lead** column showing the prospect on each call (linked to the lead
+detail page), placed before the **Owner** (rep) column so it reads prospect → rep. The `/ci/calls`
+list already returns `lead_name`/`lead_id` (added with the Sales Calls work), so this is frontend-only:
+`CallsTable`'s `CallSummary` type gains the lead fields and a non-sortable Lead column (lead name is a
+join, not a `Call` column). `tsc` + ESLint clean, `next build` passes.
+
+
 ### Added — search on the Sales Calls page (lead, rep, or call id)
 
 A debounced search box above the Analyzed Calls list. Matches the linked **lead's name/email** (the

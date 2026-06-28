@@ -16,7 +16,9 @@ export interface CallSummary {
   date: string | null;
   call_type: string | null;
   call_result: string | null;
-  call_owner: string | null;
+  call_owner: string | null; // the rep/CSR who ran the call
+  lead_id: string | null; // the lead/prospect on the call
+  lead_name: string | null;
   transcript_quality: string | null;
   processed_date: string | null;
   insights_count: number;
@@ -466,6 +468,10 @@ export function CallsTable({
                     sortDir={sortDir}
                     onSort={toggleSort}
                   />
+                  {/* Lead (prospect) — not a Call column, so non-sortable. */}
+                  <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    Lead
+                  </th>
                   <SortableHeader
                     label="Owner"
                     column="call_owner"
@@ -516,6 +522,18 @@ export function CallsTable({
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {call.call_result ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      {call.lead_id && call.lead_name ? (
+                        <Link
+                          href={`/leads/${call.lead_id}`}
+                          className="font-medium text-accent-700 hover:text-accent-800 hover:underline"
+                        >
+                          {call.lead_name}
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                       {call.call_owner ?? "—"}
