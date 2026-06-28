@@ -161,6 +161,11 @@ def map_call(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "processed_date": row.get("processed_date"),
         "call_duration_minutes": row.get("call_duration_minutes"),
         "notes": _clean(row.get("notes")),
+        # Lead linkage resolved at upsert time via the WGR lead_id → CI lead
+        # UUID (same pattern as appointments). Carried out-of-band so the
+        # mapped dict isn't written directly (CI lead_id is a UUID, not the
+        # raw 'LEAD_xxx' string).
+        "_wgr_lead_id": _clean(row.get("lead_id")),
     }
 
 

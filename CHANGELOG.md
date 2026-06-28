@@ -7,6 +7,35 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — per-lead Conversations & Tags on the lead detail page
+
+Surfaced two things the data already supported but the UI never showed.
+
+- **Conversations** — `GET /api/v1/leads/{id}/conversations` returns the lead's omni-channel message
+  log (SMS / Instagram + Facebook DMs / email / calls) from `sales_activities`, joined on the lead's
+  upstream id (`sales_activities.lead_id` stores the raw `LEAD_xxx` string, matched to
+  `leads.external_id` — NOT the CI UUID). `direction` derived from the `activity_type` suffix.
+  The lead detail page renders it as a chat timeline (outbound right, inbound left, channel pills).
+  Verified: lead Carii returns 55 messages across email/sms/phone in order. No sync change needed.
+- **Tags** — `GET /api/v1/leads/{id}/tags` aggregates tags via `lead → calls → insights →
+  insight_tags`, distinct tags by frequency. Rendered as accent pills on the lead detail page.
+
+### Fixed — WGR sync dropped `calls.lead_id`, breaking lead→tag traceability
+
+WGR `calls` carry `lead_id` (213/213) but `map_call` never copied it, so all 214 CI `calls.lead_id`
+were NULL and the `lead → calls → insights → insight_tags` chain (needed for per-lead tags) was
+broken. Fixed in **both** sync paths so an incremental run can't re-NULL what the backfill fixes:
+
+- `services/wgr_sync/mapping.py` — `map_call` now carries `_wgr_lead_id` (mirrors `map_appointment`).
+- `services/wgr_sync/upsert.py` — new `sync_calls` resolves `_wgr_lead_id` → CI lead UUID per batch;
+  removed calls from `_NATIVE_PLAN`, called before insights in `sync_all`.
+- `services/wgr_sync/bulk_load.py` — new `_load_calls` does the same for the backfill CLI path.
+- Ran `scripts/backfill_wgr --yes`: `calls.lead_id` now 213/214 populated; **55 leads** reach tags
+  (was 0). CI `Call.lead_id` column already existed — no migration.
+
+`tsc` + ESLint clean, `next build` passes, existing WGR tests green.
+
+
 ### Fixed — /leads Source Breakdown donut rendered blank for a single source
 
 The donut built each slice as an SVG arc (`A`) wedge. A single source at 100% (the live data — all leads currently come from `wgr`) has coincident start/end points, so the arc path collapsed and the donut showed **nothing**. Two smaller bugs compounded it: real integration sources (`wgr`, `facebook_ads`, …) aren't in the enum-keyed `SOURCE_COLORS`/`SOURCE_CONFIG`, so they fell back to gray with the raw lowercase label.

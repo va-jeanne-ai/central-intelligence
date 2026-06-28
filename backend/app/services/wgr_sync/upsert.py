@@ -254,6 +254,51 @@ async def sync_appointments(session: AsyncSession, *, since: Optional[str] = Non
     return total
 
 
+async def sync_calls(session: AsyncSession, *, since: Optional[str] = None) -> int:
+    """Calls sync — like the generic native-PK path but resolves the WGR
+    lead_id → CI lead UUID per batch so ``calls.lead_id`` is populated.
+
+    Calls have a stable PK (CI id = WGR call_id) so we keep the ON-CONFLICT
+    upsert; only the lead-FK resolution is bolted on (mirrors appointments).
+    Without this, ``calls.lead_id`` stays NULL and the lead → calls → insights
+    → insight_tags chain (used by the per-lead tags endpoint) is broken.
+    """
+    batch: list[dict[str, Any]] = []
+    total = 0
+
+    async def flush(maps: list[dict[str, Any]]) -> int:
+        if not maps:
+            return 0
+        # Resolve WGR lead_id → CI lead UUID in one query for the batch.
+        wgr_lead_ids = {m["_wgr_lead_id"] for m in maps if m.get("_wgr_lead_id")}
+        lead_map: dict[str, Any] = {}
+        if wgr_lead_ids:
+            rows = (await session.execute(
+                select(Lead.external_id, Lead.id).where(
+                    Lead.source == mapping.WGR_SOURCE, Lead.external_id.in_(wgr_lead_ids),
+                )
+            )).all()
+            lead_map = {ext: lid for ext, lid in rows}
+        for m in maps:
+            wgr_lead = m.pop("_wgr_lead_id", None)
+            m["lead_id"] = lead_map.get(wgr_lead)
+        written = await _on_conflict_upsert(session, Call, "id", maps)
+        await session.commit()
+        return written
+
+    for raw in reader.read_table("calls", since=since):
+        mapped = mapping.map_call(raw)
+        if mapped is None:
+            continue
+        batch.append(mapped)
+        if len(batch) >= BATCH:
+            total += await flush(batch)
+            batch = []
+    total += await flush(batch)
+    logger.info("wgr_sync calls: upserted %d", total)
+    return total
+
+
 async def sync_market_signals(session: AsyncSession) -> int:
     """market_signals merge on (signal_family, signal) unique key."""
     total = 0
@@ -401,7 +446,7 @@ _NATIVE_PLAN: list[tuple] = [
     ("offers", Offer, "offer_id", mapping.map_offer),
     ("sales_reps", SalesRep, "rep_id", mapping.map_sales_rep),
     ("sales_scorecard_categories", ScorecardCategory, "category_id", mapping.map_scorecard_category),
-    ("calls", Call, "id", mapping.map_call),
+    # calls handled by sync_calls (resolves lead_id FK) — must run before insights.
     ("insights", Insight, "id", mapping.map_insight),
     ("content_ideas", ContentIdea, "id", mapping.map_content_idea),
     ("sales_strike_rules", StrikeRule, "rule_id", mapping.map_strike_rule),
@@ -513,8 +558,11 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
     # 1b. seed tag_dictionary so insight_tags' FK (tag → tag_dictionary.tag),
     #     which WGR doesn't enforce, is satisfied before the native loop.
     counts["tag_dictionary"] = await _seed_tag_dictionary(session)
-    # 2. native-PK tables (business_profile/offers/reps/calls/insights/... first
-    #    in the list so their children's FKs resolve).
+    # 1c. calls — resolves the lead_id FK (needs leads from step 1) and must run
+    #     before insights (whose FK targets calls). Pulled out of _NATIVE_PLAN.
+    counts["calls"] = await sync_calls(session, since=since)
+    # 2. native-PK tables (business_profile/offers/reps/insights/... in the list
+    #    so their children's FKs resolve).
     for wgr_table, model, pk_col, map_fn in _NATIVE_PLAN:
         counts[wgr_table] = await _sync_native_pk(
             session, wgr_table=wgr_table, model=model, pk_col=pk_col,

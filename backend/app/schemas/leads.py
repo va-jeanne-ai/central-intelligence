@@ -311,3 +311,52 @@ class DocumentsResponse(BaseModel):
     """
 
     files: list[DocumentRow] = Field(default_factory=list)
+
+
+class ConversationMessageRow(BaseModel):
+    """One message in a lead's omni-channel conversation log.
+
+    Sourced from ``sales_activities`` (SMS / Instagram + Facebook DMs /
+    email / calls). ``direction`` is derived from the activity_type
+    suffix (``inbound`` / ``outbound`` / ``unknown``).
+    """
+
+    id: str
+    channel: str | None = None  # sms | instagram | facebook | email | phone
+    activity_type: str | None = None  # e.g. sms_outbound, social_dm_inbound
+    direction: str = "unknown"  # inbound | outbound | unknown
+    body: str | None = None
+    occurred_at: str | None = None
+    duration_seconds: int | None = None
+
+
+class ConversationsResponse(BaseModel):
+    """Payload for ``GET /api/v1/leads/{id}/conversations``.
+
+    Messages are ordered oldest-first by ``occurred_at`` so reading
+    top-to-bottom matches the real conversation flow. ``channels`` is the
+    distinct set present, for filter chips in the UI.
+    """
+
+    messages: list[ConversationMessageRow] = Field(default_factory=list)
+    total: int = 0
+    channels: list[str] = Field(default_factory=list)
+
+
+class LeadTagRow(BaseModel):
+    """One tag on a lead, with how many times it appears across their calls."""
+
+    tag: str
+    count: int = 1
+
+
+class LeadTagsResponse(BaseModel):
+    """Payload for ``GET /api/v1/leads/{id}/tags``.
+
+    Tags are aggregated across the lead's calls' insights
+    (lead → calls → insights → insight_tags), distinct tags ordered by
+    frequency desc. Empty when the lead has no tagged calls.
+    """
+
+    tags: list[LeadTagRow] = Field(default_factory=list)
+    total: int = 0
