@@ -9,6 +9,7 @@ Implements 13 REST endpoints for the CI subsystem plus two data sync bridges:
 import logging
 import math
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,6 +30,7 @@ from app.models.operational import (
     ContentIdea,
     Goal,
     Insight,
+    Lead,
     Objection,
     PainPoint,
     Win,
@@ -473,6 +475,16 @@ async def list_calls(
         )).all()
         idea_counts = {cid: n for cid, n in idea_rows}
 
+    # Resolve the lead (prospect) name per call in one query — the card shows
+    # the LEAD as its primary identity, not the call_owner (the rep).
+    lead_uuids = {c.lead_id for c in calls if c.lead_id is not None}
+    lead_names: dict = {}
+    if lead_uuids:
+        lead_rows = (await session.execute(
+            select(Lead.id, Lead.name).where(Lead.id.in_(lead_uuids))
+        )).all()
+        lead_names = {lid: name for lid, name in lead_rows}
+
     data = []
     for c in calls:
         data.append(CallSummary(
@@ -481,6 +493,8 @@ async def list_calls(
             call_type=c.call_type,
             call_result=c.call_result,
             call_owner=c.call_owner,
+            lead_id=str(c.lead_id) if c.lead_id is not None else None,
+            lead_name=lead_names.get(c.lead_id),
             transcript_quality=c.transcript_quality,
             processed_date=c.processed_date,
             insights_count=insight_counts.get(c.id, 0),
@@ -816,6 +830,26 @@ async def update_call(
         raise HTTPException(status_code=404, detail="Call not found")
 
     updates = body.model_dump(exclude_unset=True)
+
+    # lead_id is a UUID FK — handle it specially (the rest are plain str cols).
+    # "" / null clears the link; a valid UUID that exists links the call; an
+    # unknown lead 404s so the UI can't silently point a call at nothing.
+    if "lead_id" in updates:
+        raw_lead = updates.pop("lead_id")
+        if not raw_lead:
+            call.lead_id = None
+        else:
+            try:
+                lead_uuid = UUID(raw_lead)
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=422, detail="Invalid lead_id")
+            exists = (await session.execute(
+                select(Lead.id).where(Lead.id == lead_uuid, Lead.deleted_at.is_(None))
+            )).first()
+            if exists is None:
+                raise HTTPException(status_code=404, detail="Lead not found")
+            call.lead_id = lead_uuid
+
     for field, value in updates.items():
         setattr(call, field, value)
 

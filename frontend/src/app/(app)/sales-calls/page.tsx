@@ -10,6 +10,7 @@ import { Pagination } from "@/components/ui";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagination } from "@/hooks/use-pagination";
+import { showSuccess, showError } from "@/lib/toast";
 
 // ─── Types (bound to /ci/calls, /ci/calls/stats, /ci/calls/{id}) ────────────────
 
@@ -26,7 +27,9 @@ interface CallSummary {
   date: string | null;
   call_type: string | null;
   call_result: string | null;
-  call_owner: string | null;
+  call_owner: string | null; // the rep/CSR who ran the call
+  lead_id: string | null; // the prospect on the call
+  lead_name: string | null;
   processed_date: string | null;
   insights_count: number;
   pain_points_count: number;
@@ -104,7 +107,140 @@ function ResultBadge({ result }: { result: string | null }) {
 
 // ─── Expandable call card ───────────────────────────────────────────────────────
 
-function CallCard({ call }: { call: CallSummary }) {
+// ─── Lead link / picker ─────────────────────────────────────────────────────────
+
+interface LeadSearchRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+}
+
+function LeadLinkRow({ call, onChanged }: { call: CallSummary; onChanged: () => void }) {
+  const router = useRouter();
+  const [picking, setPicking] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<LeadSearchRow[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Debounced lead search (reuses /leads?search=).
+  useEffect(() => {
+    if (!picking || query.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const data = await apiClient.get<{ leads: LeadSearchRow[] }>(
+          `/leads?search=${encodeURIComponent(query.trim())}&per_page=8`,
+          { silent: true },
+        );
+        setResults(data.leads);
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [picking, query]);
+
+  const linkLead = useCallback(
+    async (leadId: string) => {
+      setSaving(true);
+      try {
+        await apiClient.patch(`/ci/calls/${call.call_id}`, { lead_id: leadId }, { silent: true });
+        showSuccess("Call linked to lead.");
+        setPicking(false);
+        setQuery("");
+        onChanged();
+      } catch (err) {
+        showError(err instanceof Error ? err.message : "Couldn't link the lead.");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [call.call_id, onChanged],
+  );
+
+  // Linked → show the lead + a "view" link.
+  if (call.lead_id && call.lead_name) {
+    return (
+      <div className="flex items-center gap-2 text-[13px]">
+        <span className="text-gray-400">Lead:</span>
+        <button
+          type="button"
+          onClick={() => router.push(`/leads/${call.lead_id}`)}
+          className="font-semibold text-accent-700 hover:text-accent-800 hover:underline"
+        >
+          {call.lead_name} →
+        </button>
+      </div>
+    );
+  }
+
+  // Unlinked → search + pick.
+  return (
+    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-3.5 py-3">
+      {!picking ? (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[13px] text-gray-500">Not linked to a lead.</span>
+          <button
+            type="button"
+            onClick={() => setPicking(true)}
+            className="text-[12px] font-semibold text-accent-600 hover:text-accent-700"
+          >
+            🔗 Link to lead
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <input
+            type="text"
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search a lead by name or email…"
+            className="w-full rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+          />
+          {searching && <p className="text-[12px] text-gray-400">Searching…</p>}
+          {!searching && query.trim().length >= 2 && results.length === 0 && (
+            <p className="text-[12px] text-gray-400">No leads found.</p>
+          )}
+          {results.length > 0 && (
+            <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 rounded-md border border-gray-100 bg-white">
+              {results.map((lead) => (
+                <button
+                  key={lead.id}
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void linkLead(lead.id)}
+                  className="w-full px-3 py-2 text-left hover:bg-accent-50 disabled:opacity-50 transition-colors"
+                >
+                  <div className="text-[13px] font-medium text-gray-800">{lead.name || "—"}</div>
+                  {lead.email && <div className="text-[11px] text-gray-400">{lead.email}</div>}
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setPicking(false);
+              setQuery("");
+            }}
+            className="text-[12px] text-gray-400 hover:text-gray-600"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CallCard({ call, onChanged }: { call: CallSummary; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<CallDetailResponse | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -129,10 +265,17 @@ function CallCard({ call }: { call: CallSummary }) {
     (i) => i.insight_type && PAIN_TYPES.has(i.insight_type),
   );
   const ideas = detail?.content_ideas ?? [];
-  const title = `${call.call_owner ?? "Unknown"}${call.call_type ? ` — ${call.call_type} Call` : ""}`;
-  const meta = [formatDate(call.date), call.duration_minutes ? `${Math.round(call.duration_minutes)} min` : null, call.source === "wgr" ? "WGR" : "CI"]
-    .filter(Boolean)
-    .join(" · ");
+
+  // Primary identity = the LEAD (prospect). call_owner is the rep, shown as
+  // "with <rep>". Unlinked calls fall back to a neutral label + a link action.
+  const leadDisplay = call.lead_name || (call.lead_id ? "Lead" : null);
+  const title = `${leadDisplay ?? "Unlinked call"}${call.call_type ? ` — ${call.call_type} Call` : ""}`;
+  const metaParts = [
+    call.call_owner ? `with ${call.call_owner}` : null,
+    formatDate(call.date),
+    call.duration_minutes ? `${Math.round(call.duration_minutes)} min` : null,
+    call.source === "wgr" ? "WGR" : "CI",
+  ].filter(Boolean);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -143,12 +286,16 @@ function CallCard({ call }: { call: CallSummary }) {
         aria-expanded={open}
         className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors"
       >
-        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-accent-100 text-accent-700 text-sm font-bold">
-          {initials(call.call_owner)}
+        <span
+          className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+            leadDisplay ? "bg-accent-100 text-accent-700" : "bg-gray-100 text-gray-400"
+          }`}
+        >
+          {leadDisplay ? initials(call.lead_name) : "?"}
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold text-gray-900 truncate">{title}</div>
-          <div className="text-[12px] text-gray-500">{meta}</div>
+          <div className="text-[12px] text-gray-500">{metaParts.join(" · ")}</div>
         </div>
         <ResultBadge result={call.call_result} />
         {call.pain_points_count > 0 && (
@@ -168,6 +315,9 @@ function CallCard({ call }: { call: CallSummary }) {
 
           {!loadingDetail && (
             <>
+              {/* Lead link — view the connected lead, or attach one if unlinked */}
+              <LeadLinkRow call={call} onChanged={onChanged} />
+
               {/* Transcript excerpt */}
               {call.transcript_excerpt && (
                 <div>
@@ -427,7 +577,9 @@ export default function SalesCallsPage() {
                   : "No calls match the selected results."}
               </p>
             ) : (
-              calls.map((call) => <CallCard key={call.call_id} call={call} />)
+              calls.map((call) => (
+                <CallCard key={call.call_id} call={call} onChanged={() => void load()} />
+              ))
             )}
           </div>
           {!isLoading && total > 0 && (

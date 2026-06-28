@@ -66,7 +66,12 @@ class CallSummary(BaseModel):
     date: datetime | None = None
     call_type: str | None = None
     call_result: str | None = None
+    # The rep/CSR who conducted the call (NOT the prospect).
     call_owner: str | None = None
+    # The lead/prospect on the call (the person they're talking to). Resolved
+    # from calls.lead_id → leads; null when the call isn't linked to a lead.
+    lead_id: str | None = None
+    lead_name: str | None = None
     transcript_quality: str | None = None
     processed_date: datetime | None = None
     insights_count: int = 0
@@ -171,6 +176,9 @@ class UpdateCallRequest(BaseModel):
     call_type: str | None = None
     call_owner: str | None = None
     call_result: str | None = None
+    # Connect (or re-connect) the call to a lead. UUID string; "" clears the
+    # link. Resolved/validated in the route (it's a UUID FK, not a plain str).
+    lead_id: str | None = None
 
 
 class UpdateInsightRequest(BaseModel):

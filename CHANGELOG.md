@@ -7,6 +7,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Sales Calls show the LEAD (prospect), not the rep; + connect a call to a lead
+
+The call card titled itself with `call_owner` — which is the rep/CSR, not the person on the call.
+The actual prospect was already linked via `calls.lead_id` (213/214), just never surfaced. Now the
+card leads with the prospect, and unlinked calls can be connected to a lead.
+
+- **`routes/ci.py`** — `/ci/calls` list now returns `lead_id` + `lead_name` (batched lead join, no
+  N+1). `PATCH /ci/calls/{id}` accepts `lead_id` to connect/clear the link — parsed as a UUID,
+  404s on an unknown lead, `""` clears it.
+- **`sales-calls/page.tsx`** — card identity is now **lead-primary**: title = the lead (avatar from
+  the lead), with **"with {rep}"** in the meta line; the expanded card shows a **Lead: name →** link
+  to the lead detail page. Unlinked calls show a **"Link to lead"** action — a debounced lead search
+  (reusing `/leads?search=`) to pick and attach a lead; the list refreshes on link.
+
+Verified end-to-end against real data (link/unlink/unknown-lead-404 on `CALL_DAA9BC31`). `tsc` +
+ESLint clean, `next build` passes.
+
+
 ### Added — pagination on the Sales Calls "Analyzed Calls" card list
 
 The Analyzed Calls cards now paginate via the shared `Pagination` + `usePagination` (rows-per-page
