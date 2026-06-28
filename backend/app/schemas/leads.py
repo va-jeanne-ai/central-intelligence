@@ -53,7 +53,8 @@ class LeadListResponse(BaseModel):
 class LeadsKpiResponse(BaseModel):
     """Top-level lead KPIs."""
 
-    total_leads: int = 0
+    total_leads: int = 0  # scoped to the selected entry-date range
+    all_time_total: int = 0  # unscoped total, for the headline "Total Leads" card
     leads_this_week: int = 0
     conversion_rate: float = 0.0
     active_applications: int = 0

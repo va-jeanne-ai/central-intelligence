@@ -7,6 +7,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Fixed — "Total Leads" KPI showed the range count but was labeled "All time"
+
+After the entry-date range work scoped the report numbers, the "Total Leads" card kept its "All time"
+label but displayed the range-scoped count (e.g. 107 for the default current-week range instead of
+11,721). Now the card shows the true all-time total as its headline with the in-range count as a
+subtitle, so both numbers are visible and honest.
+
+- **`repositories/sales_stats.py`** + **`schemas/leads.py`** — KPIs gain `all_time_total` (an unscoped
+  `COUNT(*)`) alongside the range-scoped `total_leads`.
+- **`leads/page.tsx`** — Total Leads card value = `all_time_total`, subtitle = "All time · N in range".
+  (The Source donut's center total stays `total_leads` — correct, since its segments are range-scoped too.)
+
+Verified: current-week range → headline 11,721 / subtitle "107 in range"; no range → both 11,721.
+`tsc` + ESLint clean, `next build` passes.
+
+
 ### Added — hover tooltips on the Lead Volume chart points
 
 Hovering a point on the "Lead Volume — Last 8 Weeks" chart (/leads) now shows its value and week

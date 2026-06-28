@@ -104,6 +104,14 @@ async def compute_lead_stats(
     )
     total_leads: int = _int(row.scalar())
 
+    # All-time total (NOT range-scoped) — the KPI card shows this as the headline
+    # number with the in-range count as its subtitle, so "Total Leads" stays
+    # honest regardless of the selected range.
+    row = await session.execute(
+        text("SELECT COUNT(*) FROM leads WHERE deleted_at IS NULL")
+    )
+    all_time_total: int = _int(row.scalar())
+
     # ---- 2. Leads created in the last 7 days --------------------------------
     row = await session.execute(
         text(
@@ -143,7 +151,8 @@ async def compute_lead_stats(
     active_applications: int = _int(row.scalar())
 
     kpis = {
-        "total_leads": total_leads,
+        "total_leads": total_leads,  # range-scoped (in the selected window)
+        "all_time_total": all_time_total,  # unscoped, for the headline KPI
         "leads_this_week": leads_this_week,
         "conversion_rate": conversion_rate,
         "active_applications": active_applications,

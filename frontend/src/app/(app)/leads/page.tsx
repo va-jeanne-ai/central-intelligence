@@ -21,7 +21,8 @@ interface LeadsListResponse {
 
 interface LeadsStatsResponse {
   kpis: {
-    total_leads: number;
+    total_leads: number; // scoped to the selected entry-date range
+    all_time_total: number; // unscoped total, headline of the Total Leads card
     leads_this_week: number;
     conversion_rate: number;
     active_applications: number;
@@ -88,6 +89,7 @@ function rangeLabel(from: string, to: string): string {
 const EMPTY_STATS: LeadsStatsResponse = {
   kpis: {
     total_leads: 0,
+    all_time_total: 0,
     leads_this_week: 0,
     conversion_rate: 0,
     active_applications: 0,
@@ -1214,10 +1216,12 @@ export default function LeadsPage() {
   const kpiCards = [
     {
       label: "Total Leads",
-      value: formatNumber(stats.kpis.total_leads),
+      value: formatNumber(stats.kpis.all_time_total),
       badgeLabel: "—",
       badgeDirection: "up" as const,
-      subtitle: "All time",
+      // Headline is the true all-time total; subtitle shows how many fall in the
+      // selected entry-date range so both numbers are visible without ambiguity.
+      subtitle: `All time · ${formatNumber(stats.kpis.total_leads)} in range`,
       borderColor: "#3B82F6",
     },
     {
