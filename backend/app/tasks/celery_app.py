@@ -37,6 +37,7 @@ celery_app = Celery(
         "app.tasks.embed_worker",
         "app.tasks.embed_backfill",
         "app.tasks.wgr_sync",
+        "app.tasks.metric_snapshots",
     ],
 )
 
@@ -61,6 +62,14 @@ celery_app.conf.beat_schedule = {
         # every hour at :35 — recompute market_signals from insights (rolling 7d/30d
         # windows need a full recompute, not increments). Off the :05–:25 updaters.
         "schedule": crontab(minute=35),
+    },
+    "metric-snapshots-daily": {
+        "task": "app.tasks.metric_snapshots.capture_metric_snapshots",
+        # 03:50 UTC daily — snapshot every registered outcome metric into the
+        # metric_snapshots timeseries (data-intelligence engine). Runs after the
+        # nightly syncs so the day's snapshot reflects freshly-pooled data.
+        # Idempotent per day (unique constraint upserts).
+        "schedule": crontab(minute=50, hour=3),
     },
     "social-stats-every-6h": {
         "task": "app.tasks.social_stats.update_social_stats",
