@@ -7,6 +7,37 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — data-intelligence engine: trends, recommendations, Insights dashboard, CI chat
+
+Completes the engine on top of the metric registry + snapshot store: statistical
+trend verdicts → data-cited recommendations → surfaced on a dashboard AND in CI chat.
+Pure data, no heuristics — the LLM only phrases what the numbers prove.
+
+- **Metrics generalized** (`analytics/registry.py`) — added Marketing (email open/click
+  rate) and Fulfillment (open coaching strikes) metrics. Only metrics backed by REAL
+  data registered: funnel/social/ads stats + goals are empty, so those are omitted (no
+  snapshotting zeros).
+- **Trend + significance** (`analytics/trends.py`) — compares latest vs. baseline
+  snapshot per metric → verdict (improving/declining/flat/insufficient_data).
+  Direction-aware (a drop in a lower-is-better metric is improving) and **gated on
+  sample size** — refuses to draw conclusions from thin data. Verified across every path.
+- **Recommendation generator** (`analytics/recommend.py` + `Recommendation` model +
+  migration `r9c0d1e2f3a4`) — emits a recommendation ONLY when a trend crosses a
+  threshold; stores the evidence JSON (auditable). Auto-resolves when a metric recovers
+  (the feedback loop). Run after each snapshot by the daily task.
+- **API** (`routes/analytics.py`) — `/analytics/metrics|trends|recommendations`,
+  `/metrics/{key}/history`, `PATCH /recommendations/{id}` (lifecycle), `POST /refresh`.
+- **Insights dashboard** (`(app)/insights/page.tsx` + sidebar nav) — window selector,
+  recommendations (severity + evidence + act/dismiss), metrics-by-area with verdicts.
+- **CI chat** (`agents/central_intelligence.py`) — new `analytics_insights` tool: CI
+  answers "what's working / what to fix" from the SAME engine, with the numbers cited.
+
+Verified end-to-end vs. real data (8 metrics compute; trend/recommendation paths proven
+with synthetic baselines then cleaned). Migrations applied. Backend boots, frontend
+`tsc`/ESLint clean + `next build` passes (44 routes), WGR tests green. With one day of
+snapshots the engine honestly reports "insufficient data" rather than guessing — real
+verdicts accrue as the daily task runs.
+
 ### Added — data-intelligence engine foundation: metric registry + snapshot store (Sales)
 
 First build toward the new north star (data-analysis + statistical recommendations over

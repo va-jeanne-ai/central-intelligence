@@ -90,8 +90,8 @@ from app.models.integration import Integration  # noqa: F401
 # chat — depends on User (user_id FK)
 from app.models.chat import ChatMessage, ChatSession  # noqa: F401
 
-# analytics — metric snapshot timeseries (data-intelligence engine)
-from app.models.analytics import MetricSnapshot  # noqa: F401
+# analytics — metric snapshot timeseries + recommendations (data-intelligence engine)
+from app.models.analytics import MetricSnapshot, Recommendation  # noqa: F401
 
 __all__ = [
     # base
@@ -162,6 +162,7 @@ __all__ = [
     # integrations
     "Integration",
     "MetricSnapshot",
+    "Recommendation",
     # chat
     "ChatSession",
     "ChatMessage",

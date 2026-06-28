@@ -536,6 +536,61 @@ async def _delegate_to_fulfillment_director(task: str) -> str:
     )
 
 
+# ─── Analytics insights tool — the data-intelligence engine, as prose ───────────
+# Answers "what's working / what needs to change" from the SAME engine that backs the
+# Insights dashboard. Pure data: returns the statistical verdicts + active
+# recommendations with the numbers behind them. The LLM relays these; it must not
+# invent a finding the engine didn't produce.
+
+async def _analytics_insights(area: str | None = None, window: str = "30d") -> str:
+    """Return the engine's trend verdicts + active recommendations as a prose brief."""
+    from app.analytics.trends import _evaluate
+    from app.analytics.registry import all_metrics
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import text
+
+    valid_windows = {"7d", "30d", "90d", "all"}
+    window = window if window in valid_windows else "30d"
+
+    try:
+        async with AsyncSessionLocal() as s:
+            metrics = [m for m in all_metrics() if area is None or m.area == area]
+            if not metrics:
+                return f"No metrics are registered for area '{area}'."
+
+            lines: list[str] = [f"Data-derived findings ({window} window):"]
+            for m in metrics:
+                rows = (await s.execute(text(
+                    'SELECT value, sample_size, captured_date FROM metric_snapshots '
+                    'WHERE metric_key = :k AND "window" = :w AND scope = \'global\' '
+                    "ORDER BY captured_date ASC"
+                ), {"k": m.key, "w": window})).mappings().all()
+                t = _evaluate(m, [dict(r) for r in rows], window)
+                lines.append(f"- {t.label}: {t.verdict.replace('_', ' ')}. {t.reason}")
+
+            # Active recommendations (the threshold-crossing findings).
+            recs = (await s.execute(text(
+                "SELECT severity, title, body FROM recommendations "
+                "WHERE status <> 'resolved'"
+                + (" AND area = :area" if area else "")
+                + " ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END"
+            ), ({"area": area} if area else {}))).mappings().all()
+            if recs:
+                lines.append("\nActive recommendations:")
+                for r in recs:
+                    lines.append(f"- [{r['severity']}] {r['title']} — {r['body']}")
+            else:
+                lines.append(
+                    "\nNo active recommendations: no metric currently crosses the "
+                    "significance threshold with enough data. (Findings appear as more "
+                    "daily data accrues — the engine won't guess.)"
+                )
+            return "\n".join(lines)
+    except Exception as exc:  # noqa: BLE001 — never crash the CI tool loop
+        logger.warning("analytics_insights tool error: %s", exc)
+        return "Couldn't read the analytics engine right now."
+
+
 class CentralIntelligence(BaseAgent):
     """CEO agent — orchestrates all departments.
 
@@ -584,6 +639,35 @@ class CentralIntelligence(BaseAgent):
                 "required": ["sql"],
             },
             handler=_query_database,
+        )
+
+        self.register_tool(
+            name="analytics_insights",
+            description=(
+                "Get data-derived findings on what's working and what needs to change: "
+                "statistical trend verdicts (improving / declining / flat / need-more-data) "
+                "per outcome metric, plus active recommendations — all computed purely from "
+                "the data with the numbers cited. Use this for questions like \"what's "
+                "working in sales?\", \"what should we fix?\", \"how are we trending?\". "
+                "These findings are authoritative and already statistical — relay them "
+                "as-is; do NOT invent conclusions the data didn't produce."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "area": {
+                        "type": "string",
+                        "description": "Optional area filter: 'sales', 'marketing', or "
+                        "'fulfillment'. Omit for all areas.",
+                    },
+                    "window": {
+                        "type": "string",
+                        "description": "Lookback window: '7d', '30d' (default), '90d', or 'all'.",
+                    },
+                },
+                "required": [],
+            },
+            handler=_analytics_insights,
         )
 
         self.register_tool(

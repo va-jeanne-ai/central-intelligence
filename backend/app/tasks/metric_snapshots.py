@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from celery.exceptions import MaxRetriesExceededError
 
+from app.analytics.recommend import generate_recommendations
 from app.analytics.snapshots import compute_snapshots
 from app.tasks.celery_app import celery_app
 from app.tasks.db import make_sync_session
@@ -32,19 +33,24 @@ def capture_metric_snapshots(self) -> dict:
         db = make_sync_session()
         try:
             result = compute_snapshots(db)
+            # Recompute recommendations from the fresh snapshots so the two stay in sync.
+            recs = generate_recommendations(db)
         finally:
             db.close()
 
         logger.info(
-            "capture_metric_snapshots: wrote %d rows across %d metrics — task_id=%s",
+            "capture_metric_snapshots: wrote %d rows across %d metrics, %d active "
+            "recommendation(s) — task_id=%s",
             result["rows_written"],
             result["metrics"],
+            recs["active"],
             task_id,
         )
         return {
             "task_id": task_id,
             "status": "completed",
             "updated_at": datetime.now(timezone.utc).isoformat(),
+            "active_recommendations": recs["active"],
             **result,
         }
 

@@ -16,9 +16,11 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -64,4 +66,46 @@ class MetricSnapshot(Base):
     captured_date: Mapped[date] = mapped_column(Date, nullable=False, server_default=func.current_date())
     captured_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class Recommendation(Base):
+    """A data-cited recommendation, emitted only when a metric's trend crosses a
+    threshold. The conclusion comes from statistics (see ``app/analytics/trends.py``
+    + ``recommend.py``), NOT from an LLM — the ``evidence`` JSON records the exact
+    numbers behind it (metric, baseline→latest, window, sample sizes). An LLM may
+    later phrase ``title``/``body`` from this evidence, never invent a recommendation.
+
+    Lifecycle: open → acknowledged → acted → resolved (the feedback loop: as more data
+    arrives we re-check whether the metric moved). Recommendations are upserted on the
+    natural key (metric_key, window) so a standing finding refreshes rather than piles up.
+    """
+
+    __tablename__ = "recommendations"
+    __table_args__ = (
+        UniqueConstraint("metric_key", "window", name="uq_recommendations_metric_window"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    metric_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    area: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    window: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    # What the data says.
+    verdict: Mapped[str] = mapped_column(String(24), nullable=False)  # declining / improving / …
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, default="info")  # info/warn/critical
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # The exact numbers behind the conclusion (auditable; the "must cite" contract).
+    evidence: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    # Lifecycle.
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")  # open/ack/acted/resolved
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )

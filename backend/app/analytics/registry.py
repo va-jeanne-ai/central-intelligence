@@ -156,9 +156,86 @@ _SALES_METRICS: list[Metric] = [
 ]
 
 
-# The full catalog. Other areas (marketing, fulfillment) get appended here as we
-# generalize the proven Sales loop.
-REGISTRY: list[Metric] = [*_SALES_METRICS]
+# ─── Marketing metrics ──────────────────────────────────────────────────────────
+# Only metrics backed by REAL data are registered (verified 2026-06-29): email_campaigns
+# has 2,396 rows; funnel_stats / social_stats / ads_stats are EMPTY, so those metrics are
+# intentionally omitted until the data exists (snapshotting zeros forever isn't a signal).
+
+_MARKETING_METRICS: list[Metric] = [
+    Metric(
+        key="marketing.email_open_rate",
+        area="marketing",
+        label="Email Open Rate",
+        unit="ratio",
+        higher_is_better=True,
+        description="Opens / recipients across campaigns sent in the window.",
+        sql=text(
+            """
+            SELECT
+                COALESCE(
+                    SUM(open_count)::float / NULLIF(SUM(recipients_count), 0), 0
+                ) AS value,
+                COALESCE(SUM(recipients_count), 0) AS sample_size
+            FROM email_campaigns
+            WHERE deleted_at IS NULL
+              AND sent_at IS NOT NULL
+              AND (:since IS NULL OR sent_at >= :since)
+            """
+        ),
+    ),
+    Metric(
+        key="marketing.email_click_rate",
+        area="marketing",
+        label="Email Click Rate",
+        unit="ratio",
+        higher_is_better=True,
+        description="Clicks / recipients across campaigns sent in the window.",
+        sql=text(
+            """
+            SELECT
+                COALESCE(
+                    SUM(click_count)::float / NULLIF(SUM(recipients_count), 0), 0
+                ) AS value,
+                COALESCE(SUM(recipients_count), 0) AS sample_size
+            FROM email_campaigns
+            WHERE deleted_at IS NULL
+              AND sent_at IS NOT NULL
+              AND (:since IS NULL OR sent_at >= :since)
+            """
+        ),
+    ),
+]
+
+
+# ─── Fulfillment metrics ────────────────────────────────────────────────────────
+# Verified 2026-06-29: sales_coaching_strikes has 15 rows (status active/open, severity
+# flag). goals table is EMPTY, so goal-completion is omitted until data exists.
+
+_FULFILLMENT_METRICS: list[Metric] = [
+    Metric(
+        key="fulfillment.open_coaching_strikes",
+        area="fulfillment",
+        label="Open Coaching Strikes",
+        unit="count",
+        higher_is_better=False,  # fewer unresolved strikes is better
+        description="Count of coaching strikes still unresolved (status active/open) "
+        "that were triggered in the window.",
+        sql=text(
+            """
+            SELECT
+                COUNT(*) AS value,
+                COUNT(*) AS sample_size
+            FROM sales_coaching_strikes
+            WHERE status IN ('active', 'open')
+              AND (:since IS NULL OR triggered_at >= :since)
+            """
+        ),
+    ),
+]
+
+
+# The full catalog. Areas append here as their data lands.
+REGISTRY: list[Metric] = [*_SALES_METRICS, *_MARKETING_METRICS, *_FULFILLMENT_METRICS]
 
 _BY_KEY: dict[str, Metric] = {m.key: m for m in REGISTRY}
 
