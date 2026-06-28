@@ -399,6 +399,15 @@ export default function SalesCallsPage() {
   const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
     usePagination("sales-calls");
 
+  // Search box: `search` is the live input, `debouncedSearch` is what's actually
+  // queried (matches call id, rep, or the linked lead's name/email).
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   // Multi-select result filter. `null` = not yet initialized (defaults seed from
   // the facets the first time they load: every result ON except "No Show").
   const [resultOptions, setResultOptions] = useState<string[]>([]);
@@ -440,6 +449,7 @@ export default function SalesCallsPage() {
       ) {
         params.set("call_result", Array.from(selectedResults).join(","));
       }
+      if (debouncedSearch) params.set("search", debouncedSearch);
       const [statsData, callsData] = await Promise.all([
         apiClient.get<CallStats>("/ci/calls/stats", { silent: true }),
         apiClient.get<CallsResponse>(`/ci/calls?${params.toString()}`, { silent: true }),
@@ -452,18 +462,18 @@ export default function SalesCallsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedResults, resultOptions.length, page, pageSize]);
+  }, [selectedResults, resultOptions.length, page, pageSize, debouncedSearch]);
 
   useEffect(() => {
     if (authLoading || selectedResults === null) return;
     void load();
   }, [authLoading, load, refreshKey, selectedResults]);
 
-  // Changing the result filter narrows the set — jump back to page 1.
+  // Changing the result filter or search narrows the set — jump back to page 1.
   useEffect(() => {
     resetToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedResults]);
+  }, [selectedResults, debouncedSearch]);
 
   const toggleResult = useCallback((result: string) => {
     setSelectedResults((prev) => {
@@ -536,9 +546,29 @@ export default function SalesCallsPage() {
         {/* Analyzed calls */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div className="px-5 py-4 border-b border-gray-100 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-gray-900">Analyzed Calls</h2>
-              <span className="text-xs text-gray-400">Most recent first</span>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-bold text-gray-900 flex-shrink-0">Analyzed Calls</h2>
+              <div className="relative flex-1 max-w-xs">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by lead, rep, or call id…"
+                  className="w-full rounded-lg border border-gray-200 bg-white pl-9 pr-8 py-1.5 text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <span className="text-xs text-gray-400 flex-shrink-0">Most recent first</span>
             </div>
             {/* Multi-select result filter — all on except "No Show" by default. */}
             {resultOptions.length > 0 && selectedResults && (
@@ -574,7 +604,9 @@ export default function SalesCallsPage() {
               <p className="text-sm text-gray-400 italic">
                 {selectedResults && selectedResults.size === 0
                   ? "No results selected — pick a result chip above to show calls."
-                  : "No calls match the selected results."}
+                  : debouncedSearch
+                    ? `No calls match "${debouncedSearch}".`
+                    : "No calls match the selected results."}
               </p>
             ) : (
               calls.map((call) => (

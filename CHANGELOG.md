@@ -7,6 +7,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — search on the Sales Calls page (lead, rep, or call id)
+
+A debounced search box above the Analyzed Calls list. Matches the linked **lead's name/email** (the
+prospect — what the card now leads with), the **rep** (`call_owner`), and the **call id**.
+
+- **`routes/ci.py`** — `/ci/calls` `search` now also matches the linked lead via a subquery
+  (`Call.lead_id IN (leads where name/email ILIKE …)`), on top of the existing call_id + call_owner.
+- **`sales-calls/page.tsx`** — search input (300ms debounce, clear button); resets to page 1 on
+  change; "No calls match …" empty state.
+
+Verified: "Kory" (lead) → 2 calls, "Nelson" (rep) → 126. `tsc` + ESLint clean, `next build` passes.
+
+
 ### Added — Sales Calls show the LEAD (prospect), not the rep; + connect a call to a lead
 
 The call card titled itself with `call_owner` — which is the rep/CSR, not the person on the call.

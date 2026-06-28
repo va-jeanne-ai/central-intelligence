@@ -394,7 +394,11 @@ async def list_calls(
     ),
     call_owner: str | None = Query(None, description="Filter by exact call_owner."),
     source: str | None = Query(None, description="Filter by provenance ('wgr' / 'ci_upload')."),
-    search: str | None = Query(None, description="Case-insensitive match on call_id or owner."),
+    search: str | None = Query(
+        None,
+        description="Case-insensitive match on call_id, rep (call_owner), or the "
+        "linked lead's name/email.",
+    ),
     date_from: str | None = Query(None, description="Call date >= (ISO)."),
     date_to: str | None = Query(None, description="Call date <= (ISO)."),
     sort_by: str = Query("date", description="Sort column (see _CALL_SORTABLE)."),
@@ -430,7 +434,17 @@ async def list_calls(
         _both(Call.source == source)
     if search:
         like = f"%{search.strip()}%"
-        _both(or_(Call.id.ilike(like), Call.call_owner.ilike(like)))
+        # Match the call id, the rep (call_owner), OR the linked lead (the
+        # prospect) by name/email — the card leads with the prospect, so people
+        # search by who they talked to. Lead match via a subquery on lead ids.
+        lead_match = select(Lead.id).where(
+            or_(Lead.name.ilike(like), Lead.email.ilike(like))
+        )
+        _both(or_(
+            Call.id.ilike(like),
+            Call.call_owner.ilike(like),
+            Call.lead_id.in_(lead_match),
+        ))
     if date_from:
         _both(Call.date >= datetime.fromisoformat(date_from))
     if date_to:
