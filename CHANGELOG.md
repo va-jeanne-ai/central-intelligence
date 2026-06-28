@@ -7,6 +7,45 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Members page rebuilt as the team roster (sourced from sales_reps)
+
+The member/fulfillment domain was empty (members/goals tables = 0 rows, no upstream source). The reps
+the leads talk to ARE real data, so the Members page is now the **team roster** from `sales_reps` —
+read live, nothing to seed. Matches the screen-5 mockup (directory cards + selected-member detail).
+
+- **Backend `routes/members.py`** — three new endpoints sourced from `sales_reps`:
+  `GET /members/team-stats` (total / active / at-risk=non-active / calls-this-month + MoM hire delta),
+  `GET /members/team` (rep directory + per-rep call count, by `calls.call_owner = full_name`),
+  `GET /members/team/{rep_id}` (detail: performance bars from `sales_call_scores` avg + calls + closed
+  sales, "Recent Submissions" from `sales_eod_reports`, Call History from their calls). Schemas in
+  `schemas/team.py`. Routes declared **before** `/members/{member_id}` so the literal paths resolve.
+- **`members/page.tsx`** — rebuilt to the mockup: 4 KPI cards, a Member Directory card grid (avatar,
+  name, joined date, status pill; probation → "At Risk" with a colored ring), and a selected-member
+  detail panel (header + performance + recent submissions + call history). Search + status filter.
+  The old "Add Member" became "Ask Director" (the roster is read-only from reps).
+
+Verified vs real data (7 reps: 3 active / 4 at-risk; 206 calls this month; per-rep scores/EOD/calls).
+`tsc` + ESLint clean, `next build` passes.
+
+
+### Removed — /fulfillment page (consolidated into /members)
+
+`/fulfillment` was a thin summary (4 KPIs + a tools card + a Fulfillment Director CTA) that `/members`
+already covered — same KPIs, plus the full member table. Consolidated into `/members` (mirrors the
+earlier `/sales`→`/leads` move).
+
+- **`members/page.tsx`** — gained the **Fulfillment Tools** card (links to Coaching Calls /
+  Accountability / Tech SOS — dropped the self-referential "Members" link) and the **Fulfillment
+  Director** CTA, between the KPI row and the table.
+- **`fulfillment/page.tsx`** — reduced to `redirect("/members")` so old links keep working (151 B stub).
+- **`sidebar.tsx`** — removed the "Fulfillment Overview" nav entry; Members/Director/etc. remain.
+- **`header.tsx`** — the Fulfillment-Director action rule now keys on `/fulfillment-director` (specific)
+  instead of bare `/fulfillment`; `/members` etc. still trigger it.
+- Left untouched: the `/fulfillment/summary` backend endpoint and `/fulfillment-director`.
+
+`tsc` + ESLint clean, `next build` passes (`/fulfillment` → 151 B redirect).
+
+
 ### Changed — Type + Result filters on the Calls table are now multi-select
 
 The Type and Result filters in `CallsTable` (the All Calls page) were single-select dropdowns; they're

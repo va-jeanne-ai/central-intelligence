@@ -1,705 +1,442 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Header } from "@/components/layout/header";
-import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/ui/kpi-card";
+import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
-import { usePagination } from "@/hooks/use-pagination";
-import { Pagination } from "@/components/ui";
-import { showSuccess, showApiError } from "@/lib/toast";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types (bound to /members/team*, sourced from the sales team) ───────────────
 
-type MemberStatus = "active" | "paused" | "graduated" | "churned";
-
-interface MemberRow {
-  id: string;
-  name: string | null;
-  email: string | null;
-  status: string;
-  coach_id: string | null;
-  enrollmentDate: string | null;
-}
-
-interface MembersListResponse {
-  members: MemberRow[];
-  total: number;
-  page: number;
-  per_page: number;
-}
-
-interface MembersKpis {
+interface TeamStats {
   total_members: number;
-  members_this_week: number;
   active_members: number;
-  goals_completed: number;
+  at_risk_members: number;
+  calls_this_month: number;
+  active_delta: number;
 }
 
-interface MembersStatsResponse {
-  kpis: MembersKpis;
-  enrollment_volume: { label: string; value: number }[];
-  status_breakdown: { status: string; count: number; percentage: number }[];
-  goal_funnel: { stage: string; count: number; percentage: number }[];
+interface TeamMemberRow {
+  rep_id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  status: string;
+  hired_at: string | null;
+  capabilities: string[];
+  calls_count: number;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const ORANGE = "#F97316";
-
-const EMPTY_KPIS: MembersKpis = {
-  total_members: 0,
-  members_this_week: 0,
-  active_members: 0,
-  goals_completed: 0,
-};
-
-const EMPTY_LIST: MembersListResponse = {
-  members: [],
-  total: 0,
-  page: 1,
-  per_page: 50,
-};
-
-type FilterStatus = "all" | MemberStatus;
-
-// ─── Status display config ────────────────────────────────────────────────────
-
-const STATUS_CONFIG: Record<
-  MemberStatus,
-  { label: string; dotColor: string; badgeClasses: string }
-> = {
-  active: {
-    label: "Active",
-    dotColor: "#10B981",
-    badgeClasses: "bg-green-50 text-green-700",
-  },
-  paused: {
-    label: "Paused",
-    dotColor: "#F59E0B",
-    badgeClasses: "bg-amber-50 text-amber-700",
-  },
-  graduated: {
-    label: "Graduated",
-    dotColor: "#F59E0B",
-    badgeClasses: "bg-accent-50 text-accent-700",
-  },
-  churned: {
-    label: "Churned",
-    dotColor: "#9CA3AF",
-    badgeClasses: "bg-gray-100 text-gray-500",
-  },
-};
-
-function _humanise(value: string): string {
-  return value
-    .split(/[_\-\s]+/)
-    .filter(Boolean)
-    .map((w) =>
-      w.length <= 3
-        ? w.toUpperCase()
-        : w[0].toUpperCase() + w.slice(1).toLowerCase()
-    )
-    .join(" ");
+interface PerformanceBar {
+  label: string;
+  percent: number;
+  detail: string | null;
+}
+interface SubmissionRow {
+  label: string;
+  date: string | null;
+  delivered: boolean;
+}
+interface CallHistoryRow {
+  call_id: string;
+  call_type: string | null;
+  call_result: string | null;
+  date: string | null;
+}
+interface TeamMemberDetail {
+  rep_id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  status: string;
+  hired_at: string | null;
+  days_active: number | null;
+  capabilities: string[];
+  performance: PerformanceBar[];
+  recent_submissions: SubmissionRow[];
+  call_history: CallHistoryRow[];
 }
 
-function resolveStatus(raw: string) {
-  return (
-    STATUS_CONFIG[raw as MemberStatus] ?? {
-      label: _humanise(raw),
-      dotColor: "#9CA3AF",
-      badgeClasses: "bg-gray-100 text-gray-600",
-    }
-  );
+// ─── Helpers ────────────────────────────────────────────────────────────────────
+
+function initials(name: string): string {
+  const p = name.trim().split(/\s+/);
+  return ((p[0]?.[0] ?? "") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase() || "—";
 }
 
-function formatEnrollmentDate(iso: string | null): string {
+function formatDate(iso: string | null): string {
   if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return iso;
-  }
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-// ─── Skeleton layouts ─────────────────────────────────────────────────────────
-
-function KpiRowSkeleton() {
-  return (
-    <div className="grid grid-cols-4 gap-4">
-      {[1, 2, 3, 4].map((i) => (
-        <div
-          key={i}
-          className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm space-y-2"
-        >
-          <Skeleton className="h-2.5 w-20" />
-          <Skeleton className="h-8 w-16" />
-          <Skeleton className="h-2.5 w-24" />
-        </div>
-      ))}
-    </div>
-  );
+function humanizeRole(role: string | null): string {
+  if (!role) return "Team member";
+  return role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function TableSkeleton() {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-3 w-28" />
-      </div>
-      <div className="px-5 py-3 border-b border-gray-100 flex gap-2.5">
-        <Skeleton className="h-8 flex-1 max-w-xs rounded-lg" />
-        <Skeleton className="h-8 w-32 rounded-lg" />
-      </div>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          className="grid grid-cols-4 gap-4 px-5 py-3.5 border-b border-gray-50 items-center"
-        >
-          <div className="space-y-1.5">
-            <Skeleton className="h-3.5 w-28" />
-            <Skeleton className="h-2.5 w-36" />
-          </div>
-          <Skeleton className="h-5 w-20 rounded-full" />
-          <Skeleton className="h-3 w-20" />
-          <Skeleton className="h-3 w-20" />
-        </div>
-      ))}
-    </div>
-  );
+// Status → pill + accent. "active" green, "probation" amber/at-risk, else gray/red.
+function statusStyle(status: string): { pill: string; ring: string; atRisk: boolean } {
+  const s = status.toLowerCase();
+  if (s === "active") return { pill: "bg-emerald-50 text-emerald-700", ring: "", atRisk: false };
+  if (s === "probation") return { pill: "bg-amber-50 text-amber-700", ring: "ring-1 ring-amber-300", atRisk: true };
+  return { pill: "bg-red-50 text-red-700", ring: "ring-1 ring-red-300", atRisk: true }; // terminated, etc.
 }
 
-// ─── Table Row ────────────────────────────────────────────────────────────────
+// Deterministic avatar color from the name (stable per person).
+const AVATAR_COLORS = ["#F97316", "#3B82F6", "#10B981", "#8B5CF6", "#EC4899", "#14B8A6", "#EF4444", "#6366F1"];
+function avatarColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
 
-function MemberTableRow({ member }: { member: MemberRow }) {
-  const router = useRouter();
-  const status = resolveStatus(member.status);
-
-  function openDetail() {
-    router.push(`/members/${member.id}`);
-  }
-
+function Avatar({ name, size = "md" }: { name: string; size?: "md" | "lg" }) {
+  const dim = size === "lg" ? "h-14 w-14 text-lg" : "h-12 w-12 text-sm";
   return (
-    <tr
-      onClick={openDetail}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          openDetail();
-        }
-      }}
-      role="link"
-      tabIndex={0}
-      aria-label={`Open member ${member.name ?? "unnamed"}`}
-      className="border-b border-gray-50 hover:bg-orange-50/40 focus:bg-orange-50/40 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-orange-300 cursor-pointer transition-colors"
+    <span
+      className={`flex flex-shrink-0 items-center justify-center rounded-full font-bold text-white ${dim}`}
+      style={{ backgroundColor: avatarColor(name) }}
     >
-      {/* Name + Email */}
-      <td className="px-5 py-3.5">
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold text-gray-900">
-            {member.name ?? "—"}
-          </span>
-          <span className="text-xs text-gray-400">{member.email ?? "—"}</span>
-        </div>
-      </td>
-
-      {/* Status */}
-      <td className="px-5 py-3.5">
-        <span
-          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${status.badgeClasses}`}
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-            style={{ backgroundColor: status.dotColor }}
-          />
-          {status.label}
-        </span>
-      </td>
-
-      {/* Coach */}
-      <td className="px-5 py-3.5">
-        <span className="text-xs text-gray-500">
-          {member.coach_id ?? "—"}
-        </span>
-      </td>
-
-      {/* Enrolled */}
-      <td className="px-5 py-3.5">
-        <span className="text-xs text-gray-500">
-          {formatEnrollmentDate(member.enrollmentDate)}
-        </span>
-      </td>
-    </tr>
+      {initials(name)}
+    </span>
   );
 }
 
-// ─── Filter Bar ───────────────────────────────────────────────────────────────
+// Performance bar color by label.
+function barColor(label: string): string {
+  const l = label.toLowerCase();
+  if (l.includes("score")) return "#10B981";
+  if (l.includes("calls")) return "#F59E0B";
+  return "#3B82F6";
+}
 
-function MembersFilterBar({
-  search,
-  onSearchChange,
-  statusFilter,
-  onStatusChange,
-  onClear,
+// ─── Directory card ─────────────────────────────────────────────────────────────
+
+function MemberCard({
+  member,
+  selected,
+  onSelect,
 }: {
-  search: string;
-  onSearchChange: (v: string) => void;
-  statusFilter: FilterStatus;
-  onStatusChange: (v: FilterStatus) => void;
-  onClear: () => void;
+  member: TeamMemberRow;
+  selected: boolean;
+  onSelect: () => void;
 }) {
-  const hasFilters = search !== "" || statusFilter !== "all";
-
+  const st = statusStyle(member.status);
   return (
-    <div className="flex items-center gap-2.5 flex-wrap">
-      {/* Search */}
-      <div className="relative flex-1 min-w-[180px] max-w-xs">
-        <svg
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
-            clipRule="evenodd"
-          />
-        </svg>
-        <input
-          type="text"
-          placeholder="Search members..."
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 transition-all"
-        />
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex flex-col items-center gap-2 rounded-xl border bg-white p-4 text-center transition-all hover:shadow-md ${
+        selected ? "border-accent-400 ring-1 ring-accent-300" : `border-gray-200 ${st.ring}`
+      }`}
+    >
+      <Avatar name={member.name} />
+      <div className="min-w-0">
+        <div className="text-sm font-bold text-gray-900 truncate">{member.name}</div>
+        <div className="text-[11px] text-gray-400">Joined {formatDate(member.hired_at)}</div>
       </div>
-
-      {/* Status */}
-      <select
-        value={statusFilter}
-        onChange={(e) => onStatusChange(e.target.value as FilterStatus)}
-        className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 text-gray-600"
-      >
-        <option value="all">All Statuses</option>
-        {(Object.keys(STATUS_CONFIG) as MemberStatus[]).map((key) => (
-          <option key={key} value={key}>
-            {STATUS_CONFIG[key].label}
-          </option>
-        ))}
-      </select>
-
-      {/* Clear */}
-      {hasFilters && (
-        <button
-          type="button"
-          onClick={onClear}
-          className="px-2.5 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
-        >
-          Clear filters
-        </button>
-      )}
-    </div>
+      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${st.pill}`}>
+        {st.atRisk && member.status.toLowerCase() === "probation" ? "At Risk" : humanizeRole(member.status)}
+      </span>
+    </button>
   );
 }
 
-// ─── Add Member modal ───────────────────────────────────────────────────────
+// ─── Selected-member detail panel ────────────────────────────────────────────────
 
-function AddMemberModal({
-  open,
-  onClose,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<MemberStatus>("active");
-  const [coachId, setCoachId] = useState("");
-  const [saving, setSaving] = useState(false);
+function DetailPanel({ repId }: { repId: string }) {
+  const [detail, setDetail] = useState<TeamMemberDetail | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (open) {
-      setName("");
-      setEmail("");
-      setStatus("active");
-      setCoachId("");
-      setSaving(false);
-    }
-  }, [open]);
-
-  if (!open) return null;
-
-  async function submit() {
-    if (name.trim() === "") {
-      showApiError("Name is required");
-      return;
-    }
-    setSaving(true);
-    try {
-      await apiClient.post("/members", {
-        name: name.trim(),
-        email: email.trim() || null,
-        status,
-        coach_id: coachId.trim() || null,
-      });
-      showSuccess("Member added");
-      onCreated();
-      onClose();
-    } catch (err) {
-      showApiError(err as Error);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Add member"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-md p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-base font-bold text-gray-900">Add Member</h2>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Enroll a new member into the Fulfillment department.
-        </p>
-
-        <div className="mt-4 space-y-3">
-          <label className="block">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Name *</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-              className="mt-1 w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Email</span>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Status</span>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as MemberStatus)}
-                className="mt-1 w-full text-sm border border-gray-300 rounded-md px-2 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
-              >
-                {(Object.keys(STATUS_CONFIG) as MemberStatus[]).map((k) => (
-                  <option key={k} value={k}>
-                    {STATUS_CONFIG[k].label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Coach ID</span>
-              <input
-                type="text"
-                value={coachId}
-                onChange={(e) => setCoachId(e.target.value)}
-                placeholder="optional"
-                className="mt-1 w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="sm" onClick={() => void submit()} disabled={saving || name.trim() === ""}>
-            {saving ? "Adding…" : "Add Member"}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Page ────────────────────────────────────────────────────────────────────
-
-export default function MembersPage() {
-  const { isLoading: authLoading } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
-  const [kpis, setKpis] = useState<MembersKpis>(EMPTY_KPIS);
-  const [listData, setListData] = useState<MembersListResponse>(EMPTY_LIST);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
-    usePagination("members");
-
-  // Fetch stats once on mount (after auth hydrates)
-  useEffect(() => {
-    if (authLoading) return;
-
     let cancelled = false;
-
-    async function fetchStats(): Promise<void> {
+    setLoading(true);
+    void (async () => {
       try {
-        const data = await apiClient.get<MembersStatsResponse>(
-          "/members/stats",
-          { silent: true }
-        );
-        if (!cancelled) {
-          setKpis(data.kpis ?? EMPTY_KPIS);
-        }
+        const d = await apiClient.get<TeamMemberDetail>(`/members/team/${repId}`, { silent: true });
+        if (!cancelled) setDetail(d);
       } catch {
-        // On error, kpis stays as EMPTY_KPIS so the page renders with zeros.
+        if (!cancelled) setDetail(null);
       } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
-    }
-
-    void fetchStats();
-
+    })();
     return () => {
       cancelled = true;
     };
-  }, [authLoading, refreshKey]);
+  }, [repId]);
 
-  // Fetch list whenever filters change, with debounce on search
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  if (loading) return <Card><CardBody><p className="text-sm text-gray-400">Loading…</p></CardBody></Card>;
+  if (!detail) return null;
+
+  const st = statusStyle(detail.status);
+
+  return (
+    <div className="space-y-4">
+      {/* Header card */}
+      <Card>
+        <CardBody>
+          <div className="flex items-start gap-3">
+            <Avatar name={detail.name} size="lg" />
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-gray-900">{detail.name}</h2>
+              <p className="text-[12px] text-gray-500">
+                {humanizeRole(detail.role)}
+                {detail.hired_at && ` · since ${formatDate(detail.hired_at)}`}
+                {detail.days_active != null && ` · ${detail.days_active} days active`}
+              </p>
+              <span className={`mt-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${st.pill}`}>
+                {humanizeRole(detail.status)}
+              </span>
+            </div>
+          </div>
+
+          {/* Performance bars (was "Goals Progress") */}
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-3">Performance</div>
+            {detail.performance.length === 0 ? (
+              <p className="text-[13px] text-gray-400 italic">No performance data.</p>
+            ) : (
+              <div className="space-y-3">
+                {detail.performance.map((bar) => (
+                  <div key={bar.label}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[13px] font-medium text-gray-700">{bar.label}</span>
+                      <span className="text-[13px] font-bold text-gray-900">{Math.round(bar.percent)}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${bar.percent}%`, backgroundColor: barColor(bar.label) }}
+                      />
+                    </div>
+                    {bar.detail && <div className="text-[11px] text-gray-400 mt-0.5">{bar.detail}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Recent submissions (EOD reports) */}
+      <Card>
+        <CardHeader title="Recent Submissions" />
+        <CardBody className="pt-0">
+          {detail.recent_submissions.length === 0 ? (
+            <p className="text-[13px] text-gray-400 italic">No reports yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {detail.recent_submissions.map((sub, i) => (
+                <div key={i} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-[13px]">
+                  <span className="flex items-center gap-2 text-gray-700">
+                    <span className={`h-2 w-2 rounded-full ${sub.delivered ? "bg-emerald-500" : "bg-gray-300"}`} />
+                    {sub.label}
+                  </span>
+                  <span className="text-[12px] text-gray-400">{formatDate(sub.date)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Call history */}
+      <Card>
+        <CardHeader title="Call History" />
+        <CardBody className="pt-0">
+          {detail.call_history.length === 0 ? (
+            <p className="text-[13px] text-gray-400 italic">No calls yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {detail.call_history.map((call) => (
+                <Link
+                  key={call.call_id}
+                  href={`/sales-calls/${call.call_id}`}
+                  className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-[13px] hover:bg-gray-100 transition-colors"
+                >
+                  <span className="flex items-center gap-2 text-gray-700">
+                    <span className="h-2 w-2 rounded-full bg-orange-500" />
+                    {call.call_type || "Call"}
+                    {call.call_result && <span className="text-gray-400">· {call.call_result}</span>}
+                  </span>
+                  <span className="text-[12px] text-gray-400">{formatDate(call.date)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Page ───────────────────────────────────────────────────────────────────────
+
+const STATUS_OPTIONS = ["all", "active", "probation", "terminated"];
+
+export default function MembersPage() {
+  const { isLoading: authLoading } = useAuth();
+  const [stats, setStats] = useState<TeamStats | null>(null);
+  const [members, setMembers] = useState<TeamMemberRow[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const s = await apiClient.get<TeamStats>("/members/team-stats", { silent: true });
+      setStats(s);
+    } catch {
+      /* zeros */
+    }
+  }, []);
+
+  const loadMembers = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (debounced) params.set("search", debounced);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      const data = await apiClient.get<{ members: TeamMemberRow[]; total: number }>(
+        `/members/team?${params.toString()}`,
+        { silent: true },
+      );
+      setMembers(data.members);
+      // Keep selection valid; default to the first member.
+      setSelected((prev) =>
+        prev && data.members.some((m) => m.rep_id === prev)
+          ? prev
+          : data.members[0]?.rep_id ?? null,
+      );
+    } catch {
+      setMembers([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [debounced, statusFilter]);
 
   useEffect(() => {
     if (authLoading) return;
+    void loadStats();
+  }, [authLoading, loadStats]);
 
-    if (searchDebounceRef.current !== null) {
-      clearTimeout(searchDebounceRef.current);
-    }
-
-    const doFetch = () => {
-      let cancelled = false;
-
-      async function fetchMembers(): Promise<void> {
-        const params = new URLSearchParams();
-        if (statusFilter !== "all") params.set("status", statusFilter);
-        if (search) params.set("search", search);
-        params.set("page", String(page));
-        params.set("per_page", String(pageSize));
-        params.set("sort_by", "enrollment_date");
-        params.set("sort_dir", "desc");
-
-        try {
-          const data = await apiClient.get<MembersListResponse>(
-            `/members?${params.toString()}`,
-            { silent: true }
-          );
-          if (!cancelled) {
-            setListData(data);
-          }
-        } catch {
-          // On error, listData stays as previous value.
-        }
-      }
-
-      void fetchMembers();
-
-      return () => {
-        cancelled = true;
-      };
-    };
-
-    // Debounce search input; fire immediately for dropdown changes
-    if (search !== "") {
-      searchDebounceRef.current = setTimeout(doFetch, 300);
-      return () => {
-        if (searchDebounceRef.current !== null) {
-          clearTimeout(searchDebounceRef.current);
-        }
-      };
-    }
-
-    return doFetch();
-  }, [authLoading, statusFilter, search, refreshKey, page, pageSize]);
-
-  // When a filter/search narrows the set, jump back to page 1 so the user
-  // isn't stranded on a page that no longer exists.
   useEffect(() => {
-    resetToFirstPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, search]);
+    if (authLoading) return;
+    void loadMembers();
+  }, [authLoading, loadMembers]);
 
-  function handleClearFilters() {
-    setSearch("");
-    setStatusFilter("all");
-  }
-
-  const kpiCards = [
-    {
-      label: "Total Members",
-      value: String(kpis.total_members),
-      sub: "All time",
-    },
-    {
-      label: "Enrolled This Week",
-      value: String(kpis.members_this_week),
-      sub: "Last 7 days",
-    },
-    {
-      label: "Active Members",
-      value: String(kpis.active_members),
-      sub: "Currently active",
-    },
-    {
-      label: "Goals Completed",
-      value: String(kpis.goals_completed),
-      sub: "Total completed",
-    },
-  ];
+  const activeCount = useMemo(() => members.length, [members]);
 
   return (
     <>
       <Header title="Members" />
 
       <main className="flex-1 overflow-y-auto p-7 space-y-6">
-        {/* Page heading */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Members</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              View and manage all enrolled members in the Fulfillment department.
-            </p>
+        {/* Heading + search + status + add */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-xl font-bold text-gray-900">Members</h1>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search members…"
+                className="w-56 rounded-lg border border-gray-200 bg-white pl-9 pr-3 py-2 text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+            >
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s === "all" ? "All Status" : humanizeRole(s)}
+                </option>
+              ))}
+            </select>
+            <Button variant="primary" href="/fulfillment-director">
+              + Ask Director
+            </Button>
           </div>
-          <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
-            + Add Member
-          </Button>
         </div>
 
-        {/* KPI Row */}
-        {isLoading ? (
-          <KpiRowSkeleton />
-        ) : (
-          <div className="grid grid-cols-4 gap-4">
-            {kpiCards.map((kpi) => (
-              <KpiCard
-                key={kpi.label}
-                label={kpi.label}
-                value={kpi.value}
-                borderColor={ORANGE}
-                sub={kpi.sub}
-              />
-            ))}
-          </div>
-        )}
+        {/* KPI cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KpiCard
+            label="Active Members"
+            value={isLoading ? "—" : String(stats?.active_members ?? 0)}
+            borderColor="#F97316"
+            badge={stats && stats.active_delta !== 0 ? `↑ ${Math.abs(stats.active_delta)} this month` : undefined}
+            badgeVariant={stats && stats.active_delta >= 0 ? "up" : "down"}
+          />
+          <KpiCard
+            label="Total Members"
+            value={isLoading ? "—" : String(stats?.total_members ?? 0)}
+            borderColor="#10B981"
+            sub="On the team"
+          />
+          <KpiCard
+            label="Calls This Month"
+            value={isLoading ? "—" : String(stats?.calls_this_month ?? 0)}
+            borderColor="#3B82F6"
+            sub="Across the team"
+          />
+          <KpiCard
+            label="At-Risk Members"
+            value={isLoading ? "—" : String(stats?.at_risk_members ?? 0)}
+            borderColor="#EF4444"
+            sub="Needs attention"
+          />
+        </div>
 
-        {/* Members Table */}
-        {isLoading ? (
-          <TableSkeleton />
-        ) : (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            {/* Table header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-bold text-gray-900">Member Records</h2>
-              <span className="text-xs text-gray-400">
-                Showing {listData.members.length} of{" "}
-                {listData.total.toLocaleString()}
-              </span>
-            </div>
+        {/* Directory + detail */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
+          <Card>
+            <CardHeader
+              title="Member Directory"
+              action={<span className="text-xs text-gray-400">{activeCount} shown</span>}
+            />
+            <CardBody>
+              {isLoading ? (
+                <p className="text-sm text-gray-400">Loading members…</p>
+              ) : members.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No members match.</p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {members.map((m) => (
+                    <MemberCard
+                      key={m.rep_id}
+                      member={m}
+                      selected={selected === m.rep_id}
+                      onSelect={() => setSelected(m.rep_id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardBody>
+          </Card>
 
-            {/* Filter bar */}
-            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/50">
-              <MembersFilterBar
-                search={search}
-                onSearchChange={setSearch}
-                statusFilter={statusFilter}
-                onStatusChange={setStatusFilter}
-                onClear={handleClearFilters}
-              />
-            </div>
-
-            {/* Table */}
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    Name
-                  </th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    Status
-                  </th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    Coach
-                  </th>
-                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    Enrolled
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {listData.members.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="px-5 py-12 text-center text-sm text-gray-400"
-                    >
-                      No members match your filters.
-                    </td>
-                  </tr>
-                ) : (
-                  listData.members.map((member) => (
-                    <MemberTableRow key={member.id} member={member} />
-                  ))
-                )}
-              </tbody>
-            </table>
-
-            {/* Table footer */}
-            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/50">
-              <span className="text-xs text-gray-400">
-                Showing {listData.members.length} of{" "}
-                {listData.total.toLocaleString()} members
-              </span>
-            </div>
-
-            {!isLoading && listData.total > 0 && (
-              <Pagination
-                page={page}
-                total={listData.total}
-                pageSize={pageSize}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-              />
-            )}
-          </div>
-        )}
+          {selected ? (
+            <DetailPanel repId={selected} />
+          ) : (
+            <Card><CardBody><p className="text-sm text-gray-400">Select a member to see details.</p></CardBody></Card>
+          )}
+        </div>
       </main>
-
-      <AddMemberModal
-        open={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onCreated={() => setRefreshKey((k) => k + 1)}
-      />
     </>
   );
 }
