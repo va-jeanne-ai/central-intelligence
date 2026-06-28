@@ -8,8 +8,19 @@ import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import {
+  Avatar,
+  CallHistorySection,
+  PerformanceSection,
+  SubmissionsSection,
+  formatDate,
+  humanizeRole,
+  statusStyle,
+  type TeamMemberRow,
+  type TeamMemberDetail,
+} from "@/components/members/team-member";
 
-// ─── Types (bound to /members/team*, sourced from the sales team) ───────────────
+// ─── Page-only type ─────────────────────────────────────────────────────────────
 
 interface TeamStats {
   total_members: number;
@@ -17,100 +28,6 @@ interface TeamStats {
   at_risk_members: number;
   calls_this_month: number;
   active_delta: number;
-}
-
-interface TeamMemberRow {
-  rep_id: string;
-  name: string;
-  email: string | null;
-  role: string | null;
-  status: string;
-  hired_at: string | null;
-  capabilities: string[];
-  calls_count: number;
-}
-
-interface PerformanceBar {
-  label: string;
-  percent: number;
-  detail: string | null;
-}
-interface SubmissionRow {
-  label: string;
-  date: string | null;
-  delivered: boolean;
-}
-interface CallHistoryRow {
-  call_id: string;
-  call_type: string | null;
-  call_result: string | null;
-  date: string | null;
-}
-interface TeamMemberDetail {
-  rep_id: string;
-  name: string;
-  email: string | null;
-  role: string | null;
-  status: string;
-  hired_at: string | null;
-  days_active: number | null;
-  capabilities: string[];
-  performance: PerformanceBar[];
-  recent_submissions: SubmissionRow[];
-  call_history: CallHistoryRow[];
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────────
-
-function initials(name: string): string {
-  const p = name.trim().split(/\s+/);
-  return ((p[0]?.[0] ?? "") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase() || "—";
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function humanizeRole(role: string | null): string {
-  if (!role) return "Team member";
-  return role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-// Status → pill + accent. "active" green, "probation" amber/at-risk, else gray/red.
-function statusStyle(status: string): { pill: string; ring: string; atRisk: boolean } {
-  const s = status.toLowerCase();
-  if (s === "active") return { pill: "bg-emerald-50 text-emerald-700", ring: "", atRisk: false };
-  if (s === "probation") return { pill: "bg-amber-50 text-amber-700", ring: "ring-1 ring-amber-300", atRisk: true };
-  return { pill: "bg-red-50 text-red-700", ring: "ring-1 ring-red-300", atRisk: true }; // terminated, etc.
-}
-
-// Deterministic avatar color from the name (stable per person).
-const AVATAR_COLORS = ["#F97316", "#3B82F6", "#10B981", "#8B5CF6", "#EC4899", "#14B8A6", "#EF4444", "#6366F1"];
-function avatarColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-}
-
-function Avatar({ name, size = "md" }: { name: string; size?: "md" | "lg" }) {
-  const dim = size === "lg" ? "h-14 w-14 text-lg" : "h-12 w-12 text-sm";
-  return (
-    <span
-      className={`flex flex-shrink-0 items-center justify-center rounded-full font-bold text-white ${dim}`}
-      style={{ backgroundColor: avatarColor(name) }}
-    >
-      {initials(name)}
-    </span>
-  );
-}
-
-// Performance bar color by label.
-function barColor(label: string): string {
-  const l = label.toLowerCase();
-  if (l.includes("score")) return "#10B981";
-  if (l.includes("calls")) return "#F59E0B";
-  return "#3B82F6";
 }
 
 // ─── Directory card ─────────────────────────────────────────────────────────────
@@ -194,30 +111,18 @@ function DetailPanel({ repId }: { repId: string }) {
             </div>
           </div>
 
+          {/* View full detail → dedicated page */}
+          <Link
+            href={`/members/${detail.rep_id}`}
+            className="mt-3 inline-block text-[12px] font-semibold text-accent-600 hover:text-accent-700"
+          >
+            View full detail →
+          </Link>
+
           {/* Performance bars (was "Goals Progress") */}
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-3">Performance</div>
-            {detail.performance.length === 0 ? (
-              <p className="text-[13px] text-gray-400 italic">No performance data.</p>
-            ) : (
-              <div className="space-y-3">
-                {detail.performance.map((bar) => (
-                  <div key={bar.label}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[13px] font-medium text-gray-700">{bar.label}</span>
-                      <span className="text-[13px] font-bold text-gray-900">{Math.round(bar.percent)}%</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${bar.percent}%`, backgroundColor: barColor(bar.label) }}
-                      />
-                    </div>
-                    {bar.detail && <div className="text-[11px] text-gray-400 mt-0.5">{bar.detail}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
+            <PerformanceSection performance={detail.performance} />
           </div>
         </CardBody>
       </Card>
@@ -226,21 +131,7 @@ function DetailPanel({ repId }: { repId: string }) {
       <Card>
         <CardHeader title="Recent Submissions" />
         <CardBody className="pt-0">
-          {detail.recent_submissions.length === 0 ? (
-            <p className="text-[13px] text-gray-400 italic">No reports yet.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {detail.recent_submissions.map((sub, i) => (
-                <div key={i} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-[13px]">
-                  <span className="flex items-center gap-2 text-gray-700">
-                    <span className={`h-2 w-2 rounded-full ${sub.delivered ? "bg-emerald-500" : "bg-gray-300"}`} />
-                    {sub.label}
-                  </span>
-                  <span className="text-[12px] text-gray-400">{formatDate(sub.date)}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <SubmissionsSection submissions={detail.recent_submissions} />
         </CardBody>
       </Card>
 
@@ -248,26 +139,7 @@ function DetailPanel({ repId }: { repId: string }) {
       <Card>
         <CardHeader title="Call History" />
         <CardBody className="pt-0">
-          {detail.call_history.length === 0 ? (
-            <p className="text-[13px] text-gray-400 italic">No calls yet.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {detail.call_history.map((call) => (
-                <Link
-                  key={call.call_id}
-                  href={`/sales-calls/${call.call_id}?from=members`}
-                  className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-[13px] hover:bg-gray-100 transition-colors"
-                >
-                  <span className="flex items-center gap-2 text-gray-700">
-                    <span className="h-2 w-2 rounded-full bg-orange-500" />
-                    {call.call_type || "Call"}
-                    {call.call_result && <span className="text-gray-400">· {call.call_result}</span>}
-                  </span>
-                  <span className="text-[12px] text-gray-400">{formatDate(call.date)}</span>
-                </Link>
-              ))}
-            </div>
-          )}
+          <CallHistorySection calls={detail.call_history} />
         </CardBody>
       </Card>
     </div>

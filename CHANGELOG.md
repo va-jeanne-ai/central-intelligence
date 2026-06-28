@@ -7,6 +7,41 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — editable member detail (CI overrides that survive the WGR sync)
+
+Members come from `sales_reps`, which the WGR sync overwrites on every run — so editing it directly
+would be wiped. Instead, edits write to a new CI-owned `rep_overrides` table, merged over the synced
+values at read time. Edits survive the sync; newly-synced reps still appear.
+
+- **`models/sales.py` + migration `p7a8b9c0d1e2`** — new `rep_overrides` table (PK `rep_id` FK→sales_reps;
+  nullable `full_name`/`email`/`role`/`status`/`notes`; NULL = use the synced value). Applied to the DB.
+- **`routes/members.py`** — `/members/team` + `/members/team/{rep_id}` now LEFT JOIN `rep_overrides` and
+  COALESCE override→synced (calls still join on the synced name, the canonical `calls.call_owner` key).
+  New `PATCH /members/team/{rep_id}` upserts overrides (empty string clears a field). Detail returns `notes`.
+- **`members/[member_id]/page.tsx`** — an **Edit** mode on the detail page: edit name/email/role/status
+  inline + a CI-owned **Notes** field; Save PATCHes and shows the merged result.
+
+Verified end-to-end: an edit survives a simulated sales_reps re-sync (override wins); clearing it falls
+back to the synced value. `tsc` + ESLint clean, `next build` passes, WGR tests green.
+
+
+### Added — dedicated member (rep) detail page at /members/{rep_id}
+
+The Members directory only opened a right-side panel; now each member has a full detail page too. The
+stale `/members/[member_id]` page (which queried the empty legacy members table) was rebuilt to serve
+the team roster — sourced from `/members/team/{rep_id}`, the same endpoint the panel uses.
+
+- **`components/members/team-member.tsx`** (new) — shared helpers (Avatar, status pills, formatters)
+  + the Performance / Submissions / Call History sections, so the panel and the full page render
+  identically with no duplication.
+- **`members/[member_id]/page.tsx`** — rebuilt: a Member breadcrumb, a header card (avatar, role,
+  status, capabilities, "Ask Director"), and Performance + Recent Submissions + Call History.
+- **`members/page.tsx`** — the side panel now has a **"View full detail →"** link to the page, and
+  uses the shared sections.
+
+`tsc` + ESLint clean, `next build` passes (verified against real rep data).
+
+
 ### Added — breadcrumbs on call detail pages (back to where you came from)
 
 The call detail pages had a hardcoded "← Back to calls" that always went to /sales-calls, even when the

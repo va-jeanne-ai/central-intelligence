@@ -67,6 +67,30 @@ class SalesRep(Base, TimestampMixin):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class RepOverride(Base, TimestampMixin):
+    """CI-owned editable overrides for a synced rep (sales_reps).
+
+    The WGR sync owns sales_reps and overwrites it on every run, so editing it
+    directly would be wiped. The Members page edits write HERE instead, keyed by
+    rep_id; each field is NULL when there's no override (fall back to the synced
+    value). Read paths COALESCE override → sales_reps, so edits survive the sync
+    AND newly-synced reps still appear. ``notes`` is CI-only (no synced source).
+    """
+
+    __tablename__ = "rep_overrides"
+
+    rep_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("sales_reps.rep_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    full_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    role: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class ScorecardCategory(Base, TimestampMixin):
     """A rubric category calls are scored against (discovery / sales)."""
 

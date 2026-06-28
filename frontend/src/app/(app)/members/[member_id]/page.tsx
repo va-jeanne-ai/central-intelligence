@@ -1,798 +1,255 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
-import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { GoalModal } from "@/components/goals/goal-modal";
-import type { GoalModalGoal } from "@/components/goals/goal-modal";
-import { TicketModal } from "@/components/tech-sos/ticket-modal";
-import type { TicketModalTicket } from "@/components/tech-sos/ticket-modal";
+import { Breadcrumbs, ORIGINS } from "@/components/ui/breadcrumbs";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
-import { showSuccess, showApiError } from "@/lib/toast";
+import { showSuccess, showError } from "@/lib/toast";
+import {
+  Avatar,
+  Card,
+  CardHeader,
+  CardBody,
+  CallHistorySection,
+  PerformanceSection,
+  SubmissionsSection,
+  formatDate,
+  humanizeRole,
+  statusStyle,
+  type TeamMemberDetail,
+} from "@/components/members/team-member";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+const STATUS_OPTIONS = ["active", "probation", "terminated"];
 
-type MemberStatus = "active" | "paused" | "graduated" | "churned";
-
-const STATUS_OPTIONS: MemberStatus[] = ["active", "paused", "graduated", "churned"];
-
-interface CallSummary {
-  id: string;
-  date: string | null;
-  call_type: string | null;
-  insights_count: number;
-  processed_date: string | null;
-}
-interface GoalSummary {
-  id: string;
-  goal_text: string | null;
-  status: string | null;
-  target_date: string | null;
-}
-interface WinSummary {
-  id: string;
-  win_text: string | null;
-  impact_area: string | null;
-  win_date: string | null;
-}
-interface PainPointSummary {
-  id: string;
-  text: string | null;
-  category: string | null;
-}
-interface NoteRow {
-  id: string;
-  body: string;
-  author_id: string | null;
-  author_email: string | null;
-  created_at: string;
-}
-interface TicketRow {
-  id: string;
-  subject: string | null;
-  category: string | null;
-  status: string | null;
-  priority: string | null;
-}
-const TICKET_STATUS_BADGE: Record<string, string> = {
-  open: "bg-blue-50 text-blue-700",
-  in_progress: "bg-amber-50 text-amber-700",
-  resolved: "bg-green-50 text-green-700",
-  closed: "bg-gray-100 text-gray-500",
-};
-interface MemberDetail {
-  id: string;
-  name: string | null;
-  email: string | null;
-  status: string | null;
-  coach_id: string | null;
-  enrollment_date: string | null;
-  created_at: string | null;
-  calls: CallSummary[];
-  goals: GoalSummary[];
-  wins: WinSummary[];
-  pain_points: PainPointSummary[];
-  staff_notes: NoteRow[];
-}
-interface HistoryEvent {
-  id: string;
-  action: string;
-  before: Record<string, unknown> | null;
-  after: Record<string, unknown> | null;
-  author_id: string | null;
-  author_email: string | null;
-  created_at: string;
-}
-
-const ORANGE = "#F97316";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-}
-
-function humanise(value: string): string {
-  return value
-    .split(/[_\-.\s]+/)
-    .filter(Boolean)
-    .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1).toLowerCase()))
-    .join(" ");
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  active: "bg-green-50 text-green-700",
-  paused: "bg-amber-50 text-amber-700",
-  graduated: "bg-accent-50 text-accent-700",
-  churned: "bg-gray-100 text-gray-500",
-};
-
-function statusBadgeClasses(status: string | null): string {
-  return STATUS_BADGE[(status ?? "").toLowerCase()] ?? "bg-gray-100 text-gray-600";
-}
-
-// ─── Inline-edit field ─────────────────────────────────────────────────────────
-
-interface InlineFieldProps {
-  label: string;
-  value: string | null;
-  onSave: (next: string) => Promise<void>;
-  type?: "text" | "email" | "select";
-  options?: string[];
-  placeholder?: string;
-}
-
-function InlineField({ label, value, onSave, type = "text", options, placeholder }: InlineFieldProps) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value ?? "");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setDraft(value ?? "");
-  }, [value]);
-
-  const commit = async () => {
-    if (draft === (value ?? "")) {
-      setEditing(false);
-      return;
-    }
-    setSaving(true);
-    try {
-      await onSave(draft);
-      setEditing(false);
-    } catch {
-      // error toast handled upstream
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{label}</span>
-      {editing ? (
-        <div className="flex items-center gap-2">
-          {type === "select" ? (
-            <select
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-300"
-              autoFocus
-            >
-              <option value="">—</option>
-              {(options ?? []).map((o) => (
-                <option key={o} value={o}>
-                  {humanise(o)}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              type={type}
-              value={draft}
-              placeholder={placeholder}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void commit();
-                if (e.key === "Escape") setEditing(false);
-              }}
-              className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-300"
-              autoFocus
-            />
-          )}
-          <button
-            type="button"
-            onClick={() => void commit()}
-            disabled={saving}
-            className="text-xs font-semibold text-orange-600 hover:text-orange-700 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setDraft(value ?? "");
-              setEditing(false);
-            }}
-            className="text-xs text-gray-400 hover:text-gray-600"
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="text-left text-sm text-gray-900 hover:text-orange-600 group flex items-center gap-1.5"
-        >
-          {type === "select" && value ? (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusBadgeClasses(value)}`}>
-              {humanise(value)}
-            </span>
-          ) : (
-            <span>{value || <span className="text-gray-400">—</span>}</span>
-          )}
-          <span className="opacity-0 group-hover:opacity-100 text-[10px] text-gray-400">edit</span>
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ─── Section list card ──────────────────────────────────────────────────────────
-
-function SectionCard({
-  title,
-  count,
-  children,
-  action,
-}: {
-  title: string;
-  count: number;
-  children: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <Card>
-      <CardHeader title={`${title} (${count})`} action={action} />
-      <CardBody>{children}</CardBody>
-    </Card>
-  );
-}
-
-function EmptyRow({ text }: { text: string }) {
-  return <p className="text-sm text-gray-400 py-2">{text}</p>;
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
+// The route param is `member_id` but the Members page is the team roster, so the
+// id is a rep_id (e.g. REP_NELSON_FIGUERIA) served by /members/team/{rep_id}.
 export default function MemberDetailPage({ params }: { params: { member_id: string } }) {
-  const memberId = params.member_id;
+  const repId = params.member_id;
   const { isLoading: authLoading } = useAuth();
-  const [member, setMember] = useState<MemberDetail | null>(null);
-  const [history, setHistory] = useState<HistoryEvent[]>([]);
+  const [detail, setDetail] = useState<TeamMemberDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState(false);
 
-  // notes
-  const [noteDraft, setNoteDraft] = useState("");
-  const [postingNote, setPostingNote] = useState(false);
-  const [deleteNoteId, setDeleteNoteId] = useState<string | null>(null);
-  const [deletingNote, setDeletingNote] = useState(false);
+  // Edit mode + the draft being edited. Edits write to CI overrides (rep_overrides),
+  // so they survive the WGR sync; synced fields are the fallback when not overridden.
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState({ full_name: "", email: "", role: "", status: "", notes: "" });
 
-  // goals CRUD
-  const [showAddGoal, setShowAddGoal] = useState(false);
-  const [editGoal, setEditGoal] = useState<GoalModalGoal | null>(null);
-  const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
-  const [deletingGoal, setDeletingGoal] = useState(false);
-
-  // tech-sos tickets
-  const [tickets, setTickets] = useState<TicketRow[]>([]);
-  const [showAddTicket, setShowAddTicket] = useState(false);
-  const [editTicket, setEditTicket] = useState<TicketModalTicket | null>(null);
-  const noteRef = useRef<HTMLTextAreaElement>(null);
-
-  const loadDetail = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      const data = await apiClient.get<MemberDetail>(`/members/${memberId}`, { silent: true });
-      setMember(data);
+      const d = await apiClient.get<TeamMemberDetail>(`/members/team/${repId}`, { silent: true });
+      setDetail(d);
     } catch {
-      setNotFound(true);
+      setError(true);
+    } finally {
+      setIsLoading(false);
     }
-  }, [memberId]);
-
-  const loadHistory = useCallback(async () => {
-    try {
-      const data = await apiClient.get<{ events: HistoryEvent[] }>(
-        `/members/${memberId}/history`,
-        { silent: true },
-      );
-      setHistory(data.events ?? []);
-    } catch {
-      // history is best-effort
-    }
-  }, [memberId]);
-
-  const loadTickets = useCallback(async () => {
-    try {
-      const data = await apiClient.get<{ tickets: TicketRow[] }>(
-        `/tech-sos?member_id=${memberId}`,
-        { silent: true },
-      );
-      setTickets(data.tickets ?? []);
-    } catch {
-      // best-effort
-    }
-  }, [memberId]);
+  }, [repId]);
 
   useEffect(() => {
     if (authLoading) return;
-    let cancelled = false;
-    void (async () => {
-      await Promise.all([loadDetail(), loadHistory(), loadTickets()]);
-      if (!cancelled) setIsLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, loadDetail, loadHistory, loadTickets]);
+    void load();
+  }, [authLoading, load]);
 
-  const patchField = useCallback(
-    async (field: "name" | "email" | "status" | "coach_id", next: string) => {
-      try {
-        await apiClient.patch(`/members/${memberId}`, { [field]: next || null });
-        setMember((prev) => (prev ? { ...prev, [field]: next || null } : prev));
-        showSuccess(`Updated ${humanise(field)}`);
-        void loadHistory();
-      } catch (err) {
-        showApiError(err as Error);
-        throw err;
-      }
-    },
-    [memberId, loadHistory],
-  );
-
-  const postNote = useCallback(async () => {
-    const body = noteDraft.trim();
-    if (!body) return;
-    setPostingNote(true);
-    try {
-      await apiClient.post(`/members/${memberId}/notes`, { body });
-      setNoteDraft("");
-      showSuccess("Note added");
-      await Promise.all([loadDetail(), loadHistory()]);
-    } catch (err) {
-      showApiError(err as Error);
-    } finally {
-      setPostingNote(false);
-    }
-  }, [memberId, noteDraft, loadDetail, loadHistory]);
-
-  const confirmDeleteNote = useCallback(async () => {
-    if (!deleteNoteId) return;
-    setDeletingNote(true);
-    try {
-      await apiClient.delete(`/members/${memberId}/notes/${deleteNoteId}`);
-      showSuccess("Note deleted");
-      setDeleteNoteId(null);
-      await Promise.all([loadDetail(), loadHistory()]);
-    } catch (err) {
-      showApiError(err as Error);
-    } finally {
-      setDeletingNote(false);
-    }
-  }, [memberId, deleteNoteId, loadDetail, loadHistory]);
-
-  const completeGoal = useCallback(
-    async (goalId: string) => {
-      try {
-        await apiClient.patch(`/goals/${goalId}`, { status: "completed" });
-        showSuccess("Goal completed");
-        await Promise.all([loadDetail(), loadHistory()]);
-      } catch (err) {
-        showApiError(err as Error);
-      }
-    },
-    [loadDetail, loadHistory],
-  );
-
-  const confirmDeleteGoal = useCallback(async () => {
-    if (!deleteGoalId) return;
-    setDeletingGoal(true);
-    try {
-      await apiClient.delete(`/goals/${deleteGoalId}`);
-      showSuccess("Goal deleted");
-      setDeleteGoalId(null);
-      await Promise.all([loadDetail(), loadHistory()]);
-    } catch (err) {
-      showApiError(err as Error);
-    } finally {
-      setDeletingGoal(false);
-    }
-  }, [deleteGoalId, loadDetail, loadHistory]);
-
-  const onGoalSaved = useCallback(() => {
-    void Promise.all([loadDetail(), loadHistory()]);
-  }, [loadDetail, loadHistory]);
-
-  if (notFound) {
-    return (
-      <>
-        <Header title="Member" />
-        <main className="flex-1 overflow-y-auto p-7">
-          <Card>
-            <CardBody>
-              <p className="text-sm text-gray-600">Member not found.</p>
-              <div className="mt-3">
-                <Button variant="ghost" href="/members">
-                  ← Back to Members
-                </Button>
-              </div>
-            </CardBody>
-          </Card>
-        </main>
-      </>
-    );
+  function startEdit() {
+    if (!detail) return;
+    setDraft({
+      full_name: detail.name ?? "",
+      email: detail.email ?? "",
+      role: detail.role ?? "",
+      status: detail.status ?? "",
+      notes: detail.notes ?? "",
+    });
+    setEditing(true);
   }
 
-  if (isLoading || !member) {
-    return (
-      <>
-        <Header title="Member" />
-        <main className="flex-1 overflow-y-auto p-7 space-y-4">
-          <div className="h-7 w-56 bg-gray-200 rounded animate-pulse" />
-          <div className="h-40 bg-gray-100 rounded-xl animate-pulse" />
-          <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />
-        </main>
-      </>
-    );
-  }
+  const save = useCallback(async () => {
+    setSaving(true);
+    try {
+      const updated = await apiClient.patch<TeamMemberDetail>(
+        `/members/team/${repId}`,
+        draft,
+        { silent: true },
+      );
+      setDetail(updated);
+      setEditing(false);
+      showSuccess("Member updated.");
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Couldn't save.");
+    } finally {
+      setSaving(false);
+    }
+  }, [repId, draft]);
 
   return (
     <>
-      <Header title={member.name || "Member"} />
+      <Header title="Member" />
       <main className="flex-1 overflow-y-auto p-7 space-y-6">
-        {/* Back link */}
-        <Button variant="ghost" href="/members" size="sm">
-          ← Members
-        </Button>
+        <Breadcrumbs origin={ORIGINS.members} current={detail?.name ?? "Member"} />
 
-        {/* Identity card with inline-edit fields */}
-        <Card>
-          <CardBody>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-              <InlineField label="Name" value={member.name} onSave={(v) => patchField("name", v)} />
-              <InlineField label="Email" type="email" value={member.email} onSave={(v) => patchField("email", v)} />
-              <InlineField
-                label="Status"
-                type="select"
-                options={STATUS_OPTIONS}
-                value={member.status}
-                onSave={(v) => patchField("status", v)}
-              />
-              <InlineField
-                label="Coach"
-                value={member.coach_id}
-                placeholder="coach user id"
-                onSave={(v) => patchField("coach_id", v)}
-              />
-            </div>
-            <div className="mt-4 pt-4 border-t border-gray-100 flex gap-6 text-xs text-gray-500">
-              <span>Enrolled: {fmtDate(member.enrollment_date)}</span>
-              <span>Created: {fmtDate(member.created_at)}</span>
-            </div>
-          </CardBody>
-        </Card>
-
-        {/* Two-column: goals/wins/pain + notes/history */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="space-y-4">
-            <SectionCard
-              title="Goals"
-              count={member.goals.length}
-              action={
-                <button
-                  type="button"
-                  onClick={() => setShowAddGoal(true)}
-                  className="text-[11px] font-semibold text-orange-600 hover:text-orange-700"
-                >
-                  + Add
-                </button>
-              }
-            >
-              {member.goals.length === 0 ? (
-                <EmptyRow text="No goals yet." />
-              ) : (
-                <ul className="space-y-2">
-                  {member.goals.map((g) => (
-                    <li key={g.id} className="group flex items-start justify-between gap-3 text-sm">
-                      <span className="text-gray-800">{g.goal_text || "—"}</span>
-                      <div className="shrink-0 flex items-center gap-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusBadgeClasses(g.status)}`}>
-                          {g.status ? humanise(g.status) : "—"}
-                        </span>
-                        <span className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 text-[11px]">
-                          {g.status !== "completed" && (
-                            <button
-                              type="button"
-                              onClick={() => void completeGoal(g.id)}
-                              className="font-medium text-green-600 hover:text-green-700"
-                            >
-                              Complete
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEditGoal({
-                                id: g.id,
-                                goal_text: g.goal_text,
-                                status: g.status,
-                                target_date: g.target_date,
-                              })
-                            }
-                            className="font-medium text-orange-600 hover:text-orange-700"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteGoalId(g.id)}
-                            className="font-medium text-red-500 hover:text-red-600"
-                          >
-                            Delete
-                          </button>
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </SectionCard>
-
-            <SectionCard title="Wins" count={member.wins.length}>
-              {member.wins.length === 0 ? (
-                <EmptyRow text="No wins recorded yet." />
-              ) : (
-                <ul className="space-y-2">
-                  {member.wins.map((w) => (
-                    <li key={w.id} className="text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-gray-800">{w.win_text || "—"}</span>
-                        <span className="shrink-0 text-[11px] text-gray-400">{fmtDate(w.win_date)}</span>
-                      </div>
-                      {w.impact_area && (
-                        <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-50 text-orange-700">
-                          {w.impact_area}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </SectionCard>
-
-            <SectionCard title="Pain Points" count={member.pain_points.length}>
-              {member.pain_points.length === 0 ? (
-                <EmptyRow text="No pain points yet." />
-              ) : (
-                <ul className="space-y-2">
-                  {member.pain_points.map((p) => (
-                    <li key={p.id} className="flex items-start justify-between gap-3 text-sm">
-                      <span className="text-gray-800">{p.text || "—"}</span>
-                      {p.category && <span className="shrink-0 text-[11px] text-gray-400">{p.category}</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </SectionCard>
-
-            <SectionCard title="Calls" count={member.calls.length}>
-              {member.calls.length === 0 ? (
-                <EmptyRow text="No calls logged yet." />
-              ) : (
-                <ul className="space-y-2">
-                  {member.calls.map((c) => {
-                    const isCoaching = (c.call_type ?? "").toLowerCase().includes("coaching");
-                    const href = `${isCoaching ? "/coaching-calls" : "/sales-calls"}/${c.id}`;
-                    return (
-                      <li key={c.id}>
-                        <Link
-                          href={href}
-                          className="flex items-center justify-between gap-3 text-sm rounded-md -mx-1 px-1 py-0.5 hover:bg-orange-50/50 group"
-                        >
-                          <span className="text-gray-800 group-hover:text-orange-700">
-                            {c.call_type ? humanise(c.call_type) : "Call"}
-                          </span>
-                          <span className="shrink-0 text-[11px] text-gray-400">
-                            {c.processed_date ? `${c.insights_count} insights · ${fmtDate(c.date)}` : "Analyzing…"}
-                          </span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </SectionCard>
-
-            <SectionCard
-              title="Tech SOS"
-              count={tickets.length}
-              action={
-                <button
-                  type="button"
-                  onClick={() => setShowAddTicket(true)}
-                  className="text-[11px] font-semibold text-orange-600 hover:text-orange-700"
-                >
-                  + New
-                </button>
-              }
-            >
-              {tickets.length === 0 ? (
-                <EmptyRow text="No tickets for this member." />
-              ) : (
-                <ul className="space-y-2">
-                  {tickets.map((t) => (
-                    <li key={t.id} className="group flex items-start justify-between gap-3 text-sm">
-                      <span className="text-gray-800">{t.subject || "—"}</span>
-                      <div className="shrink-0 flex items-center gap-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${TICKET_STATUS_BADGE[(t.status ?? "").toLowerCase()] ?? "bg-gray-100 text-gray-600"}`}>
-                          {t.status ? humanise(t.status) : "—"}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setEditTicket({
-                              id: t.id,
-                              subject: t.subject,
-                              category: t.category,
-                              status: t.status,
-                              priority: t.priority,
-                            })
-                          }
-                          className="opacity-0 group-hover:opacity-100 text-[11px] font-medium text-orange-600 hover:text-orange-700"
-                        >
-                          Manage
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </SectionCard>
-          </div>
-
-          <div className="space-y-4">
-            {/* Staff notes */}
+        {isLoading ? (
+          <p className="text-sm text-gray-400">Loading member…</p>
+        ) : error || !detail ? (
+          <p className="text-[15px] text-red-700">Member not found.</p>
+        ) : (
+          <>
+            {/* Header card */}
             <Card>
-              <CardHeader title={`Staff Notes (${member.staff_notes.length})`} />
               <CardBody>
-                <div className="flex flex-col gap-2">
-                  <textarea
-                    ref={noteRef}
-                    value={noteDraft}
-                    onChange={(e) => setNoteDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void postNote();
-                    }}
-                    placeholder="Add a note… (⌘/Ctrl+Enter to post)"
-                    rows={2}
-                    className="text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none"
-                  />
-                  <div className="flex justify-end">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => void postNote()}
-                      disabled={postingNote || noteDraft.trim() === ""}
-                    >
-                      {postingNote ? "Adding…" : "Add note"}
-                    </Button>
+                <div className="flex items-start gap-4">
+                  <Avatar name={detail.name} size="xl" />
+                  <div className="min-w-0 flex-1">
+                    {editing ? (
+                      <div className="space-y-2.5 max-w-md">
+                        <Field label="Name">
+                          <input
+                            value={draft.full_name}
+                            onChange={(e) => setDraft({ ...draft, full_name: e.target.value })}
+                            className={inputCls}
+                          />
+                        </Field>
+                        <Field label="Email">
+                          <input
+                            value={draft.email}
+                            onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+                            className={inputCls}
+                          />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <Field label="Role">
+                            <input
+                              value={draft.role}
+                              onChange={(e) => setDraft({ ...draft, role: e.target.value })}
+                              className={inputCls}
+                            />
+                          </Field>
+                          <Field label="Status">
+                            <select
+                              value={draft.status}
+                              onChange={(e) => setDraft({ ...draft, status: e.target.value })}
+                              className={inputCls}
+                            >
+                              {STATUS_OPTIONS.map((s) => (
+                                <option key={s} value={s}>
+                                  {humanizeRole(s)}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <h1 className="text-[22px] font-bold text-gray-900">{detail.name}</h1>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          {humanizeRole(detail.role)}
+                          {detail.hired_at && ` · since ${formatDate(detail.hired_at)}`}
+                          {detail.days_active != null && ` · ${detail.days_active} days active`}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${statusStyle(detail.status).pill}`}
+                          >
+                            {humanizeRole(detail.status)}
+                          </span>
+                          {detail.email && <span className="text-[12px] text-gray-400">{detail.email}</span>}
+                        </div>
+                        {detail.capabilities.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-3">
+                            {detail.capabilities.map((cap) => (
+                              <span
+                                key={cap}
+                                className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 capitalize"
+                              >
+                                {cap}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <div className="flex flex-shrink-0 gap-2">
+                    {editing ? (
+                      <>
+                        <Button variant="ghost" onClick={() => setEditing(false)} disabled={saving}>
+                          Cancel
+                        </Button>
+                        <Button variant="primary" onClick={() => void save()} disabled={saving}>
+                          {saving ? "Saving…" : "Save"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button variant="ghost" onClick={startEdit}>
+                        ✎ Edit
+                      </Button>
+                    )}
                   </div>
                 </div>
-
-                <ul className="mt-4 space-y-3">
-                  {member.staff_notes.length === 0 ? (
-                    <EmptyRow text="No notes yet." />
-                  ) : (
-                    member.staff_notes.map((n) => (
-                      <li key={n.id} className="group border-l-2 border-orange-200 pl-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{n.body}</p>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteNoteId(n.id)}
-                            className="opacity-0 group-hover:opacity-100 text-[11px] text-red-500 hover:text-red-600 shrink-0"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                        <span className="text-[11px] text-gray-400">
-                          {n.author_email || "Staff"} · {fmtDate(n.created_at)}
-                        </span>
-                      </li>
-                    ))
-                  )}
-                </ul>
               </CardBody>
             </Card>
 
-            {/* Activity timeline */}
+            {/* Notes (CI-owned, editable) */}
             <Card>
-              <CardHeader title="Activity" />
-              <CardBody>
-                {history.length === 0 ? (
-                  <EmptyRow text="No activity yet." />
+              <CardHeader title="Notes" />
+              <CardBody className="pt-0">
+                {editing ? (
+                  <textarea
+                    value={draft.notes}
+                    onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                    rows={3}
+                    placeholder="Add a note about this member…"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+                  />
+                ) : detail.notes ? (
+                  <p className="text-[13px] text-gray-700 whitespace-pre-wrap leading-relaxed">{detail.notes}</p>
                 ) : (
-                  <ul className="space-y-3">
-                    {history.map((ev) => (
-                      <li key={ev.id} className="flex items-start gap-2.5 text-sm">
-                        <span
-                          className="mt-1.5 w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: ORANGE }}
-                          aria-hidden="true"
-                        />
-                        <div className="flex flex-col">
-                          <span className="text-gray-800">{humanise(ev.action.replace(/^member\./, ""))}</span>
-                          {ev.after && (
-                            <span className="text-[11px] text-gray-400">
-                              {Object.entries(ev.after)
-                                .map(([k, v]) => `${humanise(k)}: ${String(v ?? "—")}`)
-                                .join(", ")}
-                            </span>
-                          )}
-                          <span className="text-[11px] text-gray-400">
-                            {ev.author_email ? `${ev.author_email} · ` : ""}
-                            {fmtDate(ev.created_at)}
-                          </span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="text-[13px] text-gray-400 italic">No notes. Click Edit to add one.</p>
                 )}
               </CardBody>
             </Card>
-          </div>
-        </div>
+
+            {/* Performance */}
+            <Card>
+              <CardHeader title="Performance" />
+              <CardBody className="pt-0">
+                <PerformanceSection performance={detail.performance} />
+              </CardBody>
+            </Card>
+
+            {/* Recent submissions + call history */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader title="Recent Submissions" />
+                <CardBody className="pt-0">
+                  <SubmissionsSection submissions={detail.recent_submissions} />
+                </CardBody>
+              </Card>
+              <Card>
+                <CardHeader title="Call History" />
+                <CardBody className="pt-0">
+                  <CallHistorySection calls={detail.call_history} />
+                </CardBody>
+              </Card>
+            </div>
+          </>
+        )}
       </main>
-
-      <ConfirmDialog
-        open={deleteNoteId !== null}
-        onClose={() => setDeleteNoteId(null)}
-        onConfirm={() => void confirmDeleteNote()}
-        title="Delete note?"
-        description="This permanently removes the staff note. This can't be undone."
-        confirmLabel="Delete"
-        variant="danger"
-        loading={deletingNote}
-      />
-
-      {/* Goal CRUD — member is locked to this member */}
-      <GoalModal
-        open={showAddGoal}
-        memberId={memberId}
-        onClose={() => setShowAddGoal(false)}
-        onSaved={onGoalSaved}
-      />
-      <GoalModal
-        open={editGoal !== null}
-        goal={editGoal}
-        memberId={memberId}
-        onClose={() => setEditGoal(null)}
-        onSaved={onGoalSaved}
-      />
-      <ConfirmDialog
-        open={deleteGoalId !== null}
-        onClose={() => setDeleteGoalId(null)}
-        onConfirm={() => void confirmDeleteGoal()}
-        title="Delete goal?"
-        description="This removes the goal from accountability tracking."
-        confirmLabel="Delete"
-        variant="danger"
-        loading={deletingGoal}
-      />
-
-      {/* Tech SOS — member locked to this member */}
-      <TicketModal
-        open={showAddTicket}
-        memberId={memberId}
-        onClose={() => setShowAddTicket(false)}
-        onSaved={() => void loadTickets()}
-      />
-      <TicketModal
-        open={editTicket !== null}
-        ticket={editTicket}
-        memberId={memberId}
-        onClose={() => setEditTicket(null)}
-        onSaved={() => void loadTickets()}
-      />
     </>
+  );
+}
+
+const inputCls =
+  "w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400";
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{label}</span>
+      <div className="mt-0.5">{children}</div>
+    </label>
   );
 }
