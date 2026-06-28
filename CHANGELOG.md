@@ -7,6 +7,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — pagination on the Sales Calls "Analyzed Calls" card list
+
+The Analyzed Calls cards now paginate via the shared `Pagination` + `usePagination` (rows-per-page
+20/50/100, jump-to-page, per-table persisted size) — same as the other tables. `/ci/calls` already
+returned `total`/`page`/`limit`, so this is real server-side pagination; the fetch sends
+`page`/`limit`, reads `total`, and resets to page 1 when the result filter changes. (`sales-calls/page.tsx`.)
+`tsc` + ESLint clean, `next build` passes.
+
+
 ### Added — multi-select result filter on Sales Calls (default: hide "No Show")
 
 The Sales Calls page now has a row of toggle chips (one per `call_result`) to filter the Analyzed

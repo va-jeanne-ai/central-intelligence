@@ -6,8 +6,10 @@ import { Header } from "@/components/layout/header";
 import { TranscriptUploadWidget } from "@/components/upload/transcript-upload-widget";
 import type { TranscriptUploadResult } from "@/components/upload/transcript-upload-widget";
 import { KpiCard } from "@/components/ui/kpi-card";
+import { Pagination } from "@/components/ui";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagination } from "@/hooks/use-pagination";
 
 // ─── Types (bound to /ci/calls, /ci/calls/stats, /ci/calls/{id}) ────────────────
 
@@ -241,7 +243,11 @@ export default function SalesCallsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [stats, setStats] = useState<CallStats | null>(null);
   const [calls, setCalls] = useState<CallSummary[]>([]);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+
+  const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
+    usePagination("sales-calls");
 
   // Multi-select result filter. `null` = not yet initialized (defaults seed from
   // the facets the first time they load: every result ON except "No Show").
@@ -272,7 +278,8 @@ export default function SalesCallsPage() {
         call_type: "Sales,Discovery,Outbound",
         sort_by: "date",
         sort_dir: "desc",
-        limit: "100",
+        page: String(page),
+        limit: String(pageSize),
       });
       // Only send call_result when a strict subset is selected — sending all
       // (or none) just means "no result filter".
@@ -289,17 +296,24 @@ export default function SalesCallsPage() {
       ]);
       setStats(statsData);
       setCalls(callsData.data);
+      setTotal(callsData.pagination.total);
     } catch {
       /* leave empties — page renders with zeros */
     } finally {
       setIsLoading(false);
     }
-  }, [selectedResults, resultOptions.length]);
+  }, [selectedResults, resultOptions.length, page, pageSize]);
 
   useEffect(() => {
     if (authLoading || selectedResults === null) return;
     void load();
   }, [authLoading, load, refreshKey, selectedResults]);
+
+  // Changing the result filter narrows the set — jump back to page 1.
+  useEffect(() => {
+    resetToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedResults]);
 
   const toggleResult = useCallback((result: string) => {
     setSelectedResults((prev) => {
@@ -416,6 +430,15 @@ export default function SalesCallsPage() {
               calls.map((call) => <CallCard key={call.call_id} call={call} />)
             )}
           </div>
+          {!isLoading && total > 0 && (
+            <Pagination
+              page={page}
+              total={total}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          )}
         </div>
       </main>
     </>
