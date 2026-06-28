@@ -67,6 +67,21 @@ def test_map_appointment_status() -> None:
     check("appt type from call_number", out["appointment_type"] == "Discovery")
 
 
+def test_map_lead_status() -> None:
+    # WGR Title-Case pipeline_stage → CI canonical status (funnel/KPI SQL +
+    # routes/leads.py::_DB_TO_API_STATUS both rely on these exact values).
+    check("Appointment Set→appointment-set", m.map_lead_status("Appointment Set") == "appointment-set")
+    check("Applied→qualified", m.map_lead_status("Applied") == "qualified")
+    check("Closed→sale", m.map_lead_status("Closed") == "sale")
+    check("Lead→new", m.map_lead_status("Lead") == "new")
+    check("status None→None", m.map_lead_status(None) is None)
+    check("status blank→None", m.map_lead_status("  ") is None)
+    check("unknown stage passthrough lower", m.map_lead_status("Some New Stage") == "some new stage")
+    # End-to-end through map_lead.
+    out = m.map_lead({"lead_id": "L1", "pipeline_stage": "Appointment Set"})
+    check("map_lead normalizes status", out["status"] == "appointment-set")
+
+
 def test_map_insight() -> None:
     row = {"insight_id": "INS_1", "call_id": "CALL_x", "raw_quote": "I'm not clear",
            "the_real_problem": "decision paralysis", "frequency_score": None}
@@ -161,7 +176,8 @@ def test_map_marketing_social() -> None:
 def main() -> int:
     for fn in (
         test_normalize_phone, test_test_call_filter, test_map_lead,
-        test_map_appointment_status, test_map_insight, test_map_content_idea,
+        test_map_appointment_status, test_map_lead_status,
+        test_map_insight, test_map_content_idea,
         test_map_market_signal, test_map_sales_rep, test_map_closed_sale_and_activity,
         test_map_webinar_and_optin, test_map_marketing_social,
     ):

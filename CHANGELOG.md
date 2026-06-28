@@ -7,6 +7,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Fixed — Sales Funnel (and KPIs) counted 0 appointments/applications/sales
+
+The funnel showed leads with "Appointment Set" status as 0 Appointments. Root cause: WGR's
+`pipeline_stage` arrives Title-Cased (`Appointment Set`, `Applied`, `Closed`, `Lead`) and `map_lead`
+stored it raw, but the funnel/KPI SQL in `sales_stats.py` (and `routes/leads.py::_DB_TO_API_STATUS`)
+match CI's canonical lowercase-hyphen vocabulary (`appointment-set`, `qualified`, `sale`, `new`) — so
+nothing matched and every downstream stage counted 0.
+
+- **`services/wgr_sync/mapping.py`** — new `map_lead_status` normalizes WGR `pipeline_stage` →
+  canonical CI status (`Appointment Set`→`appointment-set`, `Applied`→`qualified`, `Closed`→`sale`,
+  `Lead`→`new`; unknown values pass through lowercased; blank→None). `map_lead` now uses it.
+- **Backfill** — one-time UPDATE applying the same mapping to existing leads (817 rows changed). The
+  funnel now reads **Leads 11,721 → Appointments 81 → Applications 108 → Sales 3**, and the KPIs
+  (`conversion_rate`, `active_applications` = 108) reflect real data (were 0).
+- **`tests/test_wgr_mapping.py`** — `test_map_lead_status` covers the mapping + end-to-end via `map_lead`.
+
+No frontend change needed — the existing `_DB_TO_API_STATUS` layer maps the now-correct DB values to
+the UI vocabulary (`appointment-set`→`appointment_set`, `sale`→`closed_won`).
+
+
 ### Changed — lead conversation sender labels + always-visible Tags card
 
 - **Conversations** now label each message **CSR** (outbound — our rep/business) or **Lead** (inbound),

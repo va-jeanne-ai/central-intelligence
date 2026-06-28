@@ -115,6 +115,32 @@ def map_appointment_status(outcome: Optional[str]) -> Optional[str]:
     return _APPT_OUTCOME_TO_STATUS.get(outcome.strip().lower(), outcome.strip().lower())
 
 
+# WGR `pipeline_stage` arrives Title-Cased (e.g. 'Appointment Set', 'Applied',
+# 'Closed'). CI's status vocabulary is lowercase-hyphen ('appointment-set',
+# 'sale', …) — what the funnel/KPI SQL and routes/leads.py::_DB_TO_API_STATUS
+# both expect. Without this mapping the raw Title-Case value is stored and
+# nothing matches it (funnel Appointments/Sales counted 0 despite real data).
+_WGR_STAGE_TO_STATUS = {
+    "lead": "new",
+    "appointment set": "appointment-set",
+    "applied": "qualified",  # funnel "Applications" stage = qualified
+    "closed": "sale",
+    "lost": "lost",
+}
+
+
+def map_lead_status(pipeline_stage: Optional[str]) -> Optional[str]:
+    """WGR pipeline_stage → CI canonical lead status. Unknown values fall back
+    to their lowercased form so a new upstream stage is still stored, just
+    unmapped (rather than crashing or vanishing)."""
+    if not pipeline_stage:
+        return None
+    key = pipeline_stage.strip().lower()
+    if not key:  # whitespace-only → treat as unset (consistent with _clean)
+        return None
+    return _WGR_STAGE_TO_STATUS.get(key, key)
+
+
 # ---------------------------------------------------------------------------
 # Shared-domain tables (source='wgr' + external_id; CI UUID/string PKs)
 # ---------------------------------------------------------------------------
@@ -129,9 +155,10 @@ def map_lead(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "name": _clean(row.get("name")),
         "email": (_clean(row.get("email")) or None),
         "phone": normalize_phone(row.get("phone")),
-        # WGR pipeline_stage is ~94% null and unreliable; leave CI status unset
-        # rather than import a misleading funnel field (analysis doc finding).
-        "status": _clean(row.get("pipeline_stage")),
+        # WGR pipeline_stage is ~94% null; the populated values are Title-Case
+        # ('Appointment Set', 'Applied', 'Closed') and must be normalized to CI's
+        # canonical status vocabulary or the funnel/KPI SQL never matches them.
+        "status": map_lead_status(row.get("pipeline_stage")),
         # When the lead entered the funnel upstream. Surfaced as the lead's date
         # in the UI (created_at is sync time, not entry time). Often null in WGR.
         "entry_date": row.get("entry_date"),
