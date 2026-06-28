@@ -160,7 +160,7 @@ function ProgressBar({ percent }: { percent: number }) {
       aria-valuemax={100}
     >
       <div
-        className="h-full bg-indigo-400 rounded-full transition-all duration-200"
+        className="h-full bg-accent-400 rounded-full transition-all duration-200"
         style={{ width: `${percent}%` }}
       />
     </div>
@@ -170,7 +170,7 @@ function ProgressBar({ percent }: { percent: number }) {
 function Spinner() {
   return (
     <svg
-      className="animate-spin w-5 h-5 text-indigo-500"
+      className="animate-spin w-5 h-5 text-accent-500"
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
@@ -467,7 +467,7 @@ export function TranscriptUploadWidget({
   const dropZoneClasses = [
     "border-2 border-dashed rounded-xl p-6 text-center transition-all duration-150",
     isDragOver
-      ? "border-indigo-400 bg-indigo-50"
+      ? "border-accent-400 bg-accent-50"
       : "border-gray-300 bg-gray-50",
   ].join(" ");
 
@@ -522,7 +522,7 @@ export function TranscriptUploadWidget({
           <button
             type="button"
             onClick={reset}
-            className="mt-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+            className="mt-1 text-xs font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
           >
             Submit another recording
           </button>
@@ -545,7 +545,7 @@ export function TranscriptUploadWidget({
           <button
             type="button"
             onClick={reset}
-            className="mt-1 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            className="mt-1 bg-accent-500 hover:bg-accent-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
             Try again
           </button>
@@ -587,14 +587,14 @@ export function TranscriptUploadWidget({
               onKeyDown={(e) => {
                 if (e.key === "Enter") void handleUrlSubmit();
               }}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-indigo-300/50 focus:border-indigo-400 transition-all"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-accent-300/50 focus:border-accent-400 transition-all"
               aria-label="Video URL"
             />
             <button
               type="button"
               onClick={() => void handleUrlSubmit()}
               disabled={videoUrl.trim() === ""}
-              className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-200 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              className="bg-accent-500 hover:bg-accent-600 disabled:bg-accent-200 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
             >
               Submit
             </button>
@@ -627,7 +627,7 @@ export function TranscriptUploadWidget({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="text-sm text-indigo-600 hover:text-indigo-700 font-medium underline underline-offset-2"
+                className="text-sm text-accent-600 hover:text-accent-700 font-medium underline underline-offset-2"
               >
                 Choose a file
               </button>

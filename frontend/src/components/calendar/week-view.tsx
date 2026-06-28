@@ -39,7 +39,7 @@ export function WeekView({ anchorDate, events }: WeekViewProps) {
               key={d.toISOString()}
               className={
                 "px-3 py-2 text-center border-r border-gray-200 last:border-r-0 " +
-                (isToday ? "bg-indigo-50" : "")
+                (isToday ? "bg-accent-50" : "")
               }
             >
               <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
@@ -48,7 +48,7 @@ export function WeekView({ anchorDate, events }: WeekViewProps) {
               <div
                 className={
                   "text-[18px] font-semibold leading-none mt-1 " +
-                  (isToday ? "text-indigo-600" : "text-gray-800")
+                  (isToday ? "text-accent-600" : "text-gray-800")
                 }
               >
                 {d.getDate()}
@@ -68,7 +68,7 @@ export function WeekView({ anchorDate, events }: WeekViewProps) {
               key={d.toISOString()}
               className={
                 "border-r border-gray-100 last:border-r-0 p-2 flex flex-col gap-1.5 " +
-                (isToday ? "bg-indigo-50/40" : "bg-white")
+                (isToday ? "bg-accent-50/40" : "bg-white")
               }
             >
               {eventsForDay.length === 0 ? (

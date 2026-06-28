@@ -137,7 +137,7 @@ export function CalendarToolbar({
           type="button"
           onClick={onSync}
           disabled={isSyncing}
-          className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
+          className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-accent-500 hover:bg-accent-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
         >
           {isSyncing ? "Syncing…" : "Sync now"}
         </button>
@@ -155,7 +155,7 @@ export function CalendarToolbar({
               className={
                 "text-[12px] font-medium px-3 py-1 rounded-md transition-colors " +
                 (view === tab.id
-                  ? "bg-white text-indigo-600 shadow-sm"
+                  ? "bg-white text-accent-600 shadow-sm"
                   : "text-gray-600 hover:text-gray-900")
               }
             >
@@ -170,7 +170,7 @@ export function CalendarToolbar({
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
-            className="text-[12px] px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+            className="text-[12px] px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-300 bg-white"
             aria-label="Calendar source"
           >
             <option value="all">All calendars</option>
@@ -190,7 +190,7 @@ export function CalendarToolbar({
           <select
             value={rangePreset}
             onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-            className="text-[12px] px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+            className="text-[12px] px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-300 bg-white"
             aria-label="Date range"
           >
             <option value="view">Follow view</option>
@@ -210,7 +210,7 @@ export function CalendarToolbar({
                 onChange={(e) =>
                   setCustomFrom(fromDateInputValue(e.target.value))
                 }
-                className="text-[12px] px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                className="text-[12px] px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-300 bg-white"
                 aria-label="From date"
               />
               <span className="text-[11px] text-gray-400">→</span>
@@ -220,7 +220,7 @@ export function CalendarToolbar({
                 onChange={(e) =>
                   setCustomTo(fromDateInputValue(e.target.value))
                 }
-                className="text-[12px] px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                className="text-[12px] px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-300 bg-white"
                 aria-label="To date"
               />
             </>
@@ -232,7 +232,7 @@ export function CalendarToolbar({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Filter by attendee email"
-            className="text-[12px] px-3 py-1.5 border border-gray-300 rounded-lg w-56 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            className="text-[12px] px-3 py-1.5 border border-gray-300 rounded-lg w-56 focus:outline-none focus:ring-2 focus:ring-accent-300"
           />
         </div>
       </div>

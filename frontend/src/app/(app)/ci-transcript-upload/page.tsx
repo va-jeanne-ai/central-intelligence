@@ -167,7 +167,7 @@ function StatusCard({ pending, onReady, onDismiss }: StatusCardProps) {
               {insightsCount} insight{insightsCount === 1 ? "" : "s"} extracted.{" "}
               <Link
                 href={`/sales-calls/${pending.call_id}`}
-                className="font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                className="font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
               >
                 View call detail →
               </Link>
@@ -177,7 +177,7 @@ function StatusCard({ pending, onReady, onDismiss }: StatusCardProps) {
               The analyzer is taking longer than usual. The Celery worker may be down, or this is a long call.{" "}
               <Link
                 href={`/sales-calls/${pending.call_id}`}
-                className="font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                className="font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
               >
                 Open the call detail
               </Link>{" "}

@@ -26,7 +26,7 @@ export function EventChip({ event, compact = false }: EventChipProps) {
     "block rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight truncate transition-colors";
   const colorClasses = isTentative
     ? "bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100"
-    : "bg-indigo-50 text-indigo-900 border border-indigo-100 hover:bg-indigo-100";
+    : "bg-accent-50 text-accent-900 border border-accent-100 hover:bg-accent-100";
 
   return (
     <a
@@ -39,7 +39,7 @@ export function EventChip({ event, compact = false }: EventChipProps) {
       {compact ? (
         <span className="truncate">
           {!event.is_all_day && event.start_time ? (
-            <span className="font-mono text-[10px] text-indigo-700 mr-1">
+            <span className="font-mono text-[10px] text-accent-700 mr-1">
               {new Date(event.start_time).toLocaleTimeString(undefined, {
                 hour: "numeric",
                 minute: "2-digit",
@@ -50,7 +50,7 @@ export function EventChip({ event, compact = false }: EventChipProps) {
         </span>
       ) : (
         <>
-          <div className="font-mono text-[10px] text-indigo-700">{time}</div>
+          <div className="font-mono text-[10px] text-accent-700">{time}</div>
           <div className="font-medium truncate">
             {event.title || "(untitled event)"}
           </div>

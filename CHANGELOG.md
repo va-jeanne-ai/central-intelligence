@@ -7,6 +7,41 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Fixed — /leads Source Breakdown donut rendered blank for a single source
+
+The donut built each slice as an SVG arc (`A`) wedge. A single source at 100% (the live data — all leads currently come from `wgr`) has coincident start/end points, so the arc path collapsed and the donut showed **nothing**. Two smaller bugs compounded it: real integration sources (`wgr`, `facebook_ads`, …) aren't in the enum-keyed `SOURCE_COLORS`/`SOURCE_CONFIG`, so they fell back to gray with the raw lowercase label.
+
+- **`frontend/src/app/(app)/leads/page.tsx`** — `SourceDonutChart` now renders a plain stroked ring when there's a single ≥99.95% segment (arc wedges only for 2+ sources); colors unknown sources from a hashed fallback palette (stable per source) instead of all-gray; and labels them via the existing `resolveSource` prettifier (`wgr` → "WGR"). Added a "No source data" legend fallback. The all-`wgr` donut now renders a solid green ring labeled "WGR — 100%".
+
+`tsc` + ESLint clean (no new warnings), `next build` passes.
+
+
+### Removed — /sales page (duplicate of /leads); now redirects there
+
+`/sales` and `/leads` had converged on the same screen-3 "Leads Dashboard" — same `compute_lead_stats` aggregation (KPIs, 8-week lead volume, source breakdown, funnel) and a leads table. `/leads` is the more complete implementation (adds filtering, search, sort, pagination, and clickable row → `/leads/[lead_id]` detail), so it's the canonical page.
+
+- **`frontend/src/app/(app)/sales/page.tsx`** — reduced to a server-side `redirect("/leads")` (mirrors `app/page.tsx`'s redirect pattern) so any existing `/sales` links keep working instead of 404ing.
+- **`frontend/src/components/layout/sidebar.tsx`** — dropped the "Sales Overview" nav entry; "Leads" remains under Sales.
+- Left untouched: the `GET /sales/summary` backend endpoint (harmless, still serves the same data) and `header.tsx`'s `startsWith("/sales")` action-button rule (load-bearing for `/sales-calls` / `/sales-director`).
+
+`tsc` + ESLint clean (no new warnings), `next build` passes — `/sales` is now a 147 B redirect stub.
+
+
+### Added — tokenized gold accent theme + Dashboard (screen 1) mockup fidelity
+
+The app's accent was hardcoded indigo (`indigo-*`) in 245 places across 36 files, while the mockup (`webapp-mockup.html`) uses gold/amber as the product accent. Replaced the scattered hardcoding with a single themeable token system and switched the active accent to the mockup's gold.
+
+- **`globals.css`** — new `--accent-50…900` CSS-var scale (mapped to Tailwind's amber values per the mockup). `--brand*` now alias the accent scale. **Re-theming the whole app is a one-file edit** to these vars.
+- **`tailwind.config.ts`** — new `accent` color scale resolving through the CSS vars (`bg-accent-600`, `text-accent-500`, `ring-accent-300`, …); `brand` token re-pointed at the vars.
+- **Migration** — every `indigo-N` utility → `accent-N` (same weight) across all 36 files, plus 30 hardcoded `#6366F1` hexes (inline styles / timeline + chart colors) → gold. Department colors (green/blue/orange) intentionally unchanged. Zero `indigo` references remain.
+- **Dashboard (screen 1)** restyled to match the mockup: department cards are now bold gradient-filled white-text cards (was white + colored border) with the corner-circle accent; the Central Intelligence widget uses the dark amber→gray gradient with gold accents and glass recommendation cards (was light indigo); 4-col KPI grid; `1fr / 380px` bottom layout; gold sparkline highlight. Live data wiring and the schedule-brief / weekly-focus extras preserved.
+- **Dark sidebar** to match the mockup (was light/white). Tokenized the same way as the accent: new `--sidebar-*` CSS vars (`bg #1F2937`, hover `#374151`, muted text, gold active) + a `sidebar` Tailwind color scale, so the whole sidebar re-themes from one place. Active nav item is now a uniform gold left-bar + gold-tinted pill (was per-department colored pills); logo mark and user avatar use the gold gradient; department section labels muted to read on dark.
+- **Sidebar Expand all / Collapse all** — one control toggles every collapsible nav section + nested group at once. Open-state was lifted out of the individual `SectionNode`/`NavGroupNode` (local `useState`) into the `Sidebar` as a single id `Set`, so the control can drive them together; the label flips between "Expand all" and "Collapse all" based on whether everything's open. Existing behavior preserved: navigating still auto-opens the section/group containing the active page (union with current open-state, so manual toggles aren't clobbered).
+- **Smooth sidebar collapse/expand animation** — sections and nested groups now glide open/closed (height + opacity) instead of popping. New `Collapsible` wrapper uses the grid-rows `0fr→1fr` technique (no fixed height / JS measurement; children stay mounted so it animates both ways); applies to individual toggles and the Expand-all/Collapse-all. Added a global `prefers-reduced-motion` guard so these transitions (and existing pulse/spin animations) collapse to near-instant for users who request reduced motion.
+
+Verified: `tsc` clean, ESLint clean, and a full `next build` confirms the var-backed `accent-*` utilities compile.
+
+
 ### Added — pagination + records-per-page (default 20) across all record tables
 
 Most tables fetched only the first N rows (hardcoded 50–100) with no way to page through the rest, and limits were inconsistent per page. The backends already supported pagination (they returned `total` and accepted `page`+`per_page`/`limit`); the frontend just never wired the navigation. Added a single shared control and rolled it out.

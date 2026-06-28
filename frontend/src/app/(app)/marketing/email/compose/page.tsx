@@ -411,7 +411,7 @@ function EmailComposeInner() {
                       <div className="text-3xl leading-none" aria-hidden>{opt.icon}</div>
                       <h3 className="text-[15px] font-bold text-gray-900">{opt.name}</h3>
                       <p className="text-[13px] text-gray-600 leading-relaxed">{opt.description}</p>
-                      <span className="block text-[11px] font-medium text-indigo-600">Continue →</span>
+                      <span className="block text-[11px] font-medium text-accent-600">Continue →</span>
                     </CardBody>
                   </Card>
                 </button>
@@ -426,7 +426,7 @@ function EmailComposeInner() {
             <button
               type="button"
               onClick={backToType}
-              className="text-xs font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2 mb-3"
+              className="text-xs font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2 mb-3"
             >
               ← Change campaign type
             </button>
@@ -441,7 +441,7 @@ function EmailComposeInner() {
                       <div className="text-3xl leading-none" aria-hidden>{tpl.thumbnail}</div>
                       <h3 className="text-[15px] font-bold text-gray-900">{tpl.name}</h3>
                       <p className="text-[13px] text-gray-600 leading-relaxed">{tpl.description}</p>
-                      <span className="block text-[11px] font-medium text-indigo-600">Use this template →</span>
+                      <span className="block text-[11px] font-medium text-accent-600">Use this template →</span>
                     </CardBody>
                   </Card>
                 </button>
@@ -457,7 +457,7 @@ function EmailComposeInner() {
               <button
                 type="button"
                 onClick={backToType}
-                className="text-xs font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                className="text-xs font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
               >
                 ← Change campaign type
               </button>
@@ -467,7 +467,7 @@ function EmailComposeInner() {
                   <button
                     type="button"
                     onClick={backToTemplate}
-                    className="text-xs font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                    className="text-xs font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
                   >
                     ← Change template
                   </button>

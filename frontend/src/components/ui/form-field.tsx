@@ -27,7 +27,7 @@ export function FormField({ label, htmlFor, children, className = "" }: FormFiel
 }
 
 const INPUT_CLASSES =
-  "text-[13px] border border-gray-200 rounded-md px-3 py-2 bg-white text-gray-700 placeholder:text-gray-400 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors";
+  "text-[13px] border border-gray-200 rounded-md px-3 py-2 bg-white text-gray-700 placeholder:text-gray-400 outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500 transition-colors";
 
 export function FormInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${INPUT_CLASSES} ${props.className ?? ""}`} />;

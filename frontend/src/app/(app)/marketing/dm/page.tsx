@@ -450,7 +450,7 @@ export default function DmPage() {
           <KpiCard
             label="Meetings Booked"
             value={data ? data.meetings_booked.toLocaleString() : "—"}
-            borderColor="#6366F1"
+            borderColor="#F59E0B"
           />
           <KpiCard
             label="Avg Response Time"

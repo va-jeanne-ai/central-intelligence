@@ -4,15 +4,50 @@
 
 /* ─── Design Tokens ─────────────────────────────────────────────────────────── */
 :root {
-  /* Brand / Accent */
-  --brand: #6366F1;
-  --brand-light: #A5B4FC;
-  --brand-dark: #4F46E5;
+  /* ─── Accent theme ──────────────────────────────────────────────────────────
+   * Single source of truth for the app's accent color. The mockup
+   * (webapp-mockup.html) uses gold/amber as the product accent, so these map to
+   * Tailwind's amber scale. To re-theme the whole app, change ONLY these values
+   * (e.g. back to indigo) — every accent-* utility and the brand/accent tokens
+   * resolve through them, so no component edits are needed.
+   *
+   * Scale mirrors Tailwind's numbered shades, so a former `indigo-600` maps to
+   * `accent-600` at the same relative weight.
+   */
+  --accent-50: #FFFBEB;
+  --accent-100: #FEF3C7;
+  --accent-200: #FDE68A;
+  --accent-300: #FCD34D;
+  --accent-400: #FBBF24;
+  --accent-500: #F59E0B;
+  --accent-600: #D97706;
+  --accent-700: #B45309;
+  --accent-800: #92400E;
+  --accent-900: #78350F;
+
+  /* Brand / Accent — aliases of the accent scale for back-compat with the
+   * components that reference --brand / the `brand` token. */
+  --brand: var(--accent-500);
+  --brand-light: var(--accent-300);
+  --brand-dark: var(--accent-600);
 
   /* Department Colors */
   --marketing: #10B981;
   --sales: #3B82F6;
   --fulfillment: #F97316;
+
+  /* ─── Sidebar theme ─────────────────────────────────────────────────────────
+   * Dark sidebar per the mockup (.sidebar #1F2937). Tokenized like the accent
+   * so the sidebar can be re-themed from one place. `sidebar-active-*` reuse
+   * the gold accent. */
+  --sidebar-bg: #1F2937;       /* gray-800 */
+  --sidebar-hover: #374151;    /* gray-700 */
+  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar-text: #9CA3AF;     /* gray-400 — idle nav item */
+  --sidebar-text-hover: #E5E7EB; /* gray-200 */
+  --sidebar-heading: #6B7280;  /* gray-500 — section labels */
+  --sidebar-active-bg: rgba(245, 158, 11, 0.12); /* accent @ 12% */
+  --sidebar-active-text: var(--accent-300);
 
   /* Layout */
   --sidebar-width: 228px;
@@ -30,6 +65,19 @@
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* Respect users who prefer reduced motion: near-instant transitions/animations
+   instead of removing them outright (avoids breaking animation-dependent UI). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 html,

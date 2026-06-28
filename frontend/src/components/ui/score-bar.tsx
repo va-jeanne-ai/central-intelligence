@@ -3,7 +3,7 @@
  *
  * Horizontal progress bar used for ICP alignment, lead scores, etc.
  * Matches mockup's .icp-score-wrap / .score-bar-wrap patterns.
- * Default color is brand indigo gradient.
+ * Default color is the brand accent (gold) gradient.
  */
 
 interface ScoreBarProps {
@@ -17,7 +17,7 @@ interface ScoreBarProps {
 }
 
 const COLOR_CLASSES: Record<string, string> = {
-  brand: "bg-gradient-to-r from-indigo-600 to-indigo-400",
+  brand: "bg-gradient-to-r from-accent-600 to-accent-400",
   emerald: "bg-emerald-500",
   gray: "bg-gray-300",
 };
@@ -45,7 +45,7 @@ export function ScoreBar({
         />
       </div>
       {showValue && (
-        <span className="text-sm font-extrabold text-indigo-700 tabular-nums flex-shrink-0">
+        <span className="text-sm font-extrabold text-accent-700 tabular-nums flex-shrink-0">
           {clamped}%
         </span>
       )}

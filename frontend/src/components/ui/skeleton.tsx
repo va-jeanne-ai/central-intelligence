@@ -74,18 +74,18 @@ export function KpiGridSkeleton() {
 /** Matches CIWidget layout */
 export function CIWidgetSkeleton() {
   return (
-    <div className="bg-indigo-50 rounded-xl border border-indigo-200/50 p-5 shadow-sm">
+    <div className="bg-accent-50 rounded-xl border border-accent-200/50 p-5 shadow-sm">
       <div className="flex items-center gap-2 mb-4">
-        <Skeleton className="w-8 h-8 rounded-full bg-indigo-200" />
-        <Skeleton className="h-4 w-44 bg-indigo-200" />
+        <Skeleton className="w-8 h-8 rounded-full bg-accent-200" />
+        <Skeleton className="h-4 w-44 bg-accent-200" />
       </div>
       <div className="space-y-3">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="flex items-start gap-3">
-            <Skeleton className="w-5 h-5 rounded bg-indigo-200 flex-shrink-0 mt-0.5" />
+            <Skeleton className="w-5 h-5 rounded bg-accent-200 flex-shrink-0 mt-0.5" />
             <div className="flex-1 space-y-1">
-              <Skeleton className="h-3 w-full bg-indigo-200" />
-              <Skeleton className="h-3 w-3/4 bg-indigo-200" />
+              <Skeleton className="h-3 w-full bg-accent-200" />
+              <Skeleton className="h-3 w-3/4 bg-accent-200" />
             </div>
           </div>
         ))}
@@ -98,7 +98,7 @@ export function CIWidgetSkeleton() {
 export function PageSpinner({ label = "Loading..." }: { label?: string }) {
   return (
     <div className="flex flex-col items-center justify-center flex-1 gap-3" role="status">
-      <div className="w-8 h-8 border-3 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
+      <div className="w-8 h-8 border-3 border-gray-200 border-t-accent-500 rounded-full animate-spin" />
       <span className="text-sm text-gray-400">{label}</span>
     </div>
   );
@@ -109,7 +109,7 @@ export function ChatConnecting() {
   return (
     <div className="flex flex-col items-center justify-center flex-1 gap-3" role="status">
       <div className="relative">
-        <div className="w-12 h-12 rounded-full border-3 border-gray-200 border-t-indigo-500 animate-spin" />
+        <div className="w-12 h-12 rounded-full border-3 border-gray-200 border-t-accent-500 animate-spin" />
         <span className="absolute inset-0 flex items-center justify-center text-lg">
           👑
         </span>

@@ -157,8 +157,8 @@ function BlockShell({
     <div
       className={`group relative transition-shadow ${
         isSelected
-          ? "outline outline-2 outline-indigo-500 outline-offset-[-2px]"
-          : "outline outline-1 outline-transparent hover:outline-indigo-200 outline-offset-[-1px]"
+          ? "outline outline-2 outline-accent-500 outline-offset-[-2px]"
+          : "outline outline-1 outline-transparent hover:outline-accent-200 outline-offset-[-1px]"
       }`}
       onClick={(e) => {
         e.stopPropagation();
@@ -210,7 +210,7 @@ function BlockShell({
 
       {/* Type label — top-left, only when selected */}
       {isSelected && (
-        <div className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider bg-indigo-500 text-white px-2 py-0.5 rounded">
+        <div className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider bg-accent-500 text-white px-2 py-0.5 rounded">
           {BLOCK_LABELS[block.type]} · {index + 1}
         </div>
       )}
@@ -278,7 +278,7 @@ export default function PageBuilder({
               type="button"
               onClick={() => onAdd(t)}
               title={BLOCK_DESCRIPTIONS[t]}
-              className="w-full flex items-center gap-2 px-2 py-2 rounded-md border border-gray-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 text-left transition-colors"
+              className="w-full flex items-center gap-2 px-2 py-2 rounded-md border border-gray-200 bg-white hover:bg-accent-50 hover:border-accent-300 text-left transition-colors"
             >
               <span className="text-base leading-none" aria-hidden>
                 {BLOCK_ICONS[t]}

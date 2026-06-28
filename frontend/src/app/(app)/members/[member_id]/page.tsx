@@ -110,7 +110,7 @@ function humanise(value: string): string {
 const STATUS_BADGE: Record<string, string> = {
   active: "bg-green-50 text-green-700",
   paused: "bg-amber-50 text-amber-700",
-  graduated: "bg-indigo-50 text-indigo-700",
+  graduated: "bg-accent-50 text-accent-700",
   churned: "bg-gray-100 text-gray-500",
 };
 

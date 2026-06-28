@@ -203,7 +203,7 @@ export default function LoginPage() {
       e.currentTarget.style.boxShadow = '0 0 0 3px rgba(239,68,68,.12)';
       e.currentTarget.style.background = '#FFF5F5';
     } else {
-      e.currentTarget.style.borderColor = '#6366F1';
+      e.currentTarget.style.borderColor = '#F59E0B';
       e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,.12)';
       e.currentTarget.style.background = '#FFFFFF';
     }
@@ -263,7 +263,7 @@ export default function LoginPage() {
                   height: '52px',
                   borderRadius: '14px',
                   background:
-                    'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+                    'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -444,7 +444,7 @@ export default function LoginPage() {
                     style={{
                       width: '14px',
                       height: '14px',
-                      accentColor: '#6366F1',
+                      accentColor: '#F59E0B',
                       cursor: 'pointer',
                     }}
                   />
@@ -512,7 +512,7 @@ export default function LoginPage() {
           }}
         >
           Powered by{' '}
-          <strong style={{ color: '#6366F1', fontWeight: 700 }}>
+          <strong style={{ color: '#F59E0B', fontWeight: 700 }}>
             Central Intelligence AI
           </strong>
         </p>
@@ -539,7 +539,7 @@ function SignInButton({ isLoading }: { isLoading: boolean }) {
     fontSize: '14px',
     fontWeight: 700,
     color: '#FFFFFF',
-    background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
     cursor: isLoading ? 'not-allowed' : 'pointer',
     boxShadow: hovered && !isLoading
       ? '0 4px 14px rgba(99,102,241,.4)'

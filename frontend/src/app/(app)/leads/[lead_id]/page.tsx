@@ -97,7 +97,7 @@ interface LeadAppointmentRow {
 
 const APPT_STATUS_DOT: Record<string, string> = {
   booked: "#3B82F6",
-  confirmed: "#6366F1",
+  confirmed: "#F59E0B",
   showed: "#10B981",
   "no-show": "#EF4444",
   cancelled: "#9CA3AF",
@@ -173,11 +173,11 @@ const STATUS_CONFIG: Record<
   appointment_set: { label: "Booked", dotColor: "#0D9488", badgeClasses: "bg-teal-50 text-teal-700" },
   closed_won: { label: "Closed Won", dotColor: "#10B981", badgeClasses: "bg-green-50 text-green-700" },
   closed_lost: { label: "Lost", dotColor: "#9CA3AF", badgeClasses: "bg-gray-100 text-gray-500" },
-  stale: { label: "Stale", dotColor: "#6366F1", badgeClasses: "bg-indigo-50 text-indigo-700" },
+  stale: { label: "Stale", dotColor: "#F59E0B", badgeClasses: "bg-accent-50 text-accent-700" },
 };
 
 const SOURCE_CONFIG: Record<LeadSource, { label: string; badgeClasses: string }> = {
-  webinar: { label: "Webinar", badgeClasses: "bg-indigo-50 text-indigo-700" },
+  webinar: { label: "Webinar", badgeClasses: "bg-accent-50 text-accent-700" },
   vsl: { label: "VSL", badgeClasses: "bg-blue-50 text-blue-700" },
   "opt-in": { label: "Opt-in", badgeClasses: "bg-green-50 text-green-700" },
   ads: { label: "Ads", badgeClasses: "bg-gray-100 text-gray-600" },
@@ -329,13 +329,13 @@ function InlineTextEdit({
           if (e.key === "Enter") void commit();
           if (e.key === "Escape") setIsEditing(false);
         }}
-        className={`border border-indigo-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-300/50 ${inputClassName}`}
+        className={`border border-accent-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-accent-300/50 ${inputClassName}`}
       />
       <button
         type="button"
         onClick={() => void commit()}
         disabled={isSaving}
-        className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+        className="text-[12px] font-medium text-accent-600 hover:text-accent-700"
       >
         {isSaving ? "…" : "Save"}
       </button>
@@ -404,7 +404,7 @@ const HISTORY_DOT_COLORS: Record<string, string> = {
   "lead.status_changed": "#0D9488", // teal — same family as status badge
   "lead.name_changed": "#F59E0B", // amber — field edit
   "lead.phone_changed": "#F59E0B",
-  "lead.note_added": "#6366F1", // indigo — same as staff notes
+  "lead.note_added": "#F59E0B", // gold accent — same as staff notes
   "lead.note_deleted": "#9CA3AF", // grey — soft removal
   "lead.call_logged": "#3B82F6", // blue — for future action
 };
@@ -817,7 +817,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
         <main className="flex-1 overflow-y-auto p-7 space-y-4">
           <Link
             href="/leads"
-            className="text-[13px] font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+            className="text-[13px] font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
           >
             ← Back to leads
           </Link>
@@ -937,7 +937,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
         {/* Back link */}
         <Link
           href="/leads"
-          className="inline-block text-[13px] font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+          className="inline-block text-[13px] font-medium text-accent-600 hover:text-accent-700 underline underline-offset-2"
         >
           ← Back to leads
         </Link>
@@ -982,7 +982,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                     {detail.email && detail.email.trim() !== "" ? (
                       <a
                         href={`mailto:${detail.email}`}
-                        className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2"
+                        className="text-accent-600 hover:text-accent-700 underline underline-offset-2"
                       >
                         {detail.email}
                       </a>
@@ -1139,7 +1139,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                   type="button"
                   onClick={() => void postNote()}
                   disabled={isPostingNote || noteDraft.trim() === ""}
-                  className="text-[13px] font-medium px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-200 disabled:cursor-not-allowed text-white transition-colors"
+                  className="text-[13px] font-medium px-3 py-1.5 rounded-lg bg-accent-500 hover:bg-accent-600 disabled:bg-accent-200 disabled:cursor-not-allowed text-white transition-colors"
                 >
                   {isPostingNote ? "Posting…" : "Post note"}
                 </button>
@@ -1200,7 +1200,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                     type="button"
                     onClick={() => void syncEmails()}
                     disabled={isSyncingEmails}
-                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
+                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-accent-500 hover:bg-accent-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
                   >
                     {isSyncingEmails ? "Syncing…" : "Sync emails now"}
                   </button>
@@ -1226,7 +1226,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                     return (
                       <div key={thread.id}>
                         <HistoryItem
-                          dotColor={isExpanded ? "#6366F1" : "#9CA3AF"}
+                          dotColor={isExpanded ? "#F59E0B" : "#9CA3AF"}
                           trailing={
                             <span
                               className="text-[11px] text-gray-400"
@@ -1388,7 +1388,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                     type="button"
                     onClick={() => void syncEvents()}
                     disabled={isSyncingEvents}
-                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
+                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-accent-500 hover:bg-accent-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
                   >
                     {isSyncingEvents ? "Syncing…" : "Sync events now"}
                   </button>
@@ -1468,7 +1468,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                     type="button"
                     onClick={() => void syncDocuments()}
                     disabled={isSyncingDocuments}
-                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
+                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-accent-500 hover:bg-accent-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
                   >
                     {isSyncingDocuments ? "Syncing…" : "Sync documents now"}
                   </button>
@@ -1544,7 +1544,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                   onClick={() => setIsLoggingCall(true)}
                   disabled={hasPendingCall}
                   title={hasPendingCall ? "A call is currently being processed" : undefined}
-                  className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
+                  className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-accent-500 hover:bg-accent-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white transition-colors"
                 >
                   Log call
                 </button>
@@ -1599,7 +1599,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                               </span>
                             </div>
                             <div className="mt-2 h-1 rounded-full bg-gray-100 overflow-hidden">
-                              <div className="h-full w-1/3 bg-gradient-to-r from-indigo-300 via-indigo-500 to-indigo-300 animate-pulse rounded-full" />
+                              <div className="h-full w-1/3 bg-gradient-to-r from-accent-300 via-accent-500 to-accent-300 animate-pulse rounded-full" />
                             </div>
                           </li>
                         );
@@ -1611,7 +1611,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                         >
                           <Link
                             href={`/sales-calls/${c.id}`}
-                            className="text-indigo-600 hover:text-indigo-700"
+                            className="text-accent-600 hover:text-accent-700"
                           >
                             {c.call_type ?? "Call"} — {formatDate(c.date)}
                           </Link>
@@ -1725,7 +1725,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                 <button
                   type="button"
                   onClick={() => setShowRawPayload((v) => !v)}
-                  className="text-[12px] font-medium text-indigo-600 hover:text-indigo-700"
+                  className="text-[12px] font-medium text-accent-600 hover:text-accent-700"
                 >
                   {showRawPayload ? "Hide" : "Show"}
                 </button>

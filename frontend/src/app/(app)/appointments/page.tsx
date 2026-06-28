@@ -81,7 +81,7 @@ type FilterWindow = "all" | "upcoming" | "this_week";
 
 const STATUS_CONFIG: Record<AppointmentStatus, { label: string; dotColor: string; badgeClasses: string }> = {
   booked: { label: "Booked", dotColor: "#3B82F6", badgeClasses: "bg-blue-50 text-blue-700" },
-  confirmed: { label: "Confirmed", dotColor: "#6366F1", badgeClasses: "bg-indigo-50 text-indigo-700" },
+  confirmed: { label: "Confirmed", dotColor: "#F59E0B", badgeClasses: "bg-accent-50 text-accent-700" },
   showed: { label: "Showed", dotColor: "#10B981", badgeClasses: "bg-green-50 text-green-700" },
   "no-show": { label: "No-Show", dotColor: "#EF4444", badgeClasses: "bg-red-50 text-red-700" },
   cancelled: { label: "Cancelled", dotColor: "#9CA3AF", badgeClasses: "bg-gray-100 text-gray-500" },

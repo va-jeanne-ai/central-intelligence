@@ -37,7 +37,7 @@ function ChatTopbar({ isConnected, onClear }: ChatTopbarProps) {
         <div
           className="flex items-center justify-center w-[34px] h-[34px] rounded-full flex-shrink-0 shadow-sm"
           style={{
-            background: "linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)",
+            background: "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)",
           }}
           aria-hidden="true"
         >
@@ -242,7 +242,7 @@ export function ChatView() {
                   className="flex items-center justify-center w-9 h-9 rounded-full flex-shrink-0 shadow-sm"
                   style={{
                     background:
-                      "linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)",
+                      "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)",
                   }}
                   aria-hidden="true"
                 >

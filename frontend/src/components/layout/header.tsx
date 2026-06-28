@@ -72,7 +72,7 @@ export function Header({ title }: HeaderProps) {
               ? "text-white"
               : "text-gray-600 bg-gray-100 hover:bg-gray-200"
           }`}
-          style={action.primary ? { backgroundColor: "#6366F1" } : undefined}
+          style={action.primary ? { backgroundColor: "#F59E0B" } : undefined}
         >
           <span className="text-base leading-none">{action.icon}</span>
           {action.label}

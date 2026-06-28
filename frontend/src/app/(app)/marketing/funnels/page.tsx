@@ -94,7 +94,7 @@ interface AiSuggestion {
 
 const AI_SUGGESTIONS: AiSuggestion[] = [
   {
-    dotClass: "bg-indigo-400",
+    dotClass: "bg-accent-400",
     title: "Optimize Consideration Stage",
     description:
       "High drop-off detected at the Consideration stage. Review messaging clarity and add social proof to reduce friction.",
@@ -527,7 +527,7 @@ export default function FunnelsPage() {
         <section aria-label="Funnel KPIs">
           <KpiRow>
             <KpiCard label={kpiTiles[0].label} value={kpiTiles[0].value} sub={kpiTiles[0].sub} borderColor="#10B981" />
-            <KpiCard label={kpiTiles[1].label} value={kpiTiles[1].value} sub={kpiTiles[1].sub} borderColor="#6366F1" />
+            <KpiCard label={kpiTiles[1].label} value={kpiTiles[1].value} sub={kpiTiles[1].sub} borderColor="#F59E0B" />
             <KpiCard label={kpiTiles[2].label} value={kpiTiles[2].value} sub={kpiTiles[2].sub} borderColor="#3B82F6" />
             <KpiCard label={kpiTiles[3].label} value={kpiTiles[3].value} sub={kpiTiles[3].sub} borderColor="#F97316" />
           </KpiRow>

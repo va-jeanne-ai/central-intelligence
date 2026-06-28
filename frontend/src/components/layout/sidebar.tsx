@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
@@ -58,7 +58,6 @@ const NAV_SECTIONS: NavSection[] = [
     department: "sales",
     collapsible: true,
     entries: [
-      { label: "Sales Overview", icon: "📊", href: "/sales", department: "sales" },
       { label: "Sales Director", icon: "💼", href: "/sales-director", department: "sales" },
       { label: "Leads", icon: "🧲", href: "/leads", department: "sales" },
       { label: "Sales Calls", icon: "📞", href: "/sales-calls", department: "sales" },
@@ -141,21 +140,20 @@ const NAV_SECTIONS: NavSection[] = [
 
 // ─── Department Style Maps ─────────────────────────────────────────────────────
 
+// Muted department-tinted section labels per the mockup (.nav-section-label.*),
+// readable on the dark sidebar. core/admin fall back to the neutral heading gray.
 const SECTION_LABEL_CLASSES: Record<Department, string> = {
-  sales: "text-blue-500",
-  fulfillment: "text-orange-500",
-  marketing: "text-emerald-500",
-  admin: "text-gray-400",
-  core: "text-gray-400",
+  sales: "text-blue-400/70",
+  fulfillment: "text-orange-400/70",
+  marketing: "text-emerald-400/70",
+  admin: "text-sidebar-heading",
+  core: "text-sidebar-heading",
 };
 
-const ACTIVE_ITEM_CLASSES: Record<Department, string> = {
-  sales: "border-l-[3px] border-blue-500 bg-blue-50 text-blue-600",
-  fulfillment: "border-l-[3px] border-orange-500 bg-orange-50 text-orange-600",
-  marketing: "border-l-[3px] border-emerald-500 bg-emerald-50 text-emerald-600",
-  admin: "border-l-[3px] border-gray-400 bg-gray-50 text-gray-700",
-  core: "border-l-[3px] border-indigo-400 bg-indigo-50 text-indigo-700",
-};
+// Mockup uses one uniform active treatment for every item (gold left-bar +
+// gold-tinted bg + gold text), regardless of department.
+const ACTIVE_ITEM_CLASS =
+  "border-l-[3px] border-accent-500 bg-sidebar-active-bg text-sidebar-active-text";
 
 // ─── Active-route helper ────────────────────────────────────────────────────────
 
@@ -174,6 +172,32 @@ function sectionHasActiveDescendant(pathname: string, section: NavSection): bool
   );
 }
 
+// ─── Collapsible-node bookkeeping ───────────────────────────────────────────────
+// Ids of every collapsible node (sections + nested groups), in render order.
+// Drives Expand-all and the "are all open?" check for the toggle's label.
+const ALL_COLLAPSIBLE_IDS: string[] = NAV_SECTIONS.flatMap((s) =>
+  s.collapsible
+    ? [s.id, ...s.entries.filter(isGroup).map((g) => g.id)]
+    : s.entries.filter(isGroup).map((g) => g.id),
+);
+
+/** Ids that should be open for the current route — the section containing the
+ * active page plus any group containing it. Preserves the prior auto-expand. */
+function routeSeededOpenIds(pathname: string): Set<string> {
+  const open = new Set<string>();
+  for (const section of NAV_SECTIONS) {
+    if (section.collapsible && sectionHasActiveDescendant(pathname, section)) {
+      open.add(section.id);
+    }
+    for (const entry of section.entries) {
+      if (isGroup(entry) && groupHasActiveChild(pathname, entry)) {
+        open.add(entry.id);
+      }
+    }
+  }
+  return open;
+}
+
 // ─── Chevron ────────────────────────────────────────────────────────────────────
 
 function Chevron({ open }: { open: boolean }) {
@@ -182,7 +206,7 @@ function Chevron({ open }: { open: boolean }) {
       viewBox="0 0 20 20"
       fill="currentColor"
       aria-hidden="true"
-      className={`w-3 h-3 text-gray-400 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+      className={`w-3 h-3 text-sidebar-heading transition-transform duration-150 ${open ? "rotate-90" : ""}`}
     >
       <path
         fillRule="evenodd"
@@ -190,6 +214,24 @@ function Chevron({ open }: { open: boolean }) {
         clipRule="evenodd"
       />
     </svg>
+  );
+}
+
+/**
+ * Smoothly animates a collapsible region's height + opacity using the
+ * grid-rows 0fr→1fr technique — no fixed pixel height or JS measurement needed,
+ * works for arbitrary content, and the inner wrapper's `overflow-hidden` clips
+ * the children while they slide. Children stay mounted so it animates both ways.
+ */
+function Collapsible({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div
+      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+      }`}
+    >
+      <div className="overflow-hidden">{children}</div>
+    </div>
   );
 }
 
@@ -204,16 +246,15 @@ function NavLink({
   isActive: boolean;
   indented?: boolean;
 }) {
-  const activeClasses = ACTIVE_ITEM_CLASSES[item.department];
   const inactiveClasses =
-    "border-l-[3px] border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-800";
+    "border-l-[3px] border-transparent text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-hover";
 
   return (
     <Link
       href={item.href}
-      className={`flex items-center gap-2.5 py-2 text-sm font-medium rounded-r-md transition-all duration-150 ${
+      className={`flex items-center gap-2.5 py-2 text-sm font-medium transition-all duration-150 ${
         indented ? "pl-9 pr-4" : "px-4"
-      } ${isActive ? activeClasses : inactiveClasses}`}
+      } ${isActive ? ACTIVE_ITEM_CLASS : inactiveClasses}`}
     >
       <span className="text-base leading-none">{item.icon}</span>
       <span>{item.label}</span>
@@ -225,36 +266,36 @@ function NavLink({
 function NavGroupNode({
   group,
   pathname,
+  open,
+  onToggle,
 }: {
   group: NavGroup;
   pathname: string;
+  open: boolean;
+  onToggle: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(() => groupHasActiveChild(pathname, group));
-
   return (
     <div>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => onToggle(group.id)}
         aria-expanded={open}
-        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 border-l-[3px] border-transparent transition-all duration-150"
+        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm font-medium text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-hover border-l-[3px] border-transparent transition-all duration-150"
       >
         <span className="text-base leading-none">{group.icon}</span>
         <span className="flex-1 text-left">{group.label}</span>
         <Chevron open={open} />
       </button>
-      {open && (
-        <div>
-          {group.children.map((child) => (
-            <NavLink
-              key={child.href}
-              item={child}
-              isActive={routeIsActive(pathname, child.href)}
-              indented
-            />
-          ))}
-        </div>
-      )}
+      <Collapsible open={open}>
+        {group.children.map((child) => (
+          <NavLink
+            key={child.href}
+            item={child}
+            isActive={routeIsActive(pathname, child.href)}
+            indented
+          />
+        ))}
+      </Collapsible>
     </div>
   );
 }
@@ -263,19 +304,27 @@ function NavGroupNode({
 function SectionNode({
   section,
   pathname,
+  isOpen,
+  onToggle,
 }: {
   section: NavSection;
   pathname: string;
+  isOpen: (id: string) => boolean;
+  onToggle: (id: string) => void;
 }) {
   const colorClass = SECTION_LABEL_CLASSES[section.department];
-  const [open, setOpen] = useState(() =>
-    section.collapsible ? sectionHasActiveDescendant(pathname, section) : true,
-  );
+  const open = isOpen(section.id);
 
   const renderEntries = () =>
     section.entries.map((entry) =>
       isGroup(entry) ? (
-        <NavGroupNode key={entry.id} group={entry} pathname={pathname} />
+        <NavGroupNode
+          key={entry.id}
+          group={entry}
+          pathname={pathname}
+          open={isOpen(entry.id)}
+          onToggle={onToggle}
+        />
       ) : (
         <NavLink
           key={entry.href}
@@ -301,14 +350,14 @@ function SectionNode({
     <div>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => onToggle(section.id)}
         aria-expanded={open}
         className={`w-full flex items-center gap-1.5 px-4 pt-5 pb-1 text-[10px] font-bold tracking-widest uppercase hover:opacity-80 transition-opacity ${colorClass}`}
       >
         <span className="flex-1 text-left">{section.label}</span>
         <Chevron open={open} />
       </button>
-      {open && <div>{renderEntries()}</div>}
+      <Collapsible open={open}>{renderEntries()}</Collapsible>
     </div>
   );
 }
@@ -337,25 +386,24 @@ function UserFooter() {
   const initials = getInitials(displayName);
 
   return (
-    <div className="flex items-center gap-3 px-4 py-4 border-t border-gray-100 bg-gray-50">
+    <div className="flex items-center gap-3 px-4 py-4 border-t border-sidebar-border">
       <div
-        className="flex items-center justify-center w-8 h-8 rounded-full text-white text-xs font-bold flex-shrink-0"
-        style={{ backgroundColor: "#6366F1" }}
+        className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-accent-500 to-accent-600 text-white text-xs font-bold flex-shrink-0"
         aria-label="User avatar"
       >
         {initials}
       </div>
       <div className="flex flex-col min-w-0 flex-1">
-        <span className="text-sm font-semibold text-gray-800 truncate">
+        <span className="text-sm font-semibold text-sidebar-text-hover truncate">
           {displayName}
         </span>
-        <span className="text-xs text-gray-400 capitalize">{displayRole}</span>
+        <span className="text-xs text-sidebar-heading capitalize">{displayRole}</span>
       </div>
       <button
         type="button"
         onClick={() => void signOut()}
         aria-label="Sign out"
-        className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+        className="flex-shrink-0 text-sidebar-heading hover:text-sidebar-text-hover transition-colors"
         title="Sign out"
       >
         <LogOut size={15} aria-hidden="true" />
@@ -369,25 +417,54 @@ function UserFooter() {
 export function Sidebar() {
   const pathname = usePathname();
 
-  // SectionNode/NavGroupNode seed their open-state from the active route at
-  // mount; keying the tree on the active section ensures a hard navigation to
-  // a different department re-seeds auto-expansion correctly.
-  const activeSectionId = useMemo(() => {
-    const match = NAV_SECTIONS.find((s) => sectionHasActiveDescendant(pathname, s));
-    return match?.id ?? "none";
+  // Open-state for every collapsible node lives here (lifted out of the nodes)
+  // so the Expand-all / Collapse-all control can drive them together. Seeded
+  // from the active route so a deep-link still reveals its section.
+  const [openIds, setOpenIds] = useState<Set<string>>(() => routeSeededOpenIds(pathname));
+
+  // On navigation, make sure the section/group containing the new page is open
+  // (union, not replace — manual toggles elsewhere are preserved).
+  useEffect(() => {
+    const seeded = routeSeededOpenIds(pathname);
+    setOpenIds((prev) => {
+      // already open? (avoid Set spread — tsconfig target predates Set iteration)
+      if (Array.from(seeded).every((id) => prev.has(id))) return prev;
+      const next = new Set(prev);
+      seeded.forEach((id) => next.add(id));
+      return next;
+    });
   }, [pathname]);
 
+  const isOpen = useCallback((id: string) => openIds.has(id), [openIds]);
+
+  const toggle = useCallback((id: string) => {
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const allOpen = openIds.size >= ALL_COLLAPSIBLE_IDS.length;
+
+  const toggleAll = useCallback(() => {
+    setOpenIds(allOpen ? new Set<string>() : new Set(ALL_COLLAPSIBLE_IDS));
+  }, [allOpen]);
+
   return (
-    <aside className="flex flex-col w-[228px] h-screen bg-white border-r border-gray-200 overflow-y-auto overflow-x-hidden">
+    <aside className="flex flex-col w-[228px] h-screen bg-sidebar-bg overflow-y-auto overflow-x-hidden">
       {/* Logo Area */}
-      <div className="flex flex-col px-5 pt-6 pb-5 border-b border-gray-100">
+      <div className="flex flex-col px-5 pt-6 pb-5 border-b border-sidebar-border">
         <div className="flex items-center gap-2.5">
-          <span className="text-2xl leading-none">🧠</span>
+          <span className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 text-lg">
+            🧠
+          </span>
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-gray-900 leading-tight">
+            <span className="text-sm font-bold text-white leading-tight">
               {APP_CONFIG.name}
             </span>
-            <span className="text-[10px] text-gray-400 font-medium tracking-wide">
+            <span className="text-[10px] text-accent-300 font-medium tracking-wide uppercase">
               {APP_CONFIG.subtitle}
             </span>
           </div>
@@ -401,10 +478,28 @@ export function Sidebar() {
         ))}
       </nav>
 
+      {/* Expand-all / Collapse-all control */}
+      <div className="flex justify-end px-4 pt-3">
+        <button
+          type="button"
+          onClick={toggleAll}
+          aria-label={allOpen ? "Collapse all menu sections" : "Expand all menu sections"}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-heading hover:text-sidebar-text-hover transition-colors"
+        >
+          {allOpen ? "Collapse all" : "Expand all"}
+        </button>
+      </div>
+
       {/* Sectioned Nav — collapsible departments + nested groups */}
-      <nav className="flex-1 pb-3" aria-label="Department navigation" key={activeSectionId}>
+      <nav className="flex-1 pb-3" aria-label="Department navigation">
         {NAV_SECTIONS.map((section) => (
-          <SectionNode key={section.id} section={section} pathname={pathname} />
+          <SectionNode
+            key={section.id}
+            section={section}
+            pathname={pathname}
+            isOpen={isOpen}
+            onToggle={toggle}
+          />
         ))}
       </nav>
 

@@ -20,7 +20,7 @@ interface MonthViewProps {
 }
 
 /**
- * 6-row × 7-column month grid. Today's cell has an indigo ring;
+ * 6-row × 7-column month grid. Today's cell has an accent ring;
  * cells outside the active month are dimmed. Each cell shows up to
  * MAX_VISIBLE_PER_CELL chips with a "+N more" link when overflow.
  */
@@ -59,7 +59,7 @@ export function MonthView({ anchorDate, events, onDayClick }: MonthViewProps) {
               className={
                 "min-h-[110px] border-r border-b border-gray-100 last-of-row:border-r-0 p-1.5 flex flex-col gap-1 " +
                 (inMonth ? "bg-white" : "bg-gray-50/60") +
-                (isToday ? " ring-2 ring-indigo-400 ring-inset" : "")
+                (isToday ? " ring-2 ring-accent-400 ring-inset" : "")
               }
             >
               <button
@@ -68,7 +68,7 @@ export function MonthView({ anchorDate, events, onDayClick }: MonthViewProps) {
                 className={
                   "self-start text-[11px] font-semibold leading-none px-1 py-0.5 rounded transition-colors " +
                   (isToday
-                    ? "bg-indigo-500 text-white"
+                    ? "bg-accent-500 text-white"
                     : inMonth
                       ? "text-gray-700 hover:bg-gray-100"
                       : "text-gray-400 hover:bg-gray-100") +
@@ -87,7 +87,7 @@ export function MonthView({ anchorDate, events, onDayClick }: MonthViewProps) {
                   <button
                     type="button"
                     onClick={onDayClick ? () => onDayClick(cellDate) : undefined}
-                    className="text-[10px] text-gray-500 hover:text-indigo-600 text-left px-1.5"
+                    className="text-[10px] text-gray-500 hover:text-accent-600 text-left px-1.5"
                   >
                     +{overflow} more
                   </button>

@@ -14,11 +14,42 @@ const config: Config = {
         foreground: "var(--foreground)",
         surface: "var(--surface)",
 
-        // Brand accent — Central Intelligence indigo
+        // Accent — the app's themeable accent. Resolves through CSS vars in
+        // globals.css (currently the mockup's gold/amber). A former indigo-N
+        // utility migrates to accent-N at the same weight. Re-theme = edit the
+        // --accent-* vars only.
+        accent: {
+          50: "var(--accent-50)",
+          100: "var(--accent-100)",
+          200: "var(--accent-200)",
+          300: "var(--accent-300)",
+          400: "var(--accent-400)",
+          500: "var(--accent-500)",
+          600: "var(--accent-600)",
+          700: "var(--accent-700)",
+          800: "var(--accent-800)",
+          900: "var(--accent-900)",
+          DEFAULT: "var(--accent-500)",
+        },
+
+        // Brand — back-compat alias of the accent scale.
         brand: {
-          DEFAULT: "#6366F1",
-          light: "#A5B4FC",
-          dark: "#4F46E5",
+          DEFAULT: "var(--brand)",
+          light: "var(--brand-light)",
+          dark: "var(--brand-dark)",
+        },
+
+        // Sidebar — dark themeable palette (mockup .sidebar). Resolves through
+        // the --sidebar-* CSS vars so the whole sidebar re-themes from one place.
+        sidebar: {
+          bg: "var(--sidebar-bg)",
+          hover: "var(--sidebar-hover)",
+          border: "var(--sidebar-border)",
+          text: "var(--sidebar-text)",
+          "text-hover": "var(--sidebar-text-hover)",
+          heading: "var(--sidebar-heading)",
+          "active-bg": "var(--sidebar-active-bg)",
+          "active-text": "var(--sidebar-active-text)",
         },
 
         // Department palette
