@@ -76,6 +76,23 @@ class TeamMemberDetail(BaseModel):
     hired_at: str | None = None
     days_active: int | None = None
     capabilities: list[str] = Field(default_factory=list)
+    # CI-owned editable note (lives in rep_overrides, never synced from WGR).
+    notes: str | None = None
     performance: list[PerformanceBar] = Field(default_factory=list)
     recent_submissions: list[SubmissionRow] = Field(default_factory=list)
     call_history: list[CallHistoryRow] = Field(default_factory=list)
+
+
+class UpdateRepRequest(BaseModel):
+    """PATCH /members/team/{rep_id} — edits go to rep_overrides (CI-owned), NOT
+    sales_reps (WGR-synced), so they survive the sync.
+
+    Only provided keys are written (model_dump(exclude_unset=True)). An empty
+    string clears that override (falls back to the synced value); a value sets it.
+    """
+
+    full_name: str | None = None
+    email: str | None = None
+    role: str | None = None
+    status: str | None = None
+    notes: str | None = None

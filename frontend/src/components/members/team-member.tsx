@@ -41,6 +41,7 @@ export interface TeamMemberDetail {
   hired_at: string | null;
   days_active: number | null;
   capabilities: string[];
+  notes: string | null;
   performance: PerformanceBar[];
   recent_submissions: SubmissionRow[];
   call_history: CallHistoryRow[];

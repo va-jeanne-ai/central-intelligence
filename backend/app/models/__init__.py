@@ -67,6 +67,7 @@ from app.models.sales import (  # noqa: F401
     ClosedSale,
     CoachingStrike,
     EodReport,
+    RepOverride,
     SalesActivity,
     SalesRep,
     ScorecardCategory,
@@ -140,6 +141,7 @@ __all__ = [
     "OptInEvent",
     # sales (WGR)
     "SalesRep",
+    "RepOverride",
     "ScorecardCategory",
     "CallScore",
     "StrikeRule",

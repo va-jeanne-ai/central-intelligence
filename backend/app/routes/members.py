@@ -20,11 +20,12 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
+from app.models.sales import RepOverride, SalesRep
 from app.repositories.fulfillment_stats import compute_member_stats
 from app.schemas.team import (
     CallHistoryRow,
@@ -34,6 +35,7 @@ from app.schemas.team import (
     TeamMemberDetail,
     TeamMemberRow,
     TeamStats,
+    UpdateRepRequest,
 )
 from app.schemas.members import (
     CreateMemberNoteRequest,
@@ -272,33 +274,49 @@ async def team_directory(
     status: str | None = Query(None, description="Filter by status."),
     session: AsyncSession = Depends(get_session),
 ):
-    """The Member Directory — every rep with their call count, sorted by activity."""
+    """The Member Directory — every rep with their call count, sorted by activity.
+
+    CI overrides (rep_overrides) win over the synced sales_reps values, so edits
+    survive the WGR sync. Filters/search match the effective (coalesced) values.
+    """
+    # Effective expressions: override → synced fallback.
+    eff_name = "COALESCE(ro.full_name, sr.full_name)"
+    eff_email = "COALESCE(ro.email, sr.email)"
+    eff_status = "COALESCE(ro.status, sr.status)"
+
     where = ["1 = 1"]
     params: dict[str, object] = {}
     if search:
-        where.append("(sr.full_name ILIKE :q OR sr.email ILIKE :q)")
+        where.append(f"({eff_name} ILIKE :q OR {eff_email} ILIKE :q)")
         params["q"] = f"%{search.strip()}%"
     if status and status != "all":
-        where.append("LOWER(sr.status) = :status")
+        where.append(f"LOWER({eff_status}) = :status")
         params["status"] = status.lower()
 
+    # calls_count joins on the rep's full_name; the synced name is the canonical
+    # link to calls.call_owner, so use sr.full_name (not the override) here.
     rows = (await session.execute(text(
         f"""
         SELECT
-            sr.rep_id, sr.full_name, sr.email, sr.role, sr.status,
+            sr.rep_id,
+            {eff_name}  AS name,
+            {eff_email} AS email,
+            COALESCE(ro.role, sr.role)     AS role,
+            {eff_status} AS status,
             sr.hired_at, sr.capabilities,
             (SELECT COUNT(*) FROM calls c
              WHERE c.deleted_at IS NULL AND c.call_owner = sr.full_name) AS calls_count
         FROM sales_reps sr
+        LEFT JOIN rep_overrides ro ON ro.rep_id = sr.rep_id
         WHERE {" AND ".join(where)}
-        ORDER BY calls_count DESC, sr.full_name ASC
+        ORDER BY calls_count DESC, name ASC
         """
     ), params)).mappings().all()
 
     members = [
         TeamMemberRow(
             rep_id=r["rep_id"],
-            name=r["full_name"],
+            name=r["name"],
             email=r["email"],
             role=r["role"],
             status=r["status"],
@@ -323,13 +341,26 @@ async def team_member_detail(
     """Detail panel for one rep: header facts, performance bars (call scores +
     closed sales), recent EOD reports (submissions), and call history."""
     rep = (await session.execute(text(
-        "SELECT rep_id, full_name, email, role, status, hired_at, capabilities "
-        "FROM sales_reps WHERE rep_id = :id"
+        """
+        SELECT
+            sr.rep_id,
+            sr.full_name                       AS synced_name,
+            COALESCE(ro.full_name, sr.full_name) AS name,
+            COALESCE(ro.email, sr.email)         AS email,
+            COALESCE(ro.role, sr.role)           AS role,
+            COALESCE(ro.status, sr.status)       AS status,
+            sr.hired_at, sr.capabilities, ro.notes
+        FROM sales_reps sr
+        LEFT JOIN rep_overrides ro ON ro.rep_id = sr.rep_id
+        WHERE sr.rep_id = :id
+        """
     ), {"id": rep_id})).mappings().first()
     if rep is None:
         raise HTTPException(status_code=404, detail="Team member not found")
 
-    name = rep["full_name"]
+    # Calls link to the rep by the SYNCED name (calls.call_owner), not the
+    # editable override — that's the canonical join key.
+    name = rep["synced_name"]
     hired_at = rep["hired_at"]
     days_active = (
         (datetime.now(tz=timezone.utc) - hired_at).days if hired_at else None
@@ -401,17 +432,63 @@ async def team_member_detail(
 
     return TeamMemberDetail(
         rep_id=rep_id,
-        name=name,
+        name=rep["name"],  # effective (override → synced)
         email=rep["email"],
         role=rep["role"],
         status=rep["status"],
         hired_at=hired_at.isoformat() if hired_at else None,
         days_active=days_active,
         capabilities=list(rep["capabilities"] or []),
+        notes=rep["notes"],
         performance=performance,
         recent_submissions=recent_submissions,
         call_history=call_history,
     )
+
+
+@router.patch(
+    "/members/team/{rep_id}",
+    response_model=TeamMemberDetail,
+    summary="Edit a team member (writes CI overrides)",
+)
+async def update_team_member(
+    rep_id: str,
+    body: UpdateRepRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Edit a member's name/email/role/status/notes.
+
+    Edits go to the CI-owned ``rep_overrides`` table (NOT the WGR-synced
+    ``sales_reps``), so they survive the next sync. Only provided keys are
+    written; an empty string clears that override (falls back to the synced
+    value). Returns the refreshed (merged) detail.
+    """
+    # The rep must exist in the synced roster.
+    exists = (await session.execute(
+        select(SalesRep.rep_id).where(SalesRep.rep_id == rep_id)
+    )).first()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Team member not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        return await team_member_detail(rep_id, session)
+
+    # Empty string → NULL (clear the override; fall back to synced value).
+    cleaned = {k: (v if (v is None or v != "") else None) for k, v in updates.items()}
+
+    override = (await session.execute(
+        select(RepOverride).where(RepOverride.rep_id == rep_id)
+    )).scalar_one_or_none()
+    if override is None:
+        override = RepOverride(rep_id=rep_id, **cleaned)
+        session.add(override)
+    else:
+        for field, value in cleaned.items():
+            setattr(override, field, value)
+    await session.commit()
+
+    return await team_member_detail(rep_id, session)
 
 
 @router.post("/members", response_model=MemberRecord, status_code=201)
