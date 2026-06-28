@@ -7,6 +7,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Changed — Type + Result filters on the Calls table are now multi-select
+
+The Type and Result filters in `CallsTable` (the All Calls page) were single-select dropdowns; they're
+now **multi-select** checkbox dropdowns — pick any combination of types and/or results. The backend
+already accepted comma-separated `call_type` / `call_result` (IN clause), so this is frontend-only.
+
+- **`calls-table.tsx`** — new `MultiSelect` popover component (checkbox list, count badge, clear,
+  outside-click close). `typeFilter`/`resultFilter` are now `Set<string>` (empty = no filter); the
+  query joins them comma-separated; `clearFilters`/`hasFilters`/reset-to-page-1 updated.
+
+Verified composable filtering (type IN […] AND result IN […]). `tsc` + ESLint clean, `next build` passes.
+
+
 ### Added — "Lead" column on the All Calls table (/calls)
 
 The All Calls table now has a **Lead** column showing the prospect on each call (linked to the lead
