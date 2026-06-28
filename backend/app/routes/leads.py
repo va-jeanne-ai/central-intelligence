@@ -191,6 +191,10 @@ _API_TO_DB_STATUSES: dict[str, list[str]] = {
     "contacted": ["contacted"],
     "qualified": ["qualified"],
     "stale": ["stale"],
+    # Composite filter for the funnel's "Applications" stage — matches the
+    # funnel definition in sales_stats.py (qualified + appointment-set). The
+    # list endpoint already handles multi-value via an IN clause.
+    "applications": ["qualified", "appointment-set"],
 }
 
 

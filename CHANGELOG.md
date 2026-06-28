@@ -7,6 +7,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — click a Sales Funnel stage to filter the table
+
+Funnel bars on /leads are now clickable: clicking a stage sets the table's status filter to match it
+and scrolls the records table into view. Stage → filter: Leads → all, Appointments → appointment_set,
+Applications → qualified + appointment-set, Sales → closed_won.
+
+- **`routes/leads.py`** — added an `applications` composite to `_API_TO_DB_STATUSES`
+  (`qualified` + `appointment-set`); the list endpoint already handled multi-value via an IN clause.
+  Verified counts match the funnel (applications 108, appointment_set 81, closed_won 3).
+- **`leads/page.tsx`** — funnel bars are buttons (hover lift + focus ring) wired to a stage→filter map;
+  the status dropdown gains an "Applications (qualified + booked)" option so it stays in sync; clicks
+  scroll to the table.
+
+`tsc` + ESLint clean, `next build` passes.
+
+
 ### Changed — Sales Funnel Overview restyled to the mockup + Avg Deal Value wired
 
 Restyled the funnel on /leads to match the design: centered, **tapering** stage bars (width ∝ count,

@@ -600,14 +600,26 @@ function SourceDonutChart({
 
 // ─── Sales Funnel ─────────────────────────────────────────────────────────────
 
+// Each funnel stage → the table status filter that reflects it. "Leads" clears
+// the filter (all); the rest map to API status values (Applications is the
+// composite qualified+appointment-set filter).
+const FUNNEL_STAGE_TO_FILTER: Record<string, FilterStatus> = {
+  Leads: "all",
+  Appointments: "appointment_set",
+  Applications: "applications",
+  Sales: "closed_won",
+};
+
 function SalesFunnel({
   stages,
   rangeText,
   avgDealValue,
+  onStageClick,
 }: {
   stages: { stage: string; count: number; percentage: number }[];
   rangeText: string;
   avgDealValue: number;
+  onStageClick: (filter: FilterStatus) => void;
 }) {
   // Each stage's bar width tapers down the funnel (relative to the top stage),
   // floored so a thin stage stays readable. Step conversion = stage / prev.
@@ -655,8 +667,12 @@ function SalesFunnel({
                   ▼
                 </span>
               )}
-              <div
-                className="rounded-lg h-12 flex items-center justify-center gap-2 px-4 text-white transition-all duration-500"
+              <button
+                type="button"
+                onClick={() => onStageClick(FUNNEL_STAGE_TO_FILTER[stage.stage] ?? "all")}
+                title={`Show ${stage.stage} in the table`}
+                aria-label={`Filter table to ${stage.count.toLocaleString()} ${stage.stage}`}
+                className="rounded-lg h-12 flex items-center justify-center gap-2 px-4 text-white transition-all duration-200 hover:brightness-110 hover:-translate-y-px hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 cursor-pointer"
                 style={{ width: `${stage.widthPercent}%`, backgroundColor: stage.color }}
               >
                 <span className="text-lg font-extrabold tabular-nums">
@@ -666,7 +682,7 @@ function SalesFunnel({
                 {stage.stepRate && (
                   <span className="text-[11px] font-semibold opacity-80">{stage.stepRate}</span>
                 )}
-              </div>
+              </button>
             </div>
           ))}
         </div>
@@ -801,7 +817,10 @@ function LeadTableRow({ lead }: { lead: Lead }) {
 
 // ─── Filter Bar ───────────────────────────────────────────────────────────────
 
-type FilterStatus = "all" | LeadStatus;
+// "applications" is a composite filter (qualified + appointment-set) used by the
+// funnel's Applications stage and the matching dropdown option — not a real
+// per-lead status, so it's added on top of LeadStatus.
+type FilterStatus = "all" | LeadStatus | "applications";
 type FilterSource = "all" | LeadSource;
 
 // ─── Column sort ──────────────────────────────────────────────────────────────
@@ -924,6 +943,8 @@ function FilterBar({
         className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
       >
         <option value="all">All Statuses</option>
+        {/* Composite filter matching the funnel's Applications stage. */}
+        <option value="applications">Applications (qualified + booked)</option>
         {(Object.keys(STATUS_CONFIG) as LeadStatus[]).map((key) => (
           <option key={key} value={key}>
             {STATUS_CONFIG[key].label}
@@ -1143,6 +1164,9 @@ export default function LeadsPage() {
     };
   }, [authLoading, entryFrom, entryTo]);
 
+  // Scroll target for funnel-bar clicks → the records table.
+  const leadsTableRef = useRef<HTMLDivElement | null>(null);
+
   // Fetch leads whenever filters change, with debounce on search
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1343,10 +1367,16 @@ export default function LeadsPage() {
             stages={stats.funnel}
             rangeText={rangeLabel(entryFrom, entryTo)}
             avgDealValue={stats.kpis.avg_deal_value}
+            onStageClick={(filter) => {
+              setStatusFilter(filter);
+              // Bring the records table into view so the result is visible.
+              leadsTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
           />
         )}
 
         {/* Lead Records Table */}
+        <div ref={leadsTableRef} className="scroll-mt-4" />
         {isLoading ? (
           <TableSkeleton />
         ) : (
