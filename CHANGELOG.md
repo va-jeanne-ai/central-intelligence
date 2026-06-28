@@ -7,6 +7,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Changed — lead conversation sender labels + always-visible Tags card
+
+- **Conversations** now label each message **CSR** (outbound — our rep/business) or **Lead** (inbound),
+  derived from the direction (verified against real data: outbound carries a `rep_id`, inbound is the
+  lead's reply). Positioning was already CSR-right / lead-left; this adds the explicit text label.
+- **Tags card** now always renders on the lead detail page (was hidden when empty), with a "No tags yet"
+  empty state so the section is discoverable even on leads without tagged calls.
+
+
 ### Added — "jump to page" input on all paginated tables
 
 The shared `Pagination` component now includes a "Go to" page-number input next to Prev/Next, so

@@ -1153,19 +1153,24 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
           </Card>
         </div>
 
-        {/* Tags — aggregated from this lead's calls' insights. Only shown when
-            present (leads with no tagged calls render nothing). */}
-        {tags.length > 0 && (
-          <Card>
-            <CardHeader
-              title="Tags"
-              action={
-                <span className="text-[11px] text-gray-400">
-                  {tags.length} tag{tags.length === 1 ? "" : "s"}
-                </span>
-              }
-            />
-            <CardBody>
+        {/* Tags — aggregated from this lead's calls' insights (lead → calls →
+            insights → insight_tags). Always rendered so the section is
+            discoverable; empty state when the lead has no tagged calls. */}
+        <Card>
+          <CardHeader
+            title="Tags"
+            action={
+              <span className="text-[11px] text-gray-400">
+                {tags.length} tag{tags.length === 1 ? "" : "s"}
+              </span>
+            }
+          />
+          <CardBody>
+            {tags.length === 0 ? (
+              <p className="text-[13px] text-gray-400 italic">
+                No tags yet. Tags are extracted from this lead&apos;s analyzed calls.
+              </p>
+            ) : (
               <div className="flex flex-wrap gap-2">
                 {tags.map((t) => (
                   <span
@@ -1177,9 +1182,9 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                   </span>
                 ))}
               </div>
-            </CardBody>
-          </Card>
-        )}
+            )}
+          </CardBody>
+        </Card>
 
         {/* Initial Submission */}
         {submission && (
@@ -1644,6 +1649,13 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
               <div className="flex flex-col gap-2.5 max-h-[480px] overflow-y-auto pr-1">
                 {conversations.map((msg) => {
                   const outbound = msg.direction === "outbound";
+                  // Sender from direction: outbound = our CSR/rep, inbound = the lead.
+                  const sender =
+                    msg.direction === "outbound"
+                      ? "CSR"
+                      : msg.direction === "inbound"
+                        ? "Lead"
+                        : null;
                   return (
                     <div
                       key={msg.id}
@@ -1652,6 +1664,15 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                       }`}
                     >
                       <div className="flex items-center gap-1.5 mb-0.5 text-[10px] text-gray-400">
+                        {sender && (
+                          <span
+                            className={`font-semibold uppercase tracking-wide ${
+                              outbound ? "text-accent-600" : "text-gray-600"
+                            }`}
+                          >
+                            {sender}
+                          </span>
+                        )}
                         <span aria-hidden>{channelIcon(msg.channel)}</span>
                         <span className="uppercase tracking-wide">{msg.channel || "—"}</span>
                         {msg.occurred_at && (
