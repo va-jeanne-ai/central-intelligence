@@ -115,23 +115,26 @@ async def get_dashboard_stats(
     )
     total_leads: int = _int(row.scalar())
 
-    # Leads created in the last 7 days
+    # Leads ENTERED in the last 7 days. Counts on entry_date (the lead's
+    # funnel-entry date), not created_at — the latter is sync time and bunches
+    # all rows into the backfill window, overstating "this week". Matches the
+    # /leads page's entry-date basis.
     row = await session.execute(
         text(
             "SELECT COUNT(*) FROM leads "
             "WHERE deleted_at IS NULL "
-            "  AND created_at >= NOW() - INTERVAL '7 days'"
+            "  AND entry_date >= (NOW() - INTERVAL '7 days')::date"
         )
     )
     leads_this_week: int = _int(row.scalar())
 
-    # Leads created in the previous 7-day window (days 8–14 ago) for % change
+    # Leads entered in the previous 7-day window (days 8–14 ago) for % change
     row = await session.execute(
         text(
             "SELECT COUNT(*) FROM leads "
             "WHERE deleted_at IS NULL "
-            "  AND created_at >= NOW() - INTERVAL '14 days' "
-            "  AND created_at  < NOW() - INTERVAL '7 days'"
+            "  AND entry_date >= (NOW() - INTERVAL '14 days')::date "
+            "  AND entry_date  < (NOW() - INTERVAL '7 days')::date"
         )
     )
     leads_prev_week: int = _int(row.scalar())
@@ -290,15 +293,19 @@ async def get_dashboard_stats(
     # 5. Lead volume — last 8 weeks bucketed by calendar week
     # ------------------------------------------------------------------
 
+    # Bucketed by entry_date (the funnel-entry date), matching the /leads
+    # report. created_at is sync time and would bunch all rows into the
+    # backfill window.
     row = await session.execute(
         text(
             """
             SELECT
-                FLOOR(EXTRACT(EPOCH FROM (NOW() - created_at)) / 604800)::int AS weeks_ago,
+                FLOOR((CURRENT_DATE - entry_date) / 7)::int AS weeks_ago,
                 COUNT(*) AS cnt
             FROM leads
             WHERE deleted_at IS NULL
-              AND created_at >= NOW() - INTERVAL '8 weeks'
+              AND entry_date IS NOT NULL
+              AND entry_date > CURRENT_DATE - INTERVAL '8 weeks'
             GROUP BY weeks_ago
             ORDER BY weeks_ago DESC
             """

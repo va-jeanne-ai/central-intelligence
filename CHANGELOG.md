@@ -7,6 +7,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Fixed — Dashboard Weekly Performance Snapshot used sync date, not entry date
+
+Audited the dashboard snapshot. **Total Leads** (11,721) and **Calls This Week** (28) are accurate.
+**Active Members** shows 0 because the members table is genuinely empty (data gap, not a bug). The code
+bug: **"This Week"** and the **Lead Volume sparkline** counted `created_at` (sync time, which bunches
+all backfilled rows into the sync window) — the same issue fixed on /leads.
+
+- **`routes/dashboard.py`** — "This Week" (and its prev-week comparison) now count `entry_date` in the
+  last 7 days: **164 → 127**, consistent with /leads. The 8-week Lead Volume sparkline now buckets by
+  `entry_date` too (81/58/49/60/85/105/331/107), matching the /leads chart.
+
+Verified end-to-end via the dashboard route. `tsc` + `next build` pass.
+
+
 ### Added — click a Sales Funnel stage to filter the table
 
 Funnel bars on /leads are now clickable: clicking a stage sets the table's status filter to match it
