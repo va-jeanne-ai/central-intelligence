@@ -13,6 +13,7 @@ from datetime import date, datetime
 from sqlalchemy import (
     Date,
     DateTime,
+    ForeignKey,
     Integer,
     Numeric,
     String,
@@ -108,4 +109,49 @@ class Recommendation(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class OverallInsight(Base):
+    """A daily, LLM-synthesized company-level health assessment.
+
+    Unlike ``Recommendation`` (a per-metric, statistics-only finding), this is a
+    holistic narrative over the whole analytics picture — verdict + prose + key shifts.
+    It *compounds*: each day's assessment is generated from today's analytics PLUS the
+    previous day's narrative, so the story carries forward. ``previous_insight_id``
+    links to the immediately-earlier day (NULL for the genesis assessment).
+
+    ``evidence`` records the analytics inputs the LLM was given (trends, recs, latest
+    values) so the narrative is auditable. One row per ``insight_date`` — a regenerate
+    upserts (replaces) the same day rather than piling up.
+    """
+
+    __tablename__ = "overall_insights"
+    __table_args__ = (
+        UniqueConstraint("insight_date", name="uq_overall_insights_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # One assessment per calendar day; the idempotency key.
+    insight_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="published")
+
+    # The assessment itself.
+    health_verdict: Mapped[str] = mapped_column(String(16), nullable=False)  # healthy/watch/at_risk
+    narrative: Mapped[str] = mapped_column(Text, nullable=False)
+    key_shifts: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)  # list[str]
+
+    # The analytics inputs given to the LLM (audit trail), and the model used.
+    evidence: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    model: Mapped[str] = mapped_column(String(64), nullable=False)  # model id, or "mock"
+
+    # The day this assessment built on (NULL for genesis). SET NULL on delete so
+    # pruning an old row never cascades away a later one.
+    previous_insight_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("overall_insights.id", ondelete="SET NULL"), nullable=True
+    )
+
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
