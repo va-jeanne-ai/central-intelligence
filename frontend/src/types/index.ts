@@ -195,6 +195,44 @@ export interface CIInsightFacets {
   signal_strength: string[];
 }
 
+/** The company-level health assessment shown atop /insights. Synthesized daily by
+ * the analytics engine (GET /analytics/overall-insight). */
+export interface OverallInsight {
+  insight_date: string;
+  health_verdict: "healthy" | "watch" | "at_risk";
+  narrative: string;
+  key_shifts: string[];
+  previous_date: string | null;
+  model: string;
+  generated_at: string;
+}
+
+/** One (label, count) bucket in a distribution chart. `mentions` sums
+ * frequency_score across the bucket; `count` is the raw row count. */
+export interface CIInsightCount {
+  label: string;
+  count: number;
+  mentions: number;
+}
+
+/** A high-frequency signal for the "top signals" chart. */
+export interface CIInsightTopSignal {
+  signal: string;
+  signal_family: string | null;
+  insight_type: string | null;
+  mentions: number;
+}
+
+/** Pre-aggregated distributions powering the CI Insights charts. Computed
+ * server-side over the full (filtered) dataset — see GET /ci/insights/summary. */
+export interface CIInsightDistribution {
+  total: number;
+  by_insight_type: CIInsightCount[];
+  by_signal_family: CIInsightCount[];
+  by_signal_strength: CIInsightCount[];
+  top_signals: CIInsightTopSignal[];
+}
+
 // ─── CI Market Signals ───────────────────────────────────────────────────────
 
 export interface CIMarketSignal {

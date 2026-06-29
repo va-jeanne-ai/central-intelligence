@@ -33,7 +33,17 @@ from sqlalchemy.sql.elements import TextClause
 
 @dataclass(frozen=True)
 class Metric:
-    """One declared outcome metric. ``sql`` follows the contract in the module docstring."""
+    """One declared outcome metric. ``sql`` follows the contract in the module docstring.
+
+    The optional ``asof_*`` fields declare how to compute the metric *as of* any past
+    day, set-based, so a true rolling history can be derived on read directly from the
+    source tables — no accumulated snapshots required. They describe a single-table
+    aggregate: rows of ``asof_table`` whose ``asof_date_col`` falls in a rolling window
+    ``(as_of - W, as_of]``, optionally pre-filtered by ``asof_row_filter``, reduced by
+    ``asof_value_expr`` (the metric) and ``asof_sample_expr`` (the row count). Metrics
+    whose computation spans tables (e.g. a cross-table EXISTS) leave these None and
+    simply don't offer as-of history. See ``analytics/asof.py`` for the generator.
+    """
 
     key: str
     area: str
@@ -42,6 +52,22 @@ class Metric:
     higher_is_better: bool
     sql: TextClause
     description: str = ""
+
+    # As-of history support (optional; None → metric has no derived history).
+    asof_table: str | None = None
+    asof_date_col: str | None = None  # SQL expr, e.g. "close_date" or "COALESCE(scored_at, created_at)"
+    asof_value_expr: str | None = None  # aggregate producing the metric value
+    asof_sample_expr: str | None = None  # aggregate producing the row count
+    asof_row_filter: str | None = None  # extra WHERE predicate (no leading AND)
+
+    @property
+    def has_asof(self) -> bool:
+        return bool(
+            self.asof_table
+            and self.asof_date_col
+            and self.asof_value_expr
+            and self.asof_sample_expr
+        )
 
 
 # ─── Sales metrics ──────────────────────────────────────────────────────────────
@@ -97,6 +123,11 @@ _SALES_METRICS: list[Metric] = [
               AND (:since IS NULL OR COALESCE(scored_at, created_at) >= :since)
             """
         ),
+        asof_table="sales_call_scores",
+        asof_date_col="COALESCE(scored_at, created_at)",
+        asof_value_expr="COALESCE(AVG(score), 0)",
+        asof_sample_expr="COUNT(*)",
+        asof_row_filter="score IS NOT NULL",
     ),
     Metric(
         key="sales.appointment_show_rate",
@@ -120,6 +151,14 @@ _SALES_METRICS: list[Metric] = [
               AND (:since IS NULL OR COALESCE(scheduled_at, created_at) >= :since)
             """
         ),
+        asof_table="appointments",
+        asof_date_col="COALESCE(scheduled_at, created_at)",
+        asof_value_expr=(
+            "COALESCE(COUNT(*) FILTER (WHERE status = 'completed')::float "
+            "/ NULLIF(COUNT(*) FILTER (WHERE status IN ('completed', 'no_show')), 0), 0)"
+        ),
+        asof_sample_expr="COUNT(*) FILTER (WHERE status IN ('completed', 'no_show'))",
+        asof_row_filter="deleted_at IS NULL",
     ),
     Metric(
         key="sales.closed_sales_count",
@@ -138,6 +177,11 @@ _SALES_METRICS: list[Metric] = [
               AND (:since IS NULL OR close_date >= (:since)::date)
             """
         ),
+        asof_table="closed_sales",
+        asof_date_col="close_date",
+        asof_value_expr="COUNT(*)",
+        asof_sample_expr="COUNT(*)",
+        asof_row_filter="close_date IS NOT NULL",
     ),
     Metric(
         key="sales.revenue_collected",
@@ -156,6 +200,11 @@ _SALES_METRICS: list[Metric] = [
               AND (:since IS NULL OR close_date >= (:since)::date)
             """
         ),
+        asof_table="closed_sales",
+        asof_date_col="close_date",
+        asof_value_expr="COALESCE(SUM(amount_collected), 0)",
+        asof_sample_expr="COUNT(*) FILTER (WHERE amount_collected IS NOT NULL)",
+        asof_row_filter="close_date IS NOT NULL",
     ),
     Metric(
         key="sales.revenue_earned",
@@ -177,6 +226,11 @@ _SALES_METRICS: list[Metric] = [
               AND (:since IS NULL OR close_date >= (:since)::date)
             """
         ),
+        asof_table="closed_sales",
+        asof_date_col="close_date",
+        asof_value_expr="COALESCE(SUM(revenue_earned), 0)",
+        asof_sample_expr="COUNT(*) FILTER (WHERE revenue_earned IS NOT NULL)",
+        asof_row_filter="close_date IS NOT NULL",
     ),
 ]
 
@@ -207,6 +261,11 @@ _MARKETING_METRICS: list[Metric] = [
               AND (:since IS NULL OR sent_at >= :since)
             """
         ),
+        asof_table="email_campaigns",
+        asof_date_col="sent_at",
+        asof_value_expr="COALESCE(SUM(open_count)::float / NULLIF(SUM(recipients_count), 0), 0)",
+        asof_sample_expr="COALESCE(SUM(recipients_count), 0)",
+        asof_row_filter="deleted_at IS NULL AND sent_at IS NOT NULL",
     ),
     Metric(
         key="marketing.email_click_rate",
@@ -228,6 +287,11 @@ _MARKETING_METRICS: list[Metric] = [
               AND (:since IS NULL OR sent_at >= :since)
             """
         ),
+        asof_table="email_campaigns",
+        asof_date_col="sent_at",
+        asof_value_expr="COALESCE(SUM(click_count)::float / NULLIF(SUM(recipients_count), 0), 0)",
+        asof_sample_expr="COALESCE(SUM(recipients_count), 0)",
+        asof_row_filter="deleted_at IS NULL AND sent_at IS NOT NULL",
     ),
 ]
 
@@ -255,6 +319,11 @@ _FULFILLMENT_METRICS: list[Metric] = [
               AND (:since IS NULL OR triggered_at >= :since)
             """
         ),
+        asof_table="sales_coaching_strikes",
+        asof_date_col="triggered_at",
+        asof_value_expr="COUNT(*)",
+        asof_sample_expr="COUNT(*)",
+        asof_row_filter="status IN ('active', 'open')",
     ),
 ]
 

@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { showSuccess, showError } from "@/lib/toast";
+import {
+  // MetricHistoryChart, // hidden for now — restore with the Historical trend card below
+  MultiMetricTrend,
+  MetricSparkline,
+} from "./insights-charts";
+import { OverallInsightCard } from "./overall-insight-card";
+import type { OverallInsight } from "@/types";
 
 // ─── Types (mirror /analytics responses) ────────────────────────────────────────
 
@@ -85,6 +92,11 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Overall health assessment (company-level narrative). Independent of the window.
+  const [overallInsight, setOverallInsight] = useState<OverallInsight | null>(null);
+  const [insightLoading, setInsightLoading] = useState(true);
+  const [generatingInsight, setGeneratingInsight] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -105,10 +117,49 @@ export default function InsightsPage() {
     }
   }, [window]);
 
+  // Fetch the overall insight once. A 204 (no assessment yet) returns null, which
+  // the card renders as an empty "Generate" state.
+  const loadInsight = useCallback(async () => {
+    setInsightLoading(true);
+    try {
+      const data = await apiClient.get<OverallInsight | null>(
+        `/analytics/overall-insight`,
+        { silent: true }
+      );
+      setOverallInsight(data ?? null);
+    } catch {
+      setOverallInsight(null);
+    } finally {
+      setInsightLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (authLoading) return;
     void load();
   }, [authLoading, load]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    void loadInsight();
+  }, [authLoading, loadInsight]);
+
+  async function handleGenerateInsight() {
+    setGeneratingInsight(true);
+    try {
+      const data = await apiClient.post<OverallInsight>(
+        `/analytics/overall-insight/refresh`,
+        {},
+        { silent: true, timeout: 60000 }
+      );
+      setOverallInsight(data);
+      showSuccess("Overall assessment updated.");
+    } catch {
+      showError("Couldn't generate the assessment.");
+    } finally {
+      setGeneratingInsight(false);
+    }
+  }
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -172,6 +223,33 @@ export default function InsightsPage() {
             </Button>
           </div>
         </div>
+
+        {/* Overall health — company-level narrative assessment, the hero of the page */}
+        <OverallInsightCard
+          insight={overallInsight}
+          loading={insightLoading}
+          generating={generatingInsight}
+          onGenerate={() => void handleGenerateInsight()}
+        />
+
+        {/* Historical trend — hidden for now; restore when more snapshot history exists.
+        <Card>
+          <CardHeader title="Historical trend" />
+          <CardBody>
+            <MetricHistoryChart metrics={metrics} window={window} />
+          </CardBody>
+        </Card>
+        */}
+
+        {/* Multi-metric comparison — overlay trajectories, indexed to 100 */}
+        {!loading && metrics.length > 0 && (
+          <Card>
+            <CardHeader title="Compare trends" />
+            <CardBody>
+              <MultiMetricTrend metrics={metrics} window={window} />
+            </CardBody>
+          </Card>
+        )}
 
         {/* Recommendations — the headline findings */}
         <Card>
@@ -256,6 +334,11 @@ export default function InsightsPage() {
                             ? ` · ${t.rel_change >= 0 ? "+" : ""}${(t.rel_change * 100).toFixed(0)}%`
                             : ""}
                         </div>
+                        <MetricSparkline
+                          metricKey={m.metric_key}
+                          unit={m.unit}
+                          window={window}
+                        />
                         {t?.reason && (
                           <p className="text-[11px] text-gray-400 mt-1.5 leading-snug">{t.reason}</p>
                         )}

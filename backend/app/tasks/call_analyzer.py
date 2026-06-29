@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -31,6 +30,7 @@ from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.analytics._json import extract_json_object
 from app.config import settings
 from app.models.operational import Call, ContentIdea, Insight
 from app.prompts._taxonomy import normalize_best_use_case
@@ -82,43 +82,9 @@ def _make_sync_session() -> Session:
 
 # Strip ```json … ``` (or plain ```) wrappers Claude sometimes adds despite
 # the prompt explicitly forbidding them.
-_JSON_FENCE_RE = re.compile(
-    r"^\s*```(?:json)?\s*\n?(.*?)\n?```\s*$",
-    re.DOTALL | re.IGNORECASE,
-)
-
-
-def _extract_json_object(raw_text: str) -> str:
-    """Pull the JSON object out of Claude's response.
-
-    Handles the two common deviations from "pure JSON":
-      1. Wrapped in ```json fences
-      2. Has leading/trailing prose around the JSON
-
-    Returns the JSON-object substring. Raises if no `{`-balanced object found.
-    """
-    stripped = raw_text.strip()
-
-    # Case 1: fenced
-    match = _JSON_FENCE_RE.match(stripped)
-    if match:
-        return match.group(1).strip()
-
-    # Case 2: locate the outermost { ... } via brace-counting. Tolerates
-    # leading "Here are the insights:" or similar prose.
-    start = stripped.find("{")
-    if start == -1:
-        raise ValueError("No JSON object found in Claude response.")
-    depth = 0
-    for i in range(start, len(stripped)):
-        c = stripped[i]
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                return stripped[start : i + 1]
-    raise ValueError("Unbalanced JSON object in Claude response.")
+# JSON extraction now lives in app/analytics/_json.py so any layer can reuse it.
+# Aliased to the original private name to keep the call sites below unchanged.
+_extract_json_object = extract_json_object
 
 
 def _call_claude(transcript_text: str, call_type: str | None) -> tuple[str | None, list[dict]]:

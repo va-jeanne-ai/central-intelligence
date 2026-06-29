@@ -6,7 +6,13 @@ import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagination } from "@/hooks/use-pagination";
 import { Pagination } from "@/components/ui";
-import type { CIInsight, CIInsightsResponse, CIInsightFacets } from "@/types";
+import { InsightsCharts } from "./insights-charts";
+import type {
+  CIInsight,
+  CIInsightsResponse,
+  CIInsightFacets,
+  CIInsightDistribution,
+} from "@/types";
 
 // ─── Insight type pill color map ──────────────────────────────────────────────
 
@@ -238,6 +244,10 @@ export default function CIInsightsPage() {
   const [insights, setInsights] = useState<CIInsight[]>([]);
   const [total, setTotal] = useState(0);
 
+  // Aggregated distributions for the charts. Filter-aware but page-independent.
+  const [summary, setSummary] = useState<CIInsightDistribution | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+
   // Pagination — page/pageSize persisted per surface via the shared hook.
   const { page, pageSize, setPage, setPageSize } = usePagination("insights");
 
@@ -313,6 +323,39 @@ export default function CIInsightsPage() {
     };
   }, [authLoading, page, pageSize, insightType, signalFamily, signalStrength]);
 
+  // Fetch the chart distributions. Keyed on filters only (not pagination) so
+  // paging through the list doesn't refetch the aggregates. Charts reflect the
+  // full filtered dataset, computed server-side.
+  useEffect(() => {
+    if (authLoading) return;
+    let cancelled = false;
+
+    void (async () => {
+      setSummaryLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (insightType !== "All") params.set("insight_type", insightType);
+        if (signalFamily !== "All") params.set("signal_family", signalFamily);
+        if (signalStrength !== "All") params.set("signal_strength", signalStrength);
+
+        const qs = params.toString();
+        const data = await apiClient.get<CIInsightDistribution>(
+          `/ci/insights/summary${qs ? `?${qs}` : ""}`,
+          { silent: true }
+        );
+        if (!cancelled) setSummary(data);
+      } catch {
+        if (!cancelled) setSummary(null);
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, insightType, signalFamily, signalStrength]);
+
   // Reset to page 1 whenever filters change
   function handleInsightTypeChange(v: string) {
     setInsightType(v);
@@ -339,6 +382,9 @@ export default function CIInsightsPage() {
             Competitive intelligence signals extracted from your sales and coaching calls.
           </p>
         </div>
+
+        {/* Charts — aggregated distributions over the full filtered dataset */}
+        <InsightsCharts data={summary} isLoading={summaryLoading} />
 
         {/* Insights list card */}
         <section aria-label="CI Insights list">

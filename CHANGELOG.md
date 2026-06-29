@@ -7,6 +7,193 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Daily Overall Insight Celery task
+
+Wired the Overall Insight to regenerate automatically each day.
+
+- **`backend/app/tasks/overall_insight.py`** (new) — `capture_overall_insight` task, a thin
+  wrapper over `generate_overall_insight` over a sync session (mirrors
+  `capture_metric_snapshots`). `max_retries=2` (a paid LLM call shouldn't retry hard).
+- **`backend/app/tasks/celery_app.py`** — registered in `include`; beat entry
+  `overall-insight-daily` at **04:05 UTC** — 15 min after `metric-snapshots-daily` so it reads
+  the day's fresh snapshots/trends/recs. Idempotent per day (upsert on `insight_date`).
+- **COST:** one paid Claude call per run when `mock_mode=False`; a free mock otherwise — so the
+  entry is safe to ship before you're ready to spend (it only costs once mock mode is off).
+
+### Added — Overall Insight: company-level health assessment
+
+A new hero card atop `/insights` answers "how is the company doing **overall**?" in plain
+language — an LLM-synthesized health assessment that **compounds daily**: the genesis
+assessment reads the full analytics picture; each later day is generated from today's
+analytics PLUS the previous day's narrative (linked via `previous_insight_id`).
+
+- **`backend/app/models/analytics.py`** — new `OverallInsight` model / `overall_insights`
+  table: `insight_date` (unique, one row/day), `health_verdict` (healthy/watch/at_risk),
+  `narrative`, `key_shifts` (JSONB), `evidence` (JSONB audit trail), `model`, self-FK
+  `previous_insight_id`. Migration `s0d1e2f3a4b5_add_overall_insights` (chains off
+  `r9c0d1e2f3a4`).
+- **`backend/app/analytics/overall_insight.py`** (new) — sync `generate_overall_insight(db,
+  *, force_genesis=False)`: gathers the distilled analytics (latest metric values + 30d/90d
+  `all_trends` + active recommendations) as bounded `evidence`, fetches the prior day's
+  assessment, builds a genesis-vs-daily prompt, calls `claude-sonnet-4-6` (sync
+  `anthropic.Anthropic`, mirroring `call_analyzer.py`), parses JSON, validates, and
+  **upserts on `insight_date`** (regenerate replaces, never duplicates). `mock_mode`
+  fallback makes it testable for free.
+- **`backend/app/analytics/_json.py`** (new) — promoted `extract_json_object` out of the
+  Celery task module so the analytics layer can reuse it; `call_analyzer.py` now imports it.
+- **`backend/app/routes/analytics.py`** — `GET /analytics/overall-insight` (latest, 204 when
+  none) and `POST /analytics/overall-insight/refresh?genesis=` (one paid Sonnet call,
+  bridged over `make_sync_session()` like `POST /refresh`).
+- **`frontend`** — `OverallInsight` type; `overall-insight-card.tsx` hero card (verdict pill +
+  narrative paragraphs + key-shift bullets + empty/generate state); page fetches it and wires
+  a Generate/Regenerate button with loading + toast.
+- **Manual-trigger only for now** — no Celery cron yet (the sync generation fn is cron-ready;
+  a daily task drops in later). **Verified live (read+1 paid call):** genesis assessment
+  generated, verdict "watch", grounded in the real metrics; GET serves it; regenerate keeps
+  one row.
+
+### Changed — Hid the Historical trend (single-metric) card
+
+Commented out the single-metric "Historical trend" card (`MetricHistoryChart`) on
+`/insights` for now — kept (not deleted) since the component and its `history-asof`
+endpoint work and it's worth restoring later. The `MetricHistoryChart` export and the
+backend endpoint remain in place; only the page usage + its import are commented out,
+with a restore note. The multi-metric "Compare trends" chart is unaffected.
+
+### Removed — Trend comparison (diverging bars) card
+
+Removed the `TrendComparison` diverging-bar card from `/insights`. With only 2 snapshots
+recorded, almost every metric is flat/insufficient, so only one metric (Lead → Close
+Rate) had a computed `rel_change` — leaving eight empty rows. It will be worth
+reinstating once enough snapshot history accrues for most metrics to have a real
+baseline. Removed the component and its helpers (`TrendBarRow`, `TrendTooltip`, the
+GOOD/BAD/FLAT colour constants) and the now-unused `Bar`/`BarChart`/`Cell` imports and
+`TrendItem` type from `insights-charts.tsx`, and the import/usage from `page.tsx`. The
+`/analytics/trends` fetch stays — the per-metric cards still use it for the verdict pill.
+
+### Removed — Recommendation severity donut
+
+Removed the `SeverityDonut` from the Recommendations card on `/insights`. With a small
+number of recommendations (typically 1) it was a single-colour ring restating the count
+already in the card header. Removed the component (and its now-unused `Pie`/`PieChart`
+imports and `Recommendation` type) from `insights-charts.tsx` and the import/usage from
+`page.tsx`. The Recommendations card now leads straight into the recommendation list.
+
+### Removed — Metrics-by-area bar chart atop each area card
+
+Removed the `AreaMetricsBars` chart that sat at the top of each area card on `/insights`.
+Because each bar was normalized against the max of its own unit family and most unit
+families contain a single metric, every bar rendered at full width — visual noise, not a
+comparison. The area cards now lead straight into the per-metric grid (which keeps its
+sparkline + trend verdict). Removed the component and its helpers from
+`insights-charts.tsx` and the import/usage from `page.tsx`.
+
+### Changed — Insights duration toggle now drives the charts' range
+
+The `7d / 30d / 90d / all` toggle on `/insights` previously changed only the KPI cards
+and trend verdicts; the history charts were hardcoded to a 90-day span with a 30-day
+roll regardless of the selection. Now the toggle controls **both** the span shown (the
+X-axis range) and the rolling-window width per point:
+
+- `7d` → last 7 days, 1-day roll (raw daily points)
+- `30d` → last 30 days, 7-day roll (weekly smoothing)
+- `90d` → last 90 days, 30-day roll
+- `all` → full available history (capped at 730d), 30-day roll
+
+- **`frontend`** — new `WINDOW_SPEC` / `historyQuery()` helper in `insights-charts.tsx`;
+  the single-metric line, multi-metric compare, and sparkline charts all fetch the
+  mapped `days` + `roll`.
+- **`backend/app/routes/analytics.py`** — `history-asof` gains an explicit `roll` param
+  (rolling width, independent of the span `days`) and its `days` cap is raised to 730 so
+  `all` can reach the start of the data. Verified live (read-only): 7d→8 pts, 30d→31,
+  90d→91, all→731 (back to Jun 2024; data begins ~May 2025).
+- **No change to the KPI cards / trend verdicts** — those already reflected the window
+  (snapshot value per window: 7d $10k, 30d $30k, 90d $62k, all $403k for revenue).
+
+### Added — Real 3-month history derived live from source tables (no snapshots, no writes)
+
+The Insights charts previously drew from `metric_snapshots`, which only holds points
+for days the snapshot job actually ran (currently 2 days). Rather than backfill the
+client's production DB with synthetic snapshots, the history is now **derived on read**
+directly from the source tables — a true multi-month rolling trend with zero writes.
+
+- **`backend/app/analytics/registry.py`** — `Metric` gains optional declarative
+  `asof_*` fields (`asof_table`, `asof_date_col`, `asof_value_expr`, `asof_sample_expr`,
+  `asof_row_filter`) describing how to recompute the metric as of any past day.
+  Populated for the 7 single-table metrics; the cross-table `sales.lead_to_close_rate`
+  leaves them unset and simply offers no derived history.
+- **`backend/app/analytics/asof.py`** (new) — `build_asof_history_sql()` generates one
+  set-based query per metric: a `generate_series` of days LEFT JOINed against rows whose
+  date column falls in each day's rolling window `(D - W, D]`. One query per metric for
+  the whole span (not N round-trips). NULL-safe counts on empty windows.
+- **`backend/app/routes/analytics.py`** — new `GET /analytics/metrics/{key}/history-asof
+  ?window=30d&days=90`. Read-only. Each point = the metric over the rolling window
+  ending that day. Metrics without as-of support return an empty series, not an error.
+- **`frontend`** — the three historical charts (single-metric line, multi-metric compare,
+  per-card sparklines) now fetch `history-asof?days=90`, so they show a real 90-day
+  trend immediately instead of the 2 snapshot points.
+- **Verified live (2026-06-29, read-only):** all 7 as-of metrics return 91 varying points
+  — e.g. revenue_collected rolling-30d moves $10k–$30k; email_open_rate ~0.30;
+  appointment_show_rate ~0.79; coaching_strikes 15.
+
+### Added — Charts on the Insights (analytics) page
+
+The Insights page (`/insights`, the data-intelligence surface fed by `/analytics/*`)
+gained six chart types, all from data the page already had access to — **no backend
+change**:
+
+- **Compare trends (multi-line)** — overlay several metrics' trajectories on one line
+  chart, chosen via metric pills (up to 6). Because metrics carry mixed units, every
+  series is *indexed to 100* at the window start, so the chart compares relative
+  movement rather than absolute magnitude; the tooltip shows both the indexed value
+  and the real formatted value. Each selected series self-fetches from the existing
+  `/analytics/metrics/{key}/history`.
+- **Trend comparison (diverging bars)** — one horizontal bar per metric showing its
+  relative change vs baseline over the window; bars extend right (rise) or left (fall)
+  from a centre line and are coloured green/red by whether that direction is *good* for
+  the metric (honours `higher_is_better`), grey for flat/insufficient. Turns the trend
+  engine's per-metric `rel_change` (from `/analytics/trends`, already fetched) into one
+  glanceable winners-vs-losers picture.
+- **Historical trend line chart** — a full-size line graph at the top of the page with
+  a metric-selector dropdown; plots one metric's snapshot history over the selected
+  window from `GET /analytics/metrics/{key}/history`. Y-axis ticks and the tooltip use
+  the metric's real unit formatting (currency/ratio/score/count). Shows a clear empty
+  state when a metric has <2 snapshots.
+- **Per-metric sparklines** — each metric card now shows a compact area sparkline of
+  its snapshot history over the selected window, self-fetched from the existing
+  `GET /analytics/metrics/{key}/history`. Renders only when ≥2 history points exist.
+- **Metrics-by-area bars** — a horizontal bar chart atop each area card (Sales /
+  Marketing / Fulfillment) comparing that area's metrics. Bars are normalized within
+  each unit family so mixed units (currency/ratio/score) stay readable; the tooltip
+  shows the real formatted value. Bar colour matches the department KPI palette.
+- **Recommendation severity donut** — a small donut + legend summarizing open
+  recommendations by severity (critical/warn/info) inside the Recommendations card.
+- **`frontend`** — new `insights/insights-charts.tsx`; uses the `recharts` dependency
+  added for the CI Insights charts. Chart accent uses the themeable `--accent-*` CSS
+  vars so it re-themes with the app.
+
+### Added — Charts on the CI Insights page
+
+The CI Insights page (`/ci-insights`) previously showed only a paginated flat list.
+Added a charts grid above the list that visualizes the findings across the **full
+filtered dataset** (not just the current page).
+
+- **`backend/app/routes/ci.py`** — new `GET /ci/insights/summary` endpoint that
+  aggregates in the database: distributions by `insight_type`, `signal_family`, and
+  `signal_strength` (each with row `count` + summed `mentions`), plus the top 10
+  signals by total mentions. Accepts the same filters as `GET /ci/insights`
+  (`insight_type`, `signal_family`, `signal_strength`, `date_from`, `date_to`).
+  Declared before the dynamic `/insights/{insight_id}` route so the literal path
+  isn't swallowed. NULL/blank group keys are excluded.
+- **`backend/app/schemas/ci.py`** — new `InsightCount`, `InsightTopSignal`, and
+  `InsightDistribution` response schemas.
+- **`frontend`** — added `recharts` (^2.15). New `ci-insights/insights-charts.tsx`
+  renders a donut (insight-type mix), traffic-light bars (signal strength), and
+  horizontal bars (top signal families, most-mentioned signals). Chart colours
+  mirror the list's insight-type pill hues. The page fetches `/ci/insights/summary`
+  in a filter-keyed effect (independent of pagination) and shows per-chart skeletons
+  while loading and empty placeholders when a distribution is empty.
+
 ### Added — `sales.revenue_earned` metric (alongside Revenue Collected)
 
 Added a "Revenue Earned" metric so the collected-vs-earned gap is visible instead of

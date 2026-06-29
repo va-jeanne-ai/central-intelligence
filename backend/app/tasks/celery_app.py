@@ -38,6 +38,7 @@ celery_app = Celery(
         "app.tasks.embed_backfill",
         "app.tasks.wgr_sync",
         "app.tasks.metric_snapshots",
+        "app.tasks.overall_insight",
     ],
 )
 
@@ -70,6 +71,14 @@ celery_app.conf.beat_schedule = {
         # nightly syncs so the day's snapshot reflects freshly-pooled data.
         # Idempotent per day (unique constraint upserts).
         "schedule": crontab(minute=50, hour=3),
+    },
+    "overall-insight-daily": {
+        "task": "app.tasks.overall_insight.capture_overall_insight",
+        # 04:05 UTC daily — 15 min AFTER metric-snapshots so the assessment reads the
+        # day's fresh snapshots/trends/recommendations. Compounds on the prior day.
+        # COST: one paid Claude call per run when mock_mode=False; a free mock otherwise.
+        # Idempotent per day (upsert on insight_date).
+        "schedule": crontab(minute=5, hour=4),
     },
     "social-stats-every-6h": {
         "task": "app.tasks.social_stats.update_social_stats",

@@ -279,6 +279,42 @@ class InsightFacets(BaseModel):
     signal_strength: list[str]
 
 
+class InsightCount(BaseModel):
+    """A single (label, count) pair for a distribution chart.
+
+    ``mentions`` sums frequency_score across the bucket; ``count`` is the raw
+    number of insight rows. Charts pick whichever magnitude they want to plot.
+    """
+
+    label: str
+    count: int
+    mentions: int
+
+
+class InsightTopSignal(BaseModel):
+    """A high-frequency signal surfaced for the "top signals" bar chart."""
+
+    signal: str
+    signal_family: str | None = None
+    insight_type: str | None = None
+    mentions: int
+
+
+class InsightDistribution(BaseModel):
+    """Pre-aggregated distributions for the CI Insights charts (CI-MKT-01).
+
+    Computed over the whole table (honouring any filters passed) so the charts
+    reflect the full dataset rather than a single page. ``total`` is the row
+    count after filtering; the three distributions are sorted by mentions desc.
+    """
+
+    total: int
+    by_insight_type: list[InsightCount]
+    by_signal_family: list[InsightCount]
+    by_signal_strength: list[InsightCount]
+    top_signals: list[InsightTopSignal]
+
+
 class InsightDetail(BaseModel):
     insight_id: str
     call_id: str | None = None

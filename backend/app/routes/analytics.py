@@ -5,6 +5,8 @@ Serves the shared engine to BOTH the Insights dashboard and CI chat:
   GET  /analytics/trends           — verdict per metric (improving/declining/flat/…)
   GET  /analytics/recommendations  — active data-cited recommendations
   GET  /analytics/metrics/{key}/history — a metric's snapshot timeseries (for charts)
+  GET  /analytics/metrics/{key}/history-asof — rolling history derived live from source
+                                     tables (no snapshots needed; read-only)
   POST /analytics/refresh          — recompute snapshots + recommendations on demand
   PATCH /analytics/recommendations/{id} — advance a recommendation's lifecycle status
 
@@ -14,11 +16,12 @@ recommendations (populated by the snapshot task) and the registry — no heurist
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analytics.asof import build_asof_history_sql
 from app.analytics.registry import all_metrics, get_metric
 from app.database import get_session
 
@@ -70,6 +73,18 @@ class RecommendationItem(BaseModel):
     evidence: dict
     status: str
     updated_at: str | None
+
+
+class OverallInsightResponse(BaseModel):
+    """The latest company-level health assessment (see analytics/overall_insight.py)."""
+
+    insight_date: str
+    health_verdict: str  # healthy | watch | at_risk
+    narrative: str
+    key_shifts: list[str]
+    previous_date: str | None
+    model: str
+    generated_at: str
 
 
 # ─── Endpoints ──────────────────────────────────────────────────────────────────
@@ -211,6 +226,75 @@ async def metric_history(
     }
 
 
+# Rolling-window width (days) per window label. "all" isn't a rolling concept, so
+# a derived history falls back to the 30d roll for it.
+_WINDOW_DAYS = {"7d": 7, "30d": 30, "90d": 90, "all": 30}
+
+
+@router.get(
+    "/metrics/{metric_key}/history-asof",
+    summary="A metric's rolling history derived as-of each past day",
+)
+async def metric_history_asof(
+    metric_key: str,
+    window: str = Query("30d", description="Default rolling width when `roll` is omitted: 7d | 30d | 90d | all."),
+    days: int = Query(90, ge=2, le=730, description="How many days back the series spans (the X-axis range)."),
+    roll: int | None = Query(
+        None, ge=1, le=365,
+        description="Rolling-window width in days per point. Overrides the `window`-derived default.",
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+    """A true rolling timeseries computed live from the source tables — no snapshots.
+
+    Two independent knobs:
+      • ``days`` — the span shown (how far back the X-axis goes).
+      • ``roll`` — the rolling-window width each point averages over. If omitted it
+        falls back to the width implied by ``window`` (7d→7, 30d→30, 90d→90, all→30).
+
+    For each of the last ``days`` calendar days, the metric is recomputed over the
+    ``roll``-day window ending that day. Read-only: nothing is written. This lets the
+    charts show a real multi-month trend even when the snapshot job has rarely run.
+
+    Metrics whose computation spans multiple tables (no single date column) don't
+    support derived history and return an empty series rather than an error.
+    """
+    metric = get_metric(metric_key)
+    if metric is None:
+        raise HTTPException(404, "Unknown metric")
+    if window not in _VALID_WINDOWS:
+        raise HTTPException(422, f"window must be one of {sorted(_VALID_WINDOWS)}")
+
+    if not metric.has_asof:
+        # Honest empty series — the frontend already renders a clear empty state.
+        return {"metric_key": metric_key, "window": window, "points": []}
+
+    window_days = roll if roll is not None else _WINDOW_DAYS[window]
+
+    rows = (
+        await session.execute(
+            build_asof_history_sql(metric),
+            {
+                "days": days,
+                "window_days": window_days,
+            },
+        )
+    ).mappings().all()
+
+    return {
+        "metric_key": metric_key,
+        "window": window,
+        "points": [
+            {
+                "value": float(r["value"]),
+                "sample_size": int(r["sample_size"]),
+                "date": r["captured_date"].isoformat(),
+            }
+            for r in rows
+        ],
+    }
+
+
 @router.patch("/recommendations/{rec_id}", response_model=RecommendationItem, summary="Advance status")
 async def update_recommendation(
     rec_id: int,
@@ -254,3 +338,66 @@ async def refresh(session: AsyncSession = Depends(get_session)):
     finally:
         db.close()
     return {"snapshots_written": snap["rows_written"], "active_recommendations": recs["active"]}
+
+
+# ===================================================================
+# Overall Insight — company-level narrative health assessment
+# ===================================================================
+
+@router.get(
+    "/overall-insight",
+    response_model=OverallInsightResponse,
+    summary="Latest company-level health assessment",
+)
+async def get_overall_insight(
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+):
+    """The most recent overall insight, or 204 when none has been generated yet."""
+    row = (await session.execute(text(
+        """
+        SELECT o.insight_date, o.health_verdict, o.narrative, o.key_shifts, o.model,
+               o.generated_at, p.insight_date AS previous_date
+        FROM overall_insights o
+        LEFT JOIN overall_insights p ON p.id = o.previous_insight_id
+        ORDER BY o.insight_date DESC
+        LIMIT 1
+        """
+    ))).mappings().first()
+
+    if row is None:
+        response.status_code = 204
+        return None
+
+    return OverallInsightResponse(
+        insight_date=row["insight_date"].isoformat(),
+        health_verdict=row["health_verdict"],
+        narrative=row["narrative"],
+        key_shifts=list(row["key_shifts"] or []),
+        previous_date=(row["previous_date"].isoformat() if row["previous_date"] else None),
+        model=row["model"],
+        generated_at=row["generated_at"].isoformat(),
+    )
+
+
+@router.post(
+    "/overall-insight/refresh",
+    response_model=OverallInsightResponse,
+    summary="Generate (or regenerate) today's overall insight — one paid LLM call",
+)
+async def refresh_overall_insight(
+    genesis: bool = Query(False, description="Ignore prior assessments; synthesize from scratch."),
+):
+    """Trigger a fresh synthesis. This makes ONE Claude call (unless mock_mode is on).
+
+    Runs the sync generation over a short-lived sync session, mirroring POST /refresh.
+    """
+    from app.analytics.overall_insight import generate_overall_insight
+    from app.tasks.db import make_sync_session
+
+    db = make_sync_session()
+    try:
+        result = generate_overall_insight(db, force_genesis=genesis)
+    finally:
+        db.close()
+    return OverallInsightResponse(**result)

@@ -71,9 +71,12 @@ from app.schemas.ci import (
     InsightBrief,
     InsightDetail,
     InsightDetailResponse,
+    InsightCount,
+    InsightDistribution,
     InsightFacets,
     InsightListResponse,
     InsightSummary,
+    InsightTopSignal,
     MarketSignalFacets,
     MarketSignalItem,
     MarketSignalListResponse,
@@ -992,6 +995,109 @@ async def insight_facets(
         insight_type=await _distinct(Insight.insight_type),
         signal_family=await _distinct(Insight.signal_family),
         signal_strength=await _distinct(Insight.signal_strength),
+    )
+
+
+# ===================================================================
+# 5c. GET /ci/insights/summary
+# ===================================================================
+# NOTE: declared before /insights/{insight_id} so the literal "summary"
+# path isn't swallowed by the dynamic insight_id route.
+
+@router.get("/insights/summary", response_model=InsightDistribution)
+async def insight_summary(
+    insight_type: str | None = Query(None),
+    signal_family: str | None = Query(None),
+    signal_strength: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+):
+    """Pre-aggregated distributions for the CI Insights charts (CI-MKT-01).
+
+    Aggregation runs in the database over the whole table (after applying the
+    same filters the list endpoint accepts), so the charts reflect the full
+    dataset rather than a single page. Each distribution carries both a raw
+    row ``count`` and a ``mentions`` sum (frequency_score); NULL/blank group
+    keys are excluded so they never render as an empty chart slice.
+    """
+
+    # Build the shared filter predicate once and apply it to every query so
+    # the charts stay consistent with each other and with the list view.
+    filters = []
+    if insight_type:
+        filters.append(Insight.insight_type == insight_type)
+    if signal_family:
+        filters.append(Insight.signal_family == signal_family)
+    if signal_strength:
+        filters.append(Insight.signal_strength == signal_strength)
+    if date_from:
+        filters.append(Insight.created_at >= datetime.fromisoformat(date_from))
+    if date_to:
+        filters.append(Insight.created_at <= datetime.fromisoformat(date_to))
+
+    def _apply(stmt):
+        for f in filters:
+            stmt = stmt.where(f)
+        return stmt
+
+    total = (
+        await session.execute(_apply(select(func.count()).select_from(Insight)))
+    ).scalar_one()
+
+    async def _distribution(column) -> list[InsightCount]:
+        """Group by ``column``, summing mentions and counting rows.
+
+        Excludes NULL and whitespace-only keys; sorted by mentions desc so the
+        biggest bucket leads the chart.
+        """
+        stmt = (
+            select(
+                column.label("label"),
+                func.count().label("count"),
+                func.coalesce(func.sum(Insight.frequency_score), 0).label("mentions"),
+            )
+            .where(column.is_not(None))
+            .where(func.trim(column) != "")
+            .group_by(column)
+            .order_by(func.coalesce(func.sum(Insight.frequency_score), 0).desc())
+        )
+        rows = (await session.execute(_apply(stmt))).all()
+        return [
+            InsightCount(label=r.label, count=r.count, mentions=r.mentions)
+            for r in rows
+        ]
+
+    # Top signals by total mentions — the headline "what comes up most" chart.
+    top_stmt = (
+        select(
+            Insight.signal.label("signal"),
+            Insight.signal_family.label("signal_family"),
+            Insight.insight_type.label("insight_type"),
+            func.coalesce(func.sum(Insight.frequency_score), 0).label("mentions"),
+        )
+        .where(Insight.signal.is_not(None))
+        .where(func.trim(Insight.signal) != "")
+        .group_by(Insight.signal, Insight.signal_family, Insight.insight_type)
+        .order_by(func.coalesce(func.sum(Insight.frequency_score), 0).desc())
+        .limit(10)
+    )
+    top_rows = (await session.execute(_apply(top_stmt))).all()
+
+    return InsightDistribution(
+        total=total,
+        by_insight_type=await _distribution(Insight.insight_type),
+        by_signal_family=await _distribution(Insight.signal_family),
+        by_signal_strength=await _distribution(Insight.signal_strength),
+        top_signals=[
+            InsightTopSignal(
+                signal=r.signal,
+                signal_family=r.signal_family,
+                insight_type=r.insight_type,
+                mentions=r.mentions,
+            )
+            for r in top_rows
+        ],
     )
 
 
