@@ -621,13 +621,19 @@ function SalesFunnel({
   avgDealValue: number;
   onStageClick: (filter: FilterStatus) => void;
 }) {
-  // Each stage's bar width tapers down the funnel (relative to the top stage),
-  // floored so a thin stage stays readable. Step conversion = stage / prev.
-  const top = stages[0]?.count ?? 0;
+  // Each stage is a centered rectangle bar; the bars step down evenly in width
+  // (100% → MIN) so the stack reads as an inverted triangle, with a downward
+  // arrow between stages showing the flow. The numbers on each bar carry the
+  // actual data. Step conversion = stage / prev.
+  const MIN_WIDTH = 34; // % width of the narrowest (bottom) bar
+  const n = stages.length;
+  const widthFor = (i: number) =>
+    n <= 1 ? 100 : 100 - ((100 - MIN_WIDTH) * i) / (n - 1);
+
   const funnelStages = stages.map((stage, i) => ({
     ...stage,
     color: FUNNEL_COLORS[stage.stage] ?? "#6B7280",
-    widthPercent: top > 0 ? Math.max((stage.count / top) * 100, 22) : 100,
+    widthPercent: widthFor(i),
     stepRate:
       i > 0 && stages[i - 1].count > 0
         ? ((stage.count / stages[i - 1].count) * 100).toFixed(1) + "%"
@@ -657,13 +663,18 @@ function SalesFunnel({
       </div>
 
       <div className="flex gap-5">
-        {/* Funnel — centered, tapering bars with inline label + step % */}
+        {/* Funnel — centered rectangle bars stepping down into an inverted
+            triangle, with a downward arrow between stages showing the flow */}
         <div className="flex-1 flex flex-col items-center">
           {funnelStages.map((stage, i) => (
             <div key={stage.stage} className="w-full flex flex-col items-center">
-              {/* Down-arrow connector between stages */}
+              {/* Down-arrow connector indicating lead flow to the next stage */}
               {i > 0 && (
-                <span className="text-gray-300 text-xs leading-none my-1.5" aria-hidden>
+                <span
+                  className="text-gray-300 leading-none my-1 select-none"
+                  style={{ fontSize: "1rem" }}
+                  aria-hidden
+                >
                   ▼
                 </span>
               )}
