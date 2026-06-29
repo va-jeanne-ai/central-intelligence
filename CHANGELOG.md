@@ -7,6 +7,42 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — `sales.revenue_earned` metric (alongside Revenue Collected)
+
+Added a "Revenue Earned" metric so the collected-vs-earned gap is visible instead of
+implicit. Both sum over `closed_sales` (windowed on `close_date`) and pass through 1:1
+from WGR; earned is the full booked value, collected is cash actually taken in.
+
+- **`analytics/registry.py`** — new `sales.revenue_earned` metric (`SUM(revenue_earned)`),
+  mirroring `sales.revenue_collected`.
+- **Verified live (2026-06-29, via the psycopg2 snapshot session):**
+  all-time earned **$610,000** (n=60) vs collected **$403,250** (n=71) → gap **$206,750**.
+- **Data-quality flag (WGR source, not a CI bug):** of 75 closed sales, **15 have a NULL
+  `revenue_earned`** and 4 have a NULL `amount_collected`. So the $610k earned total is a
+  floor (omits 15 rows) and earned/collected sample sizes differ (60 vs 71) — in the 90d
+  window collected ($62k) even exceeds earned ($30k) because of the null-earned rows.
+  Chase these upstream in WGR if the totals must be authoritative.
+
+
+### Fixed — insights windowed on sync date instead of the lead's entry date
+
+The `sales.lead_to_close_rate` metric in the analytics registry filtered leads by
+`leads.created_at` (when the row was *synced* into CI), so a lead that entered the funnel
+months ago but was synced recently landed in the wrong trend window — skewing every
+snapshot/trend/recommendation built on that metric. Every other lead-windowed surface
+(`sales_stats.py`, `dashboard.py`, `leads.py`) already buckets on `entry_date`; this
+metric was the lone holdout.
+
+- **`analytics/registry.py`** — `sales.lead_to_close_rate` now windows on
+  `leads.entry_date` (the upstream funnel-entry date), excluding NULL `entry_date` rows
+  when a window is set, matching the established `sales_stats.py` convention (`entry_date`
+  is ~99% populated). All-time (`:since IS NULL`) is unchanged. Description updated.
+- **Note (not changed):** `sales.avg_call_score` and `sales.appointment_show_rate` use
+  `COALESCE(scored_at|scheduled_at, created_at)` — they prefer the real event date and
+  only fall back to sync time when it's NULL. Left as-is; revisit if those fallbacks fire
+  often (needs live data to quantify; servers were off at EOD).
+
+
 ### Fixed — dashboard member counts (showed 0 while the Members page showed 3)
 
 The dashboard read member stats from the legacy `members` table, which is **empty** (no

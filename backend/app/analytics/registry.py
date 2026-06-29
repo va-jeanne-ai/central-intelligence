@@ -54,7 +54,10 @@ _SALES_METRICS: list[Metric] = [
         label="Lead → Close Rate",
         unit="ratio",
         higher_is_better=True,
-        description="Share of leads (created in window) that have a closed sale. "
+        description="Share of leads (that ENTERED the funnel in window) that have a "
+        "closed sale. Windowed on leads.entry_date — the upstream funnel-entry date, "
+        "NOT created_at (when the row was synced into CI). Rows with a NULL entry_date "
+        "are excluded when a window is set (entry_date is ~99% populated). "
         "Join: closed_sales.lead_id = leads.external_id.",
         sql=text(
             """
@@ -67,7 +70,8 @@ _SALES_METRICS: list[Metric] = [
                     ) AS closed
                 FROM leads l
                 WHERE l.deleted_at IS NULL
-                  AND (:since IS NULL OR l.created_at >= :since)
+                  AND (:since IS NULL OR (l.entry_date IS NOT NULL
+                                          AND l.entry_date >= (:since)::date))
             )
             SELECT
                 COALESCE(AVG(CASE WHEN closed THEN 1.0 ELSE 0.0 END), 0) AS value,
@@ -147,6 +151,27 @@ _SALES_METRICS: list[Metric] = [
             SELECT
                 COALESCE(SUM(amount_collected), 0) AS value,
                 COUNT(*) FILTER (WHERE amount_collected IS NOT NULL) AS sample_size
+            FROM closed_sales
+            WHERE close_date IS NOT NULL
+              AND (:since IS NULL OR close_date >= (:since)::date)
+            """
+        ),
+    ),
+    Metric(
+        key="sales.revenue_earned",
+        area="sales",
+        label="Revenue Earned",
+        unit="currency",
+        higher_is_better=True,
+        description="Sum of revenue_earned over closed sales with a close_date in the "
+        "window. Distinct from Revenue Collected (amount_collected): earned is the full "
+        "booked value of the sale, collected is the cash actually taken in — the gap is "
+        "payment plans / outstanding balances. Both pass through 1:1 from WGR.",
+        sql=text(
+            """
+            SELECT
+                COALESCE(SUM(revenue_earned), 0) AS value,
+                COUNT(*) FILTER (WHERE revenue_earned IS NOT NULL) AS sample_size
             FROM closed_sales
             WHERE close_date IS NOT NULL
               AND (:since IS NULL OR close_date >= (:since)::date)
