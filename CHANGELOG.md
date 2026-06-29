@@ -7,6 +7,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Daily Overall Insight Celery task
+
+Wired the Overall Insight to regenerate automatically each day.
+
+- **`backend/app/tasks/overall_insight.py`** (new) — `capture_overall_insight` task, a thin
+  wrapper over `generate_overall_insight` over a sync session (mirrors
+  `capture_metric_snapshots`). `max_retries=2` (a paid LLM call shouldn't retry hard).
+- **`backend/app/tasks/celery_app.py`** — registered in `include`; beat entry
+  `overall-insight-daily` at **04:05 UTC** — 15 min after `metric-snapshots-daily` so it reads
+  the day's fresh snapshots/trends/recs. Idempotent per day (upsert on `insight_date`).
+- **COST:** one paid Claude call per run when `mock_mode=False`; a free mock otherwise — so the
+  entry is safe to ship before you're ready to spend (it only costs once mock mode is off).
+
 ### Added — Overall Insight: company-level health assessment
 
 A new hero card atop `/insights` answers "how is the company doing **overall**?" in plain
