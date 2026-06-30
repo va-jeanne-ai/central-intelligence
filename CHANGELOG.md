@@ -7,6 +7,34 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Chat history for the department directors (parity with /chat)
+
+The marketing / sales / fulfillment director chats now persist, with a per-director history
+sidebar (list, resume, delete) and reload-resume — the same experience Central Intelligence
+already had. Director sessions were in-memory only before (lost on refresh).
+
+- **Migration `t1e2f3a4b5c6`** — adds nullable `agent_slug` to `chat_sessions` (+ index
+  `ix_chat_sessions_user_agent`). NULL = Central Intelligence; a director slug for a director
+  session. Applied to OUR database (DATABASE_URL); existing CI sessions stay NULL/untouched.
+- **`backend/app/models/chat.py`** — `ChatSession.agent_slug`.
+- **`backend/app/services/chat_persistence.py`** — `ensure_session(..., agent_slug=None)`,
+  stored on create.
+- **`backend/app/routes/chat_sessions.py`** — list endpoint takes `?agent_slug=` and filters
+  `agent_slug IS NOT DISTINCT FROM :slug` (NULL ⇒ CI-only, slug ⇒ that director only — no bleed).
+- **`backend/app/routes/directors.py`** — the director WS route now persists user + assistant
+  turns (stamped with the director slug) and re-hydrates the transcript into the agent on
+  connect so a resumed session keeps full context. Truncated/incomplete responses are not saved.
+- **`frontend/src/lib/chat-sessions-client.ts`** — `list(agentSlug?)`.
+- **`frontend/src/components/chat/chat-history-sidebar.tsx`** — optional `agentSlug` prop.
+- **`frontend/src/hooks/use-director-chat.ts`** — full history parity: per-director localStorage
+  resume, `loadSession`, `startNewChat`, transcript restore on mount.
+- **`frontend/src/components/chat/{marketing,sales,fulfillment}-director-chat-view.tsx`** — render
+  the history sidebar (scoped to the director) beside the chat column.
+
+Verified: migration applied (agent_slug + index present, 5 existing CI rows NULL); the
+`IS NOT DISTINCT FROM` filter returns CI-only for NULL and director-only for a slug; backend
+imports clean; frontend `tsc --noEmit` passes.
+
 ### Added — Token-exhaustion / incomplete-response signal (no false "complete" answers)
 
 When the model stops before finishing (ran out of output tokens, rate limit, overload, etc.),

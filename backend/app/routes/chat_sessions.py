@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,15 +63,27 @@ def _parse_user_uuid(user_id: str) -> uuid.UUID | None:
     "/api/v1/chat/sessions", response_model=ChatSessionListResponse,
 )
 async def list_chat_sessions(
+    agent_slug: str | None = Query(
+        default=None,
+        description=(
+            "Scope the list to one chat surface. Omit for Central Intelligence "
+            "(agent_slug IS NULL); pass a director slug (e.g. 'marketing-director') "
+            "for that director's sessions only."
+        ),
+    ),
     db: AsyncSession = Depends(get_session),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ChatSessionListResponse:
-    """Return the calling user's chat sessions, newest first.
+    """Return the calling user's chat sessions for one surface, newest first.
 
     `last_message_at` is the sort key; sessions with no messages yet
     (created but never written to) sort last via NULLS LAST. Each row
     carries a denormalised ``message_count`` for the sidebar's
     "12 messages" trailing label.
+
+    ``agent_slug`` scopes by surface: ``IS NOT DISTINCT FROM`` treats NULL as a
+    matchable value, so no query param ⇒ Central Intelligence sessions only,
+    and a director slug ⇒ that director only. The two never bleed together.
     """
     user_uuid = _parse_user_uuid(current_user.id)
     if user_uuid is None:
@@ -91,9 +103,10 @@ async def list_chat_sessions(
                 )                   AS message_count
             FROM chat_sessions cs
             WHERE cs.user_id = :user_id
+              AND cs.agent_slug IS NOT DISTINCT FROM :agent_slug
             ORDER BY cs.last_message_at DESC NULLS LAST, cs.created_at DESC
         """),
-        {"user_id": str(user_uuid)},
+        {"user_id": str(user_uuid), "agent_slug": agent_slug},
     )).mappings().all()
 
     sessions = [

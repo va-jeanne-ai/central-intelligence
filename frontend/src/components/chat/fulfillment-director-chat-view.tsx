@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useDirectorChat } from "@/hooks/use-director-chat";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
+import { ChatHistorySidebar } from "@/components/chat/chat-history-sidebar";
 
 // ─── Static welcome message ───────────────────────────────────────────────────
 
@@ -129,22 +130,59 @@ function ChatTopbar({ isConnected, onClear }: ChatTopbarProps) {
 
 // ─── FulfillmentDirectorChatView ──────────────────────────────────────────────
 
+const DIRECTOR_SLUG = "fulfillment-director";
+
 export function FulfillmentDirectorChatView() {
-  const { messages, sendMessage, clearChat, isStreaming, isConnected } =
-    useDirectorChat("fulfillment-director");
+  const {
+    messages,
+    sendMessage,
+    clearChat,
+    isStreaming,
+    isConnected,
+    sessionId,
+    loadSession,
+    startNewChat,
+  } = useDirectorChat(DIRECTOR_SLUG);
 
   // Scroll anchor — sits at the bottom of the messages list.
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
+
+  // Bump to tell the sidebar to refetch (after a new chat's first turn persists).
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
 
   // Auto-scroll whenever the messages list grows.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // When a streaming turn finishes with messages present, a new session row may
+  // have just been born — refresh the sidebar so it appears.
+  const lastStreaming = useRef(false);
+  useEffect(() => {
+    if (lastStreaming.current && !isStreaming && messages.length > 0) {
+      setSidebarRefreshKey((k) => k + 1);
+    }
+    lastStreaming.current = isStreaming;
+  }, [isStreaming, messages.length]);
+
   const handleClear = useCallback(() => {
     clearChat();
   }, [clearChat]);
+
+  const handleSelectSession = useCallback(
+    (id: string) => {
+      void loadSession(id);
+    },
+    [loadSession],
+  );
+
+  const handleDeletedSession = useCallback(
+    (id: string) => {
+      if (id === sessionId) startNewChat();
+    },
+    [sessionId, startNewChat],
+  );
 
   // Derive the effective message list: prepend the static welcome bubble.
   const welcomeBubble = {
@@ -160,18 +198,35 @@ export function FulfillmentDirectorChatView() {
       ? [welcomeBubble]
       : [welcomeBubble, ...messages];
 
+  // History sidebar — rendered alongside the chat column in every state.
+  const sidebar = (
+    <ChatHistorySidebar
+      activeSessionId={sessionId}
+      refreshKey={sidebarRefreshKey}
+      agentSlug={DIRECTOR_SLUG}
+      onSelectSession={handleSelectSession}
+      onNewChat={startNewChat}
+      onDeleted={handleDeletedSession}
+    />
+  );
+
   // Show connecting screen until WebSocket is ready
   if (!isConnected) {
     return (
-      <div className="flex flex-col flex-1 overflow-hidden bg-white">
-        <ChatTopbar isConnected={false} onClear={handleClear} />
-        <DirectorConnecting />
+      <div className="flex flex-1 overflow-hidden bg-white">
+        {sidebar}
+        <div className="flex flex-col flex-1 overflow-hidden bg-white">
+          <ChatTopbar isConnected={false} onClear={handleClear} />
+          <DirectorConnecting />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden bg-white">
+    <div className="flex flex-1 overflow-hidden bg-white">
+      {sidebar}
+      <div className="flex flex-col flex-1 overflow-hidden bg-white">
       {/* Chat topbar */}
       <ChatTopbar isConnected={isConnected} onClear={handleClear} />
 
@@ -225,6 +280,7 @@ export function FulfillmentDirectorChatView() {
 
       {/* Input bar */}
       <ChatInput onSend={sendMessage} isDisabled={isStreaming} />
+      </div>
     </div>
   );
 }

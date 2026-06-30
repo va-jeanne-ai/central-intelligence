@@ -82,6 +82,106 @@ def _get_or_create_director(director_slug: str, session_id: str, db_session=None
 
 
 # ---------------------------------------------------------------------------
+# Persistence helpers — mirror routes/central_intelligence.py but stamp the
+# director slug as agent_slug so each director's history is its own surface.
+# Each runs in a short-lived session and never aborts the chat on failure.
+# ---------------------------------------------------------------------------
+
+
+def _user_id_from_token(token: str | None) -> str | None:
+    """Extract ``sub`` from a Supabase JWT (None when missing/invalid)."""
+    if not token:
+        return None
+    try:
+        from app.middleware.auth import verify_supabase_jwt
+        claims = verify_supabase_jwt(token)
+        if claims is None:
+            return None
+        return str(claims.get("sub") or "") or None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Director WS: failed to extract sub from token — %s", exc)
+        return None
+
+
+def _last_assistant_blocks(agent) -> list | None:
+    """Most recent assistant turn's content_blocks (for full-state replay)."""
+    history = getattr(agent, "conversation_history", None) or []
+    for entry in reversed(history):
+        if entry.get("role") == "assistant":
+            content = entry.get("content")
+            return content if isinstance(content, list) else None
+    return None
+
+
+async def _persist_user_turn(
+    *, session_id: str, user_id: str, agent_slug: str, message: str,
+) -> None:
+    from app.services import chat_persistence
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await chat_persistence.ensure_session(
+                db,
+                session_id=session_id,
+                user_id=user_id,
+                first_user_message=message,
+                agent_slug=agent_slug,
+            )
+            await chat_persistence.append_message(
+                db, session_id=session_id, role="user", content=message,
+            )
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Director persist_user_turn failed (%s): %s", session_id, exc)
+
+
+async def _persist_assistant_turn(
+    *, session_id: str, content: str, content_blocks: list | None,
+) -> None:
+    from app.services import chat_persistence
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await chat_persistence.append_message(
+                db,
+                session_id=session_id,
+                role="assistant",
+                content=content,
+                content_blocks=content_blocks,
+            )
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Director persist_assistant_turn failed (%s): %s", session_id, exc)
+
+
+async def _rehydrate_history(agent, session_id: str) -> None:
+    """Replay a persisted transcript into the agent before the next turn.
+
+    Lets a resumed director session continue with full prior context, exactly
+    like Central Intelligence. No-op (and silent) if nothing is stored yet.
+    """
+    if not hasattr(agent, "set_conversation_history"):
+        return
+    if getattr(agent, "conversation_history", None):
+        return  # already has in-memory context for this process
+    from app.services import chat_persistence
+
+    try:
+        async with AsyncSessionLocal() as db:
+            history = await chat_persistence.load_history_for_agent(
+                db, session_id=session_id,
+            )
+        if history:
+            agent.set_conversation_history(history)
+            logger.info(
+                "Director WS: rehydrated %d turn(s) for session %s",
+                len(history), session_id,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Director WS: history rehydrate failed (%s): %s", session_id, exc)
+
+
+# ---------------------------------------------------------------------------
 # WS /ws/v1/{director_slug}/{session_id}
 # ---------------------------------------------------------------------------
 
@@ -134,6 +234,12 @@ async def director_websocket(
 
         logger.info("Director WebSocket connected: %s/%s", director_slug, session_id)
 
+        # Who is this (for persistence) + replay any stored transcript so a
+        # resumed session keeps full context. user_id is None in mock/no-auth
+        # mode, in which case we simply don't persist.
+        user_id = _user_id_from_token(token)
+        await _rehydrate_history(agent, session_id)
+
         channel = f"{director_slug}:chat-stream:{session_id}"
 
         while True:
@@ -168,6 +274,17 @@ async def director_websocket(
                 "Director WebSocket message: %s/%s len=%d",
                 director_slug, session_id, len(message),
             )
+
+            # Persist the user's turn BEFORE streaming so a mid-stream
+            # disconnect still leaves it in the transcript (stamped with this
+            # director's slug). Skipped in mock/no-auth mode (user_id is None).
+            if user_id:
+                await _persist_user_turn(
+                    session_id=session_id,
+                    user_id=user_id,
+                    agent_slug=director_slug,
+                    message=message,
+                )
 
             # ---- Stream response ----------------------------------------
             accumulated: list[str] = []
@@ -220,6 +337,17 @@ async def director_websocket(
                     "Director WebSocket stream complete: %s/%s tokens=%d chars=%d finish=%s",
                     director_slug, session_id, token_index, len(full_response), finish_reason,
                 )
+
+                # Persist the assistant turn once the stream finishes cleanly.
+                # Truncated/incomplete responses are NOT saved — the user will
+                # reload and re-ask, and we don't want a cut-off answer in the
+                # replayed history.
+                if user_id and not is_incomplete and full_response:
+                    await _persist_assistant_turn(
+                        session_id=session_id,
+                        content=full_response,
+                        content_blocks=_last_assistant_blocks(agent),
+                    )
 
             except WebSocketDisconnect:
                 logger.info(

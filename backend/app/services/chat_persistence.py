@@ -53,6 +53,7 @@ async def ensure_session(
     session_id: str,
     user_id: str,
     first_user_message: str,
+    agent_slug: str | None = None,
 ) -> ChatSession:
     """Find-or-create a ``chat_sessions`` row.
 
@@ -61,6 +62,10 @@ async def ensure_session(
     holds the canonical ``session_id`` (minted client-side or by the
     route layer), so we pass it through here rather than letting the
     DB generate it.
+
+    ``agent_slug`` records which surface owns the session — None for Central
+    Intelligence, a director slug for a department chat — and is set on
+    creation only (it never changes for a given session_id).
     """
     try:
         session_uuid = uuid.UUID(session_id)
@@ -81,6 +86,7 @@ async def ensure_session(
         id=session_uuid,
         user_id=user_uuid,
         title=derive_title(first_user_message),
+        agent_slug=agent_slug,
     )
     db.add(row)
     await db.flush()

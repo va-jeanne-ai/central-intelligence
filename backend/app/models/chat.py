@@ -41,6 +41,13 @@ class ChatSession(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # Which agent surface owns this session. NULL = Central Intelligence (the
+    # original /chat surface); a director slug (e.g. 'marketing-director') for a
+    # department-director chat. Scopes the history sidebar per surface so
+    # directors don't share CI's list. See routes/chat_sessions.list filter.
+    agent_slug: Mapped[str | None] = mapped_column(
+        String(64), nullable=True,
+    )
     # First ~60 chars of the user's first message + '…' if truncated.
     # User-editable later via PATCH /chat/sessions/{id}.
     title: Mapped[str] = mapped_column(String(120), nullable=False)
