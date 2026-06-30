@@ -91,6 +91,70 @@ class SocialStatsRepository(RepositoryBase[SocialStats]):
             "avg_engagement": float(row.avg_engagement),
         }
 
+    async def aggregate_instagram_totals(
+        self,
+        *,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> dict:
+        """Aggregate real per-post engagement from ``instagram_posts``.
+
+        The period-aggregate ``social_stats`` table is not populated by the WGR
+        sync — actual social performance lands per-post in ``instagram_posts``
+        (likes/comments/saves/shares/reach + engagement_rate). This rolls those
+        rows up so the Social Media Specialist reports the data that exists.
+
+        ``date_from`` / ``date_to`` scope on ``posted_at`` (inclusive). This is
+        a different grain from ``aggregate_totals``: there is no follower count
+        in this table, so the key is absent rather than reported as zero.
+        """
+        filters = []
+        if date_from is not None:
+            filters.append(InstagramPost.posted_at >= date_from)
+        if date_to is not None:
+            filters.append(InstagramPost.posted_at <= date_to)
+
+        stmt = select(
+            func.count(InstagramPost.id).label("total_posts"),
+            func.coalesce(func.sum(InstagramPost.likes_count), 0).label("likes"),
+            func.coalesce(func.sum(InstagramPost.comments_count), 0).label("comments"),
+            func.coalesce(func.sum(InstagramPost.saves_count), 0).label("saves"),
+            func.coalesce(func.sum(InstagramPost.shares_count), 0).label("shares"),
+            func.coalesce(func.sum(InstagramPost.reach), 0).label("reach"),
+            func.coalesce(func.sum(InstagramPost.views), 0).label("views"),
+            func.avg(InstagramPost.engagement_rate).label("avg_engagement"),
+            func.min(InstagramPost.posted_at).label("earliest"),
+            func.max(InstagramPost.posted_at).label("latest"),
+        )
+        if filters:
+            stmt = stmt.where(*filters)
+
+        row = (await self.session.execute(stmt)).one()
+        avg_eng = float(row.avg_engagement) if row.avg_engagement is not None else 0.0
+        return {
+            "platform": "instagram",
+            "total_posts": int(row.total_posts),
+            "total_likes": int(row.likes),
+            "total_comments": int(row.comments),
+            "total_saves": int(row.saves),
+            "total_shares": int(row.shares),
+            "total_reach": int(row.reach),
+            "total_views": int(row.views),
+            "avg_engagement_rate": round(avg_eng, 4),
+            "_meta": {
+                "source_table": "instagram_posts",
+                "date_from": date_from.isoformat() if date_from else None,
+                "date_to": date_to.isoformat() if date_to else None,
+                "earliest_post": row.earliest.isoformat() if row.earliest else None,
+                "latest_post": row.latest.isoformat() if row.latest else None,
+                "note": (
+                    "Per-post Instagram data from instagram_posts. Follower count "
+                    "is not ingested (social_stats is empty), so it is omitted "
+                    "rather than reported as zero."
+                ),
+            },
+        }
+
     async def upsert_stats(
         self,
         platform: str,

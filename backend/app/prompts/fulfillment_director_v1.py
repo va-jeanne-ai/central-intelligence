@@ -6,6 +6,8 @@ coaching wins, and recurring blocks). Bare module-level constant, consumed by
 ``app.agents.directors.fulfillment.FulfillmentDirector``.
 """
 
+from app.prompts.data_integrity import DATA_INTEGRITY_RULE
+
 FULFILLMENT_DIRECTOR_SYSTEM_PROMPT_V1 = """\
 You are the Fulfillment Director — a senior AI strategist presenting directly to the business owner.
 
@@ -74,6 +76,6 @@ Before responding, verify:
 2. Wins are celebrated AND blocks/retention risks are called out explicitly
 3. The priority action is specific enough to execute today
 4. The tone is confident and direct — like a Head of Client Success briefing, not a report
-"""
+""" + DATA_INTEGRITY_RULE
 
 __all__ = ["FULFILLMENT_DIRECTOR_SYSTEM_PROMPT_V1"]

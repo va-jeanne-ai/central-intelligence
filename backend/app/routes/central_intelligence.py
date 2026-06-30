@@ -276,18 +276,30 @@ async def _sse_generator(
             yield frame
 
         full_response = "".join(accumulated)
+        from app.agents.base import (
+            FINISH_COMPLETE,
+            INCOMPLETE_FINISH_REASONS,
+            FINISH_NOTICES,
+        )
+
+        finish_reason = getattr(agent, "last_finish_reason", FINISH_COMPLETE)
+        is_incomplete = finish_reason in INCOMPLETE_FINISH_REASONS
         yield _sse_frame(
             ChatChunk(
                 chunk="",
                 session_id=session_id,
                 done=True,
                 full_response=full_response,
+                status="incomplete" if is_incomplete else "complete",
+                finish_reason=finish_reason,
+                notice=FINISH_NOTICES.get(finish_reason) if is_incomplete else None,
             )
         )
         logger.info(
-            "SSE stream complete for session %s (%d chars)",
+            "SSE stream complete for session %s (%d chars) finish=%s",
             session_id,
             len(full_response),
+            finish_reason,
         )
 
         if user_id:
@@ -494,24 +506,33 @@ async def central_intelligence_websocket(
                     token_index += 1
 
                 full_response = "".join(accumulated)
-                final_frame = json.dumps(
-                    {
-                        "channel": channel,
-                        "data": {
-                            "sessionId": session_id,
-                            "chunk": "",
-                            "tokenIndex": token_index,
-                            "isComplete": True,
-                            "fullResponse": full_response,
-                        },
-                    }
+                from app.agents.base import (
+                    FINISH_COMPLETE,
+                    INCOMPLETE_FINISH_REASONS,
+                    FINISH_NOTICES,
                 )
+
+                finish_reason = getattr(agent, "last_finish_reason", FINISH_COMPLETE)
+                is_incomplete = finish_reason in INCOMPLETE_FINISH_REASONS
+                final_data = {
+                    "sessionId": session_id,
+                    "chunk": "",
+                    "tokenIndex": token_index,
+                    "isComplete": True,
+                    "fullResponse": full_response,
+                    "status": "incomplete" if is_incomplete else "complete",
+                    "finishReason": finish_reason,
+                }
+                if is_incomplete:
+                    final_data["notice"] = FINISH_NOTICES.get(finish_reason)
+                final_frame = json.dumps({"channel": channel, "data": final_data})
                 await websocket.send_text(final_frame)
                 logger.info(
-                    "WebSocket stream complete: session=%s tokens=%d chars=%d",
+                    "WebSocket stream complete: session=%s tokens=%d chars=%d finish=%s",
                     session_id,
                     token_index,
                     len(full_response),
+                    finish_reason,
                 )
 
                 if user_id:

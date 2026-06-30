@@ -32,6 +32,9 @@ interface ChatHistorySidebarProps {
   /** Bump this number when a fresh chat sends its first message so the
    * sidebar refetches and surfaces the new row. */
   refreshKey?: number;
+  /** Scope the list to one chat surface. Omit for Central Intelligence;
+   * pass a director slug (e.g. "marketing-director") for that director. */
+  agentSlug?: string;
   onSelectSession: (sessionId: string) => void;
   onNewChat: () => void;
   /** Called after a session is deleted, so the parent can switch away
@@ -44,6 +47,7 @@ interface ChatHistorySidebarProps {
 export function ChatHistorySidebar({
   activeSessionId,
   refreshKey,
+  agentSlug,
   onSelectSession,
   onNewChat,
   onDeleted,
@@ -55,7 +59,7 @@ export function ChatHistorySidebar({
 
   const load = useCallback(async () => {
     try {
-      const data = await chatSessionsClient.list();
+      const data = await chatSessionsClient.list(agentSlug);
       setSessions(data.sessions);
     } catch {
       // Silent — the sidebar is a nice-to-have; don't poison the page
@@ -63,7 +67,7 @@ export function ChatHistorySidebar({
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [agentSlug]);
 
   // Initial load + refetch whenever refreshKey bumps (parent signals
   // "a new session was just born, please refresh the list").

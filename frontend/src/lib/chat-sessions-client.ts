@@ -12,9 +12,16 @@ import type {
 } from "@/types";
 
 export const chatSessionsClient = {
-  /** GET /api/v1/chat/sessions — current user's sessions newest-first. */
-  list(): Promise<ChatSessionListResponse> {
-    return apiClient.get<ChatSessionListResponse>("/chat/sessions", {
+  /** GET /api/v1/chat/sessions — current user's sessions newest-first.
+   *
+   * Pass `agentSlug` to scope to one surface: omit for Central Intelligence,
+   * or a director slug (e.g. "marketing-director") for that director only.
+   */
+  list(agentSlug?: string): Promise<ChatSessionListResponse> {
+    const qs = agentSlug
+      ? `?agent_slug=${encodeURIComponent(agentSlug)}`
+      : "";
+    return apiClient.get<ChatSessionListResponse>(`/chat/sessions${qs}`, {
       silent: true,
     });
   },

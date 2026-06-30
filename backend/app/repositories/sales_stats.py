@@ -50,6 +50,7 @@ async def compute_lead_stats(
     *,
     date_from: str | None = None,
     date_to: str | None = None,
+    window_weeks: int = 8,
 ) -> dict:
     """Aggregate lead data into KPIs, an 8-week volume series, source
     breakdown, and a four-stage sales funnel.
@@ -182,10 +183,13 @@ async def compute_lead_stats(
         "avg_deal_value": avg_deal_value,  # range-scoped, for the funnel rail
     }
 
-    # ---- 5. Lead volume — 8 weeks ending at the range end, by entry_date -----
+    # ---- 5. Lead volume — `window_weeks` weeks ending at range end, by entry_date
     # Bucketed on entry_date (not created_at) and anchored to the selected
     # range's end (date_to), falling back to today when no end is set. This
-    # keeps it a real 8-week trend while following the entered-date window.
+    # keeps it a real trailing trend while following the entered-date window.
+    # `window_weeks` (default 8) is clamped at the tool layer; clamp again here
+    # so a direct caller can't ask for a 0- or 10000-bucket series.
+    weeks = max(1, min(int(window_weeks), 52))
     vol_anchor = d_to or date.today()
     row = await session.execute(
         text(
@@ -196,25 +200,25 @@ async def compute_lead_stats(
             FROM leads
             WHERE deleted_at IS NULL
               AND entry_date IS NOT NULL
-              AND entry_date >  CAST(:anchor AS date) - INTERVAL '8 weeks'
+              AND entry_date >  CAST(:anchor AS date) - (:weeks * INTERVAL '1 week')
               AND entry_date <= CAST(:anchor AS date)
             GROUP BY weeks_ago
             ORDER BY weeks_ago DESC
             """
         ),
-        {"anchor": vol_anchor},
+        {"anchor": vol_anchor, "weeks": weeks},
     )
     volume_map: dict[int, int] = {r[0]: _int(r[1]) for r in row.fetchall()}
 
     # The newest bucket is "Now" only when the anchor really is today; for a
-    # past range end it's just the last week (Wk 8).
+    # past range end it's just the last week (Wk N).
     anchor_is_today = vol_anchor == date.today()
     lead_volume: list[dict] = [
         {
-            "label": "Now" if (w == 0 and anchor_is_today) else f"Wk {8 - w}",
+            "label": "Now" if (w == 0 and anchor_is_today) else f"Wk {weeks - w}",
             "value": volume_map.get(w, 0),
         }
-        for w in range(7, -1, -1)  # oldest (Wk 1) → newest (anchor week)
+        for w in range(weeks - 1, -1, -1)  # oldest (Wk 1) → newest (anchor week)
     ]
 
     # ---- 6. Source breakdown (in range) -------------------------------------
@@ -298,6 +302,15 @@ async def compute_lead_stats(
         "lead_volume": lead_volume,
         "source_breakdown": source_breakdown,
         "funnel": funnel,
+        # Trace block: which window produced these numbers. Lets the director
+        # (and any auditor) see the exact scope it's reasoning over instead of
+        # guessing. Routes ignore it; the agent tooling surfaces it.
+        "_meta": {
+            "window_weeks": weeks,
+            "date_from": date_from,
+            "date_to": date_to,
+            "anchor": vol_anchor.isoformat(),
+        },
     }
 
 

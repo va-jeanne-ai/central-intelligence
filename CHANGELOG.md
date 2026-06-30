@@ -7,6 +7,121 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Chat history for the department directors (parity with /chat)
+
+The marketing / sales / fulfillment director chats now persist, with a per-director history
+sidebar (list, resume, delete) and reload-resume — the same experience Central Intelligence
+already had. Director sessions were in-memory only before (lost on refresh).
+
+- **Migration `t1e2f3a4b5c6`** — adds nullable `agent_slug` to `chat_sessions` (+ index
+  `ix_chat_sessions_user_agent`). NULL = Central Intelligence; a director slug for a director
+  session. Applied to OUR database (DATABASE_URL); existing CI sessions stay NULL/untouched.
+- **`backend/app/models/chat.py`** — `ChatSession.agent_slug`.
+- **`backend/app/services/chat_persistence.py`** — `ensure_session(..., agent_slug=None)`,
+  stored on create.
+- **`backend/app/routes/chat_sessions.py`** — list endpoint takes `?agent_slug=` and filters
+  `agent_slug IS NOT DISTINCT FROM :slug` (NULL ⇒ CI-only, slug ⇒ that director only — no bleed).
+- **`backend/app/routes/directors.py`** — the director WS route now persists user + assistant
+  turns (stamped with the director slug) and re-hydrates the transcript into the agent on
+  connect so a resumed session keeps full context. Truncated/incomplete responses are not saved.
+- **`frontend/src/lib/chat-sessions-client.ts`** — `list(agentSlug?)`.
+- **`frontend/src/components/chat/chat-history-sidebar.tsx`** — optional `agentSlug` prop.
+- **`frontend/src/hooks/use-director-chat.ts`** — full history parity: per-director localStorage
+  resume, `loadSession`, `startNewChat`, transcript restore on mount.
+- **`frontend/src/components/chat/{marketing,sales,fulfillment}-director-chat-view.tsx`** — render
+  the history sidebar (scoped to the director) beside the chat column.
+
+Verified: migration applied (agent_slug + index present, 5 existing CI rows NULL); the
+`IS NOT DISTINCT FROM` filter returns CI-only for NULL and director-only for a slug; backend
+imports clean; frontend `tsc --noEmit` passes.
+
+### Added — Token-exhaustion / incomplete-response signal (no false "complete" answers)
+
+When the model stops before finishing (ran out of output tokens, rate limit, overload, etc.),
+the chat surfaces now flag the response as **incomplete** and show a reload prompt, instead of
+presenting the cut-off text as a finished answer. Critically, a truncated turn's tool calls are
+**not executed** (their args may be partial/unreliable).
+
+- **`backend/app/agents/base.py`** — `stream_response` now detects `stop_reason == "max_tokens"`
+  after the stream: it stops, sets `last_finish_reason`, and does NOT run any (possibly truncated)
+  tool_use blocks. New finish-reason constants (`FINISH_MAX_TOKENS`, `FINISH_RATE_LIMITED`,
+  `FINISH_OVERLOADED`, `FINISH_MAX_TOOL_ROUNDS`, `FINISH_ERROR`), an `INCOMPLETE_FINISH_REASONS`
+  set, and per-reason `FINISH_NOTICES`. Rate-limit/overload/connection/API-error branches and the
+  max-tool-rounds valve all set a finish reason. `execute()` returns `finish_reason` + `incomplete`.
+- **`backend/app/schemas/chat.py`** — `ChatChunk` gains `status` / `finish_reason` / `notice`
+  (final-frame only).
+- **`backend/app/routes/{directors,central_intelligence}.py`** — both streaming surfaces (WS for
+  directors + CI, SSE for CI) read `agent.last_finish_reason` after the stream and add
+  `status` (`complete` | `incomplete`), `finishReason`, and a human `notice` to the final frame.
+- **`frontend/src/types/index.ts`** — `WebSocketMessage.data`, `ChatChunk`, and `ChatMessage`
+  carry the optional `status` / `finishReason` / `notice` / `incomplete` fields.
+- **`frontend/src/hooks/{use-chat,use-director-chat}.ts`** — on the final frame, mark the assistant
+  message `incomplete` (keeping the partial text) when `status === "incomplete"`.
+- **`frontend/src/components/chat/message-bubble.tsx`** — renders an amber `IncompleteNotice`
+  with a **Reload** button under any message flagged incomplete (shared across all chat views).
+
+Verified: a stubbed `max_tokens` turn flags `finish_reason=max_tokens`, keeps the partial text,
+and skips the truncated tool call; a normal `end_turn` stays `complete`. Frontend `tsc --noEmit`
+passes.
+
+### Fixed — Marketing director reported zero social data (read from empty table)
+
+The Social Media Specialist's `get_social_data` read `social_stats`, which the WGR sync
+never populates (0 rows) — so the marketing director truthfully but uselessly reported
+zero followers / zero posts / 0% engagement. The real data lives per-post in
+`instagram_posts` (1,000 rows: ~283K likes, ~76K comments, ~182K saves, 17.1M reach,
+4.21% avg engagement, Aug 2025–Jun 2026).
+
+- **`backend/app/repositories/marketing.py`** — new `SocialStatsRepository.aggregate_instagram_totals()`
+  rolls up the real per-post metrics (likes/comments/saves/shares/reach/views + avg
+  engagement_rate) with optional `posted_at` range and a `_meta` block. Different grain from
+  `aggregate_totals`: no follower count exists in that table, so the key is omitted (not zero).
+- **`backend/app/agents/specialists/social_media.py`** — `get_social_data` now calls the new
+  method; tool description states it returns Instagram per-post aggregates and that follower
+  count is intentionally absent. Dropped the unused `limit` param.
+
+**FOLLOW-UP:** `social_stats` (period aggregate) and `social_comments` (11,702 rows) are still
+unused by the director. If a follower trend is wanted, the WGR sync needs to populate
+`social_stats` — flagged, not done here.
+
+### Changed — Director data tools: parameterized windows + data-integrity contract
+
+Directors can now answer time-scoped questions over real data with a flexible window
+instead of a single hardcoded 8-week view, and a shared rule forbids fabricating numbers.
+Refines the no-heuristics pivot: directors reason over real data freely, but never originate
+the numbers and ask the user when the data is ambiguous.
+
+- **`backend/app/agents/directors/base.py`** (new shared contract) — `WINDOW_PARAMS` JSON-schema
+  fragment (`date_from` / `date_to` / `window_weeks`), `build_window()` (validates + clamps
+  `window_weeks` to 1–52, bad dates → all-time), and `window_meta()`. One place all directors
+  reference so the time-window params are identical everywhere.
+- **`backend/app/repositories/sales_stats.py`** — `compute_lead_stats` gains `window_weeks`
+  (default 8); the lead-volume sparkline's hardcoded `INTERVAL '8 weeks'` is now bound from the
+  param, and the bucket/label loop is dynamic. Response carries a `_meta` trace block
+  (`window_weeks`, `date_from`, `date_to`, `anchor`).
+- **`backend/app/repositories/fulfillment_stats.py`** — `compute_member_stats` gains
+  `date_from` / `date_to` / `window_weeks` (it had **none** before — was inconsistent with
+  sales). KPIs, status breakdown, and goal funnel now honor the range; enrollment-volume
+  sparkline anchors on `date_to` and spans `window_weeks`. Adds `_meta`. Removed the local
+  `_week_label` helper (inlined, since it hardcoded `8 -`).
+- **`backend/app/agents/directors/{sales,fulfillment}.py`** — summary tools expose
+  `WINDOW_PARAMS` and pass them through `build_window`. Defaults preserve current behavior.
+- **`backend/app/agents/directors/marketing.py`** — `get_market_signals` gains an honest
+  `timeframe` enum (`trending` = precomputed last-7-day counter, `all_time` = total-mentions
+  counter) instead of a fake date range, since this data is denormalized counters, not dated
+  rows; response now `{_meta, signals}`. `get_top_pain_points` description states it's an
+  all-history `frequency_count` counter with no date slice.
+- **`backend/app/prompts/data_integrity.py`** (new) — canonical `DATA_INTEGRITY_RULE` appended
+  to all three director prompts: hypothesize about meaning freely, never originate numbers,
+  cite `_meta` scope, and **ask the user when data is ambiguous** rather than guess/fabricate.
+
+**FOLLOW-UPS (flagged, not done here):**
+- The same hardcoded-8 `_week_label` pattern still lives in `repositories/tech_sos_stats.py`,
+  `repositories/appointment_stats.py`, and `routes/{dashboard,leads}.py` — parameterize them
+  the same way in a follow-up.
+- Marketing signals/pain-points can't be *truly* date-ranged until the ingest stores per-mention
+  dated rows (today they're precomputed counters). A real date slice needs a schema/ingest change.
+
 ### Added — Daily Overall Insight Celery task
 
 Wired the Overall Insight to regenerate automatically each day.

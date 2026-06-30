@@ -6,6 +6,11 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   isStreaming?: boolean;
+  // Set when the model stopped before finishing (e.g. ran out of tokens). The
+  // content is partial and must be shown as incomplete with a reload prompt.
+  incomplete?: boolean;
+  finishReason?: string;
+  notice?: string;
 }
 
 export interface ChatChunk {
@@ -13,6 +18,10 @@ export interface ChatChunk {
   done?: boolean;
   session_id: string;
   full_response?: string;
+  // Final-frame only. "complete" = finished; "incomplete" = stopped early.
+  status?: "complete" | "incomplete";
+  finish_reason?: string;
+  notice?: string;
 }
 
 // ─── WebSocket ─────────────────────────────────────────────────────────────────
@@ -25,6 +34,10 @@ export interface WebSocketMessage {
     tokenIndex: number;
     isComplete: boolean;
     fullResponse?: string;
+    // Final-frame only. "incomplete" means the streamed text was cut off.
+    status?: "complete" | "incomplete";
+    finishReason?: string;
+    notice?: string;
   };
 }
 

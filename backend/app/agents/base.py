@@ -23,6 +23,54 @@ logger = logging.getLogger(__name__)
 _OVERLOAD_MAX_RETRIES = 3
 
 
+# Finish reasons surfaced to callers (route layer → frontend) after a stream.
+# "complete" is the normal happy path; the rest mean the answer is partial or
+# absent and MUST NOT be treated as a finished result. Read via
+# ``agent.last_finish_reason`` once ``stream_response`` is exhausted.
+FINISH_COMPLETE = "complete"
+FINISH_MAX_TOKENS = "max_tokens"        # model ran out of output tokens mid-answer
+FINISH_RATE_LIMITED = "rate_limited"    # 429 from the API
+FINISH_OVERLOADED = "overloaded"        # 529 overloaded, retries exhausted
+FINISH_MAX_TOOL_ROUNDS = "max_tool_rounds"  # tool loop safety valve hit
+FINISH_ERROR = "error"                  # connection / other API error
+
+# Finish reasons that mean "the response is NOT a complete, trustworthy answer."
+INCOMPLETE_FINISH_REASONS = frozenset(
+    {
+        FINISH_MAX_TOKENS,
+        FINISH_RATE_LIMITED,
+        FINISH_OVERLOADED,
+        FINISH_MAX_TOOL_ROUNDS,
+        FINISH_ERROR,
+    }
+)
+
+# Human-facing notices per incomplete reason. The frontend may override these,
+# but they give every surface a sane default to show next to a reload affordance.
+FINISH_NOTICES = {
+    FINISH_MAX_TOKENS: (
+        "The assistant ran out of tokens before finishing this response. "
+        "The text above is incomplete — reload to continue."
+    ),
+    FINISH_RATE_LIMITED: (
+        "Rate limit reached before the response finished. "
+        "Please wait a moment and reload."
+    ),
+    FINISH_OVERLOADED: (
+        "The service was temporarily overloaded and the response did not finish. "
+        "Please reload to try again."
+    ),
+    FINISH_MAX_TOOL_ROUNDS: (
+        "The assistant reached its tool-use limit before finishing. "
+        "The result may be incomplete — reload to continue."
+    ),
+    FINISH_ERROR: (
+        "An error interrupted the response before it finished. "
+        "Please reload to try again."
+    ),
+}
+
+
 class BaseAgent:
     """Abstract agent with Anthropic SDK integration, tool registry, and streaming.
 
@@ -60,7 +108,17 @@ class BaseAgent:
         self.system_prompt: str = ""
         self.conversation_history: list[dict] = []
 
+        # Why the most recent stream_response ended. The route layer reads this
+        # AFTER the stream is exhausted to tell the frontend whether the answer
+        # is complete or was cut off (tokens/rate-limit/etc). Reset per turn.
+        self.last_finish_reason: str = FINISH_COMPLETE
+
         logger.info("Initialized agent %s (%s) on model %s", agent_id, name, model)
+
+    @property
+    def last_finish_notice(self) -> str | None:
+        """Human-facing notice for an incomplete finish, else None."""
+        return FINISH_NOTICES.get(self.last_finish_reason)
 
     # -------------------------------------------------------------------
     # Tool registration
@@ -105,6 +163,11 @@ class BaseAgent:
         response or ``max_tool_rounds`` is exhausted.
         """
         self.conversation_history.append({"role": "user", "content": message})
+
+        # Assume success until something says otherwise. Callers inspect this
+        # after the stream ends; an incomplete value means "do not treat the
+        # streamed text as a finished answer."
+        self.last_finish_reason = FINISH_COMPLETE
 
         rounds = 0
         has_yielded_text = False
@@ -167,6 +230,7 @@ class BaseAgent:
                             attempt + 1,
                             exc,
                         )
+                        self.last_finish_reason = FINISH_OVERLOADED
                         yield "\n\n[Service is temporarily overloaded. Please try again in a moment.]"
                         return
 
@@ -175,6 +239,7 @@ class BaseAgent:
                     "Rate-limited on agent %s: %s — backing off", self.agent_id, exc
                 )
                 # Surface a user-friendly message and stop the turn.
+                self.last_finish_reason = FINISH_RATE_LIMITED
                 yield "\n\n[Rate limit reached. Please try again in a moment.]"
                 return
 
@@ -182,6 +247,7 @@ class BaseAgent:
                 logger.error(
                     "Connection error on agent %s: %s", self.agent_id, exc
                 )
+                self.last_finish_reason = FINISH_ERROR
                 yield "\n\n[Connection error. Please check network and retry.]"
                 return
 
@@ -192,6 +258,7 @@ class BaseAgent:
                     getattr(exc, "status_code", "unknown"),
                     exc,
                 )
+                self.last_finish_reason = FINISH_ERROR
                 yield f"\n\n[API error: {exc.message}]"
                 return
 
@@ -201,6 +268,21 @@ class BaseAgent:
             self.conversation_history.append(
                 {"role": "assistant", "content": self._serialize_content(response.content)}
             )
+
+            # ----- Token exhaustion -----
+            # The model hit max_tokens before finishing. Whatever streamed is a
+            # partial answer, and any tool_use blocks may be truncated — do NOT
+            # execute them (truncated args are unreliable). Flag the turn as
+            # incomplete and stop so the route/frontend can show a reload notice
+            # rather than present the cut-off text as a finished result.
+            if getattr(response, "stop_reason", None) == "max_tokens":
+                logger.warning(
+                    "Agent %s: stop_reason=max_tokens at round %d — response truncated",
+                    self.agent_id,
+                    rounds,
+                )
+                self.last_finish_reason = FINISH_MAX_TOKENS
+                return
 
             # ----- Tool-use handling -----
             tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
@@ -232,6 +314,7 @@ class BaseAgent:
         logger.warning(
             "Agent %s hit max tool rounds (%d)", self.agent_id, self.max_tool_rounds
         )
+        self.last_finish_reason = FINISH_MAX_TOOL_ROUNDS
         yield "\n\n[Reached maximum tool execution rounds. Stopping.]"
 
     # -------------------------------------------------------------------
@@ -251,6 +334,8 @@ class BaseAgent:
         return {
             "agent_id": self.agent_id,
             "response": "".join(chunks),
+            "finish_reason": self.last_finish_reason,
+            "incomplete": self.last_finish_reason in INCOMPLETE_FINISH_REASONS,
         }
 
     # -------------------------------------------------------------------

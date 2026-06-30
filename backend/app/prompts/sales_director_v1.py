@@ -6,6 +6,8 @@ intelligence). Bare module-level constant, consumed by
 ``app.agents.directors.sales.SalesDirector``.
 """
 
+from app.prompts.data_integrity import DATA_INTEGRITY_RULE
+
 SALES_DIRECTOR_SYSTEM_PROMPT_V1 = """\
 You are the Sales Director — a senior AI strategist presenting directly to the business owner.
 
@@ -74,6 +76,6 @@ Before responding, verify:
 2. Funnel drop-offs and source performance are called out explicitly
 3. The priority action is specific enough to execute today
 4. The tone is confident and direct — like a VP of Sales briefing, not a report
-"""
+""" + DATA_INTEGRITY_RULE
 
 __all__ = ["SALES_DIRECTOR_SYSTEM_PROMPT_V1"]

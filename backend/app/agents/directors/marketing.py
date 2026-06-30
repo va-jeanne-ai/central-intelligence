@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.directors.base import DirectorAgent
+from app.prompts.data_integrity import DATA_INTEGRITY_RULE
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ Before responding, verify:
 2. Cross-channel patterns are called out (e.g., same VoC gap across email and social)
 3. The priority action is specific enough to execute today
 4. The tone is confident and direct — like a CMO briefing, not a report
-"""
+""" + DATA_INTEGRITY_RULE
 
     def __init__(
         self,
@@ -186,7 +187,13 @@ Before responding, verify:
 
         self.register_tool(
             name="get_top_pain_points",
-            description="Retrieve the most frequently mentioned pain points from customer calls.",
+            description=(
+                "Retrieve the most frequently mentioned pain points from customer "
+                "calls, ranked by a precomputed frequency_count. This is an "
+                "all-history counter, not a dated feed — there is no date-range "
+                "slice for it; don't infer one. Each item reports its "
+                "frequency_count so the ranking basis is visible."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
@@ -232,12 +239,26 @@ Before responding, verify:
         self.register_tool(
             name="get_market_signals",
             description=(
-                "Retrieve trending market signals from customer call analysis. "
-                "Returns signals with the highest activity in the last 7 days."
+                "Retrieve market signals from customer call analysis. These are "
+                "stored as precomputed counters, NOT dated rows, so only two "
+                "timeframes are real: 'trending' ranks by a precomputed last-7-day "
+                "activity counter; 'all_time' ranks by total mentions across all "
+                "history. There is no arbitrary date-range slice for this data — do "
+                "not infer one. Each signal reports last_7_days and total_mentions "
+                "so you can see the basis of the ranking."
             ),
             input_schema={
                 "type": "object",
                 "properties": {
+                    "timeframe": {
+                        "type": "string",
+                        "enum": ["trending", "all_time"],
+                        "description": (
+                            "'trending' = precomputed last-7-day counter (default); "
+                            "'all_time' = total mentions across all history."
+                        ),
+                        "default": "trending",
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Number of signals to return (default 15)",
@@ -351,22 +372,39 @@ Before responding, verify:
             ]
         )
 
-    async def _handle_get_market_signals(self, limit: int = 15) -> str:
+    async def _handle_get_market_signals(
+        self, timeframe: str = "trending", limit: int = 15
+    ) -> str:
         from app.repositories.intelligence import MarketSignalRepository
 
         repo = MarketSignalRepository(self._session)
-        signals = await repo.find_trending(limit=limit)
+        # Only two real bases exist for this denormalized counter data; anything
+        # other than the explicit 'all_time' falls back to the trending counter.
+        if timeframe == "all_time":
+            signals = await repo.find_top_overall(limit=limit)
+        else:
+            signals = await repo.find_trending(limit=limit)
         return json.dumps(
-            [
-                {
-                    "signal_family": s.signal_family,
-                    "signal": s.signal,
-                    "last_7_days": s.last_7_days,
-                    "total_mentions": s.total_mentions,
-                    "best_marketing_angle": s.best_marketing_angle,
-                }
-                for s in signals
-            ]
+            {
+                "_meta": {
+                    "timeframe": "all_time" if timeframe == "all_time" else "trending",
+                    "basis": (
+                        "total_mentions counter (all history)"
+                        if timeframe == "all_time"
+                        else "last_7_days precomputed counter"
+                    ),
+                },
+                "signals": [
+                    {
+                        "signal_family": s.signal_family,
+                        "signal": s.signal,
+                        "last_7_days": s.last_7_days,
+                        "total_mentions": s.total_mentions,
+                        "best_marketing_angle": s.best_marketing_angle,
+                    }
+                    for s in signals
+                ],
+            }
         )
 
     async def _handle_get_content_brief(self) -> str:
