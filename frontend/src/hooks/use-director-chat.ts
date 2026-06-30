@@ -28,6 +28,7 @@ export function useDirectorChat(directorSlug: string) {
       if (data.isComplete) {
         // Stream is done — finalise the assistant bubble.
         setIsStreaming(false);
+        const isIncomplete = data.status === "incomplete";
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.role === "assistant" && last.isStreaming === true) {
@@ -35,9 +36,19 @@ export function useDirectorChat(directorSlug: string) {
               data.fullResponse !== undefined && data.fullResponse !== ""
                 ? data.fullResponse
                 : last.content;
+            // When the model stopped early, keep the partial text but flag it
+            // incomplete so the UI shows a reload prompt instead of treating the
+            // cut-off answer as final/trustworthy.
             return [
               ...prev.slice(0, -1),
-              { ...last, isStreaming: false, content: finalContent },
+              {
+                ...last,
+                isStreaming: false,
+                content: finalContent,
+                incomplete: isIncomplete,
+                finishReason: isIncomplete ? data.finishReason : undefined,
+                notice: isIncomplete ? data.notice : undefined,
+              },
             ];
           }
           return prev;

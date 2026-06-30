@@ -14,7 +14,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.directors.base import DirectorAgent
+from app.agents.directors.base import DirectorAgent, WINDOW_PARAMS, build_window
 from app.prompts.sales_director_v1 import SALES_DIRECTOR_SYSTEM_PROMPT_V1
 
 logger = logging.getLogger(__name__)
@@ -63,13 +63,16 @@ class SalesDirector(DirectorAgent):
             name="get_sales_summary",
             description=(
                 "Retrieve the sales pipeline summary: KPIs (total leads, leads "
-                "this week, conversion rate, active applications), an 8-week "
-                "lead-volume series, the source breakdown, and the four-stage "
-                "sales funnel (Leads → Appointments → Applications → Sales)."
+                "this week, conversion rate, active applications), a lead-volume "
+                "series (default 8 weeks, set window_weeks to change), the source "
+                "breakdown, and the four-stage sales funnel (Leads → Appointments "
+                "→ Applications → Sales). Pass date_from/date_to to scope the "
+                "report to an entry-date window. Every number is computed in SQL; "
+                "the response carries a _meta block naming the exact window used."
             ),
             input_schema={
                 "type": "object",
-                "properties": {},
+                "properties": {**WINDOW_PARAMS},
                 "required": [],
             },
             handler=self._handle_get_sales_summary,
@@ -96,10 +99,16 @@ class SalesDirector(DirectorAgent):
     # Tool handlers
     # -------------------------------------------------------------------
 
-    async def _handle_get_sales_summary(self) -> str:
+    async def _handle_get_sales_summary(
+        self,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        window_weeks: int = 8,
+    ) -> str:
         from app.repositories.sales_stats import compute_lead_stats
 
-        return json.dumps(await compute_lead_stats(self._session))
+        window = build_window(date_from, date_to, window_weeks)
+        return json.dumps(await compute_lead_stats(self._session, **window))
 
     async def _handle_get_top_pain_points(self, limit: int = 10) -> str:
         from app.repositories.sales_stats import get_top_pain_points

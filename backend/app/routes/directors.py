@@ -191,22 +191,34 @@ async def director_websocket(
                     token_index += 1
 
                 full_response = "".join(accumulated)
-                final_frame = json.dumps(
-                    {
-                        "channel": channel,
-                        "data": {
-                            "sessionId": session_id,
-                            "chunk": "",
-                            "tokenIndex": token_index,
-                            "isComplete": True,
-                            "fullResponse": full_response,
-                        },
-                    }
+
+                # Why the turn ended. On anything other than a clean finish the
+                # streamed text is partial — tell the frontend so it can flag it
+                # and offer a reload instead of treating it as a finished answer.
+                from app.agents.base import (
+                    FINISH_COMPLETE,
+                    INCOMPLETE_FINISH_REASONS,
+                    FINISH_NOTICES,
                 )
+
+                finish_reason = getattr(agent, "last_finish_reason", FINISH_COMPLETE)
+                is_incomplete = finish_reason in INCOMPLETE_FINISH_REASONS
+                final_data = {
+                    "sessionId": session_id,
+                    "chunk": "",
+                    "tokenIndex": token_index,
+                    "isComplete": True,
+                    "fullResponse": full_response,
+                    "status": "incomplete" if is_incomplete else "complete",
+                    "finishReason": finish_reason,
+                }
+                if is_incomplete:
+                    final_data["notice"] = FINISH_NOTICES.get(finish_reason)
+                final_frame = json.dumps({"channel": channel, "data": final_data})
                 await websocket.send_text(final_frame)
                 logger.info(
-                    "Director WebSocket stream complete: %s/%s tokens=%d chars=%d",
-                    director_slug, session_id, token_index, len(full_response),
+                    "Director WebSocket stream complete: %s/%s tokens=%d chars=%d finish=%s",
+                    director_slug, session_id, token_index, len(full_response), finish_reason,
                 )
 
             except WebSocketDisconnect:

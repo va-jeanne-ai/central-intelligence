@@ -46,6 +46,21 @@ class ChatChunk(BaseModel):
         default=None,
         description="Present only on the final frame (done=true).",
     )
+    status: str = Field(
+        default="complete",
+        description=(
+            "Final-frame only. 'complete' = finished answer; 'incomplete' = the "
+            "model stopped early (e.g. ran out of tokens) and the text is partial."
+        ),
+    )
+    finish_reason: Optional[str] = Field(
+        default=None,
+        description="Final-frame only. Why the turn ended (e.g. 'max_tokens').",
+    )
+    notice: Optional[str] = Field(
+        default=None,
+        description="Final-frame only. Human-facing message shown when incomplete.",
+    )
 
 
 class HealthResponse(BaseModel):

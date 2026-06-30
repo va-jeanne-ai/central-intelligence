@@ -88,6 +88,7 @@ export function useChat() {
       if (data.isComplete) {
         // Stream is done — finalise the assistant bubble.
         setIsStreaming(false);
+        const isIncomplete = data.status === "incomplete";
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.role === "assistant" && last.isStreaming === true) {
@@ -95,9 +96,18 @@ export function useChat() {
               data.fullResponse !== undefined && data.fullResponse !== ""
                 ? data.fullResponse
                 : last.content;
+            // Keep partial text but flag it when the model stopped early so the
+            // UI can show a reload prompt instead of treating it as final.
             return [
               ...prev.slice(0, -1),
-              { ...last, isStreaming: false, content: finalContent },
+              {
+                ...last,
+                isStreaming: false,
+                content: finalContent,
+                incomplete: isIncomplete,
+                finishReason: isIncomplete ? data.finishReason : undefined,
+                notice: isIncomplete ? data.notice : undefined,
+              },
             ];
           }
           return prev;

@@ -208,6 +208,37 @@ function StreamingCursor() {
   );
 }
 
+// ─── Incomplete notice ────────────────────────────────────────────────────────
+
+const DEFAULT_INCOMPLETE_NOTICE =
+  "This response was cut off before it finished, so it may be incomplete. Reload to continue.";
+
+/**
+ * Shown beneath an assistant bubble whose response stopped early (e.g. the
+ * model ran out of tokens). Makes the truncation explicit and offers a reload
+ * so the partial answer is never mistaken for a finished one.
+ */
+function IncompleteNotice({ notice }: { notice?: string }) {
+  return (
+    <div
+      className="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+      role="alert"
+    >
+      <span aria-hidden="true" className="mt-px">⚠️</span>
+      <div className="flex flex-col gap-1.5">
+        <span>{notice ?? DEFAULT_INCOMPLETE_NOTICE}</span>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="self-start rounded-md border border-amber-400 bg-white px-2 py-1 font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+        >
+          Reload
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── MessageBubble ────────────────────────────────────────────────────────────
 
 export function MessageBubble({ message, agent = CENTRAL_INTELLIGENCE }: MessageBubbleProps) {
@@ -237,6 +268,11 @@ export function MessageBubble({ message, agent = CENTRAL_INTELLIGENCE }: Message
             />
             {message.isStreaming === true && <StreamingCursor />}
           </div>
+
+          {/* Incomplete / ran-out-of-tokens notice + reload */}
+          {message.incomplete === true && (
+            <IncompleteNotice notice={message.notice} />
+          )}
 
           {/* Timestamp */}
           <span className="text-[10px] text-gray-400 ml-1">

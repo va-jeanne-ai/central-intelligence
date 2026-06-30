@@ -14,7 +14,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.directors.base import DirectorAgent
+from app.agents.directors.base import DirectorAgent, WINDOW_PARAMS, build_window
 from app.prompts.fulfillment_director_v1 import FULFILLMENT_DIRECTOR_SYSTEM_PROMPT_V1
 
 logger = logging.getLogger(__name__)
@@ -65,13 +65,16 @@ class FulfillmentDirector(DirectorAgent):
             name="get_fulfillment_summary",
             description=(
                 "Retrieve the fulfillment summary: member KPIs (total members, "
-                "enrolled this week, active members, goals completed), an 8-week "
-                "enrollment-volume series, the status breakdown, and the goal "
-                "funnel (Goals Set → In Progress → Completed)."
+                "enrolled this week, active members, goals completed), an "
+                "enrollment-volume series (default 8 weeks, set window_weeks to "
+                "change), the status breakdown, and the goal funnel (Goals Set → "
+                "In Progress → Completed). Pass date_from/date_to to scope the "
+                "report to an enrollment-date window. Every number is computed in "
+                "SQL; the response carries a _meta block naming the window used."
             ),
             input_schema={
                 "type": "object",
-                "properties": {},
+                "properties": {**WINDOW_PARAMS},
                 "required": [],
             },
             handler=self._handle_get_fulfillment_summary,
@@ -98,10 +101,16 @@ class FulfillmentDirector(DirectorAgent):
     # Tool handlers
     # -------------------------------------------------------------------
 
-    async def _handle_get_fulfillment_summary(self) -> str:
+    async def _handle_get_fulfillment_summary(
+        self,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        window_weeks: int = 8,
+    ) -> str:
         from app.repositories.fulfillment_stats import compute_member_stats
 
-        return json.dumps(await compute_member_stats(self._session))
+        window = build_window(date_from, date_to, window_weeks)
+        return json.dumps(await compute_member_stats(self._session, **window))
 
     async def _handle_get_top_pain_points(self, limit: int = 10) -> str:
         from app.repositories.sales_stats import get_top_pain_points

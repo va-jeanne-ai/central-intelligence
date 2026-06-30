@@ -52,16 +52,16 @@ class SocialMediaSpecialist(SpecialistAgent):
 
         self.register_tool(
             name="get_social_data",
-            description="Get social media metrics and content performance data from the database.",
+            description=(
+                "Get aggregated Instagram performance from real per-post data: "
+                "post count, total likes/comments/saves/shares/reach/views, and "
+                "average engagement rate, plus the post date range. Follower "
+                "count is not ingested, so it is intentionally absent (not zero). "
+                "The response carries a _meta block naming the source and window."
+            ),
             input_schema={
                 "type": "object",
-                "properties": {
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of results (default 20)",
-                        "default": 20,
-                    },
-                },
+                "properties": {},
                 "required": [],
             },
             handler=self._handle_get_social_data,
@@ -102,12 +102,16 @@ class SocialMediaSpecialist(SpecialistAgent):
     # Tool handlers
     # -------------------------------------------------------------------
 
-    async def _handle_get_social_data(self, limit: int = 20) -> str:
+    async def _handle_get_social_data(self) -> str:
         if not self._session:
             return json.dumps({"error": "No database session available"})
         from app.repositories.marketing import SocialStatsRepository
         repo = SocialStatsRepository(self._session)
-        totals = await repo.aggregate_totals()
+        # Reads instagram_posts (real per-post data). The period-aggregate
+        # social_stats table is not populated by the WGR sync, so aggregating it
+        # returned all-zeros; aggregate_instagram_totals reflects the data that
+        # actually exists.
+        totals = await repo.aggregate_instagram_totals()
         return json.dumps(totals)
 
     async def _handle_generate_social_script(
