@@ -1,0 +1,15 @@
+# Keep the build context small and secrets out of the image.
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+celerybeat-schedule*
+*.log
+tests/
+.git/

@@ -1,0 +1,14 @@
+# Caddy reverse proxy for the Central Intelligence API.
+#
+# {$API_DOMAIN} is read from backend/.env (e.g. API_DOMAIN=api.yourdomain.com).
+# Caddy automatically provisions and renews a Let's Encrypt certificate for it,
+# so the API is served over HTTPS and WebSockets work over wss:// with no extra
+# config (Caddy proxies Upgrade/Connection headers transparently).
+#
+# Point the domain's DNS A record at the droplet's IP before starting, or the
+# certificate challenge will fail.
+
+{$API_DOMAIN} {
+	reverse_proxy api:8000
+	encode gzip
+}

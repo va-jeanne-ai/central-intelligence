@@ -1,0 +1,116 @@
+# Central Intelligence — full backend stack on one box (DigitalOcean droplet).
+#
+# Runs API + Celery worker + Celery beat + Redis + a Caddy reverse proxy that
+# terminates HTTPS (so the frontend can reach the API over https:// and wss://).
+# The frontend itself is hosted separately on Vercel — it is NOT in this file.
+#
+# All app config comes from `backend/.env` (see backend/.env.example). Redis is
+# a local container, so REDIS_URL is fixed to the compose network below and does
+# NOT need to be in .env.
+#
+# Usage on the droplet:
+#   docker compose up -d --build
+#   docker compose logs -f api
+#
+# Redis is intentionally NOT published to the host — only the compose network
+# can reach it.
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # One-shot: run DB migrations, then exit. The api/worker/beat wait for this to
+  # complete successfully so nothing races the schema. Migrations run ONCE here,
+  # not in the long-running services.
+  migrate:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "8000"          # internal only; Caddy publishes it over HTTPS
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    command: ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    # Beat MUST be a single separate process from the worker (see
+    # backend/app/tasks/celery_app.py). Schedule state lives on a named volume
+    # so it survives restarts; every scheduled task is idempotent regardless.
+    command: ["celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=info", "--schedule", "/var/celery/celerybeat-schedule"]
+    volumes:
+      - beat-data:/var/celery
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # Reverse proxy — automatic HTTPS via Let's Encrypt. Reads the domain from
+  # API_DOMAIN in backend/.env (e.g. api.yourdomain.com). Handles wss:// too.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file: ./backend/.env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+
+volumes:
+  redis-data:
+  beat-data:
+  caddy-data:
+  caddy-config:
