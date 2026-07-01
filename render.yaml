@@ -1,0 +1,239 @@
+# Central Intelligence — Render blueprint (STAGING, live data).
+#
+# MOCK_MODE is false: this environment serves the client's REAL data and makes
+# paid Claude/OpenAI/Voyage calls. It reuses the production Supabase DB and API
+# keys, so treat it as production-grade even though it's labelled "staging".
+#
+# Defines the whole stack as one deployable unit:
+#   - ci-backend   : FastAPI (uvicorn) web service + WebSockets
+#   - ci-worker    : Celery worker (background tasks)
+#   - ci-beat      : Celery beat (scheduler; enqueues periodic tasks)
+#   - ci-redis     : managed Redis (Celery broker + result backend)
+#   - ci-frontend  : Next.js web service
+#
+# Postgres/pgvector and auth are hosted on Supabase (external) — NOT provisioned
+# here. Point DATABASE_URL / SUPABASE_* at the staging Supabase project.
+#
+# Secrets (API keys, DB URLs) are marked `sync: false` so Render prompts for them
+# at deploy time instead of reading from this committed file. Set them in the
+# Render dashboard or via the Blueprint's "environment" step. See DEPLOY.md.
+#
+# Python is pinned to 3.12 (PYTHON_VERSION) — the stack targets >=3.11 and the
+# audioop-lts backport is only needed on 3.13+, so 3.12 keeps stdlib audioop.
+
+services:
+  # ---------------------------------------------------------------------------
+  # Managed Redis (Key Value) — Celery broker + result backend.
+  # `ipAllowList: []` keeps it on Render's private network only (reachable by
+  # the services below, not the public internet).
+  # ---------------------------------------------------------------------------
+  - type: redis
+    name: ci-redis
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: noeviction  # Celery brokers must not evict queued tasks.
+
+  # ---------------------------------------------------------------------------
+  # Backend API — FastAPI + WebSockets
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: ci-backend
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    # preDeployCommand runs once per deploy, AFTER build and BEFORE the new
+    # instance goes live — the correct place for DB migrations (runs on the web
+    # service only, so worker/beat don't race to migrate).
+    preDeployCommand: "alembic upgrade head"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2"
+    healthCheckPath: /api/v1/health
+    autoDeploy: false
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # Debug OFF in staging; flip via dashboard if you need verbose logs.
+      - key: DEBUG
+        value: "false"
+      # Live mode — staging serves the client's REAL data. Makes paid
+      # Claude/OpenAI/Voyage calls. Requires the AI keys below to be set.
+      - key: MOCK_MODE
+        value: "false"
+      # Redis broker/backend — wired from the managed instance below.
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: ci-redis
+          property: connectionString
+      # CORS — the frontend's public URL. Update after first deploy if the
+      # frontend URL differs, then redeploy.
+      - key: CORS_ORIGINS
+        sync: false
+      # Public base URL of THIS backend (used to build webhook URLs handed to
+      # third parties). Set to the ci-backend .onrender.com URL after first deploy.
+      - key: PUBLIC_API_BASE_URL
+        sync: false
+      # --- Datastores / auth (Supabase, external) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      # --- AI providers (REQUIRED — MOCK_MODE is false) ---
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: VOYAGE_API_KEY
+        sync: false
+      # --- Integrations (optional; leave blank to use seed fallbacks) ---
+      - key: INTEGRATIONS_ENCRYPTION_KEY
+        sync: false
+      - key: MAILCHIMP_API_KEY
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
+      # --- Client WGR mirror (READ-ONLY data source; serves the client's real data) ---
+      - key: CLIENT_SYNC_ENABLED
+        value: "true"
+      - key: CLIENT_SUPABASE_URL
+        sync: false
+      - key: CLIENT_SUPABASE_ANON_KEY
+        sync: false
+      - key: WGR_DATABASE_URL
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Celery worker — consumes the queue populated by beat + API-triggered tasks.
+  # ---------------------------------------------------------------------------
+  - type: worker
+    name: ci-worker
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2"
+    autoDeploy: false
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DEBUG
+        value: "false"
+      - key: MOCK_MODE
+        value: "false"
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: ci-redis
+          property: connectionString
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: VOYAGE_API_KEY
+        sync: false
+      - key: INTEGRATIONS_ENCRYPTION_KEY
+        sync: false
+      - key: MAILCHIMP_API_KEY
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
+      - key: CLIENT_SYNC_ENABLED
+        value: "true"
+      - key: CLIENT_SUPABASE_URL
+        sync: false
+      - key: CLIENT_SUPABASE_ANON_KEY
+        sync: false
+      - key: WGR_DATABASE_URL
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Celery beat — scheduler. MUST be a single, separate process from the worker
+  # (see backend/app/tasks/celery_app.py). Uses the default file scheduler; on
+  # Render's ephemeral disk the schedule state resets on redeploy, which is fine
+  # because every scheduled task is idempotent (upsert semantics).
+  # ---------------------------------------------------------------------------
+  - type: worker
+    name: ci-beat
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A app.tasks.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule"
+    autoDeploy: false
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DEBUG
+        value: "false"
+      - key: MOCK_MODE
+        value: "false"
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: ci-redis
+          property: connectionString
+      # Beat only enqueues by name; it still imports task modules (which import
+      # app.config), so it needs the same DB/provider vars available.
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: VOYAGE_API_KEY
+        sync: false
+      - key: INTEGRATIONS_ENCRYPTION_KEY
+        sync: false
+      - key: CLIENT_SYNC_ENABLED
+        value: "true"
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Next.js. Talks to ci-backend over HTTPS + WSS.
+  # NEXT_PUBLIC_* vars are baked in at BUILD time, so a change to the API URL
+  # requires a rebuild (not just a restart).
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: ci-frontend
+    runtime: node
+    plan: starter
+    rootDir: frontend
+    buildCommand: "npm ci && npm run build"
+    startCommand: "npm run start -- --port $PORT"
+    autoDeploy: false
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_WS_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
