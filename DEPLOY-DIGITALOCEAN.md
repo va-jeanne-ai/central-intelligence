@@ -19,8 +19,10 @@ Files: [`docker-compose.yml`](docker-compose.yml), [`Caddyfile`](Caddyfile),
 
 ## What you need first
 
-1. A **domain** (or subdomain) you control for the API, e.g. `api.yourdomain.com`.
-   Caddy needs it to get an HTTPS cert. (No domain? See "No domain?" at the end.)
+1. **No domain needed** — this dev deploy uses **sslip.io**: the hostname
+   `<droplet-ip-with-dashes>.sslip.io` resolves to your droplet automatically, so
+   Caddy can still get a real Let's Encrypt cert and serve HTTPS + wss (required
+   because the Vercel frontend is HTTPS and browsers block HTTPS→HTTP calls).
 2. The values from `backend/.env` (DB URL, Supabase, API keys, WGR, Fernet key).
 3. A DigitalOcean account and a Vercel account.
 
@@ -30,21 +32,32 @@ Files: [`docker-compose.yml`](docker-compose.yml), [`Caddyfile`](Caddyfile),
 
 ### 1. Create the droplet
 DigitalOcean → Create → Droplet:
-- **Image:** Ubuntu 24.04 LTS
-- **Plan:** Basic → Regular → **$6/mo** (1 GB RAM / 1 vCPU / 25 GB). This is enough
-  for staging; bump to the $12 (2 GB) tier if the worker + Whisper transcription
-  get memory-hungry under real load.
-- **Auth:** add your SSH key (easiest) or a password.
+- **Image:** Ubuntu 24.04 (LTS) x64
+- **Plan:** Basic → Regular → **`s-1vcpu-2gb`** (2 GB RAM / 1 vCPU / 50 GB, ~$12/mo).
+  2 GB is the safe floor: `faster-whisper` (call transcription) loads an ML model
+  into RAM, and the worker/embeddings/API/beat/Redis all share this one box.
+- **Region:** Singapore (SGP1) is a good default for a PH-based client. (The WGR
+  sync to the client's US Supabase is a background job and tolerates the latency.)
+- **Auth:** add your SSH key.
 - Create, and note the droplet's **public IP**.
 
-### 2. Point DNS at it
-At your DNS provider, add an **A record**: `api.yourdomain.com` → `<droplet IP>`.
-Wait until `dig +short api.yourdomain.com` returns the IP (usually minutes).
-**Do this before step 6** or the TLS cert challenge fails.
+### 2. Your API hostname (sslip.io — no DNS setup)
+Take the droplet IP and replace dots with dashes, then append `.sslip.io`:
 
-### 3. SSH in and install Docker
+    203.0.113.5   →   203-0-113-5.sslip.io
+
+That is your `API_DOMAIN`. It resolves to the droplet automatically — nothing to
+configure at a registrar. (Verify: `dig +short 203-0-113-5.sslip.io` returns the IP.)
+
+### 3. SSH in, add swap, install Docker
 ```bash
 ssh root@<droplet IP>
+
+# 2 GB swap — cheap insurance against a transient spike OOM-killing the worker
+# mid-transcription.
+fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
 curl -fsSL https://get.docker.com | sh          # installs Docker + compose plugin
 ```
 
@@ -69,8 +82,8 @@ Set, at minimum (values from your local `backend/.env`):
 - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `VOYAGE_API_KEY`
 - `INTEGRATIONS_ENCRYPTION_KEY`  (the Fernet key)
 - `CLIENT_SYNC_ENABLED=true`, `CLIENT_SUPABASE_URL`, `CLIENT_SUPABASE_ANON_KEY`, `WGR_DATABASE_URL`
-- `API_DOMAIN=api.yourdomain.com`   ← the domain from step 2
-- `PUBLIC_API_BASE_URL=https://api.yourdomain.com`
+- `API_DOMAIN=203-0-113-5.sslip.io`   ← your sslip.io hostname from step 2
+- `PUBLIC_API_BASE_URL=https://203-0-113-5.sslip.io`
 - `CORS_ORIGINS=["https://<your-vercel-domain>.vercel.app"]`  ← set after Part B,
   or put a best guess now and edit later.
 
@@ -86,12 +99,13 @@ starts redis, api, worker, beat, and Caddy. Caddy fetches the HTTPS cert for
 
 ### 7. Verify the backend
 ```bash
-docker compose ps                       # all services "running"/"healthy"
-curl https://api.yourdomain.com/api/v1/health     # HTTP 200, database healthy
-docker compose logs -f beat             # see it enqueue scheduled tasks
-docker compose logs -f worker           # see it consume them
+docker compose ps                                   # all services "running"/"healthy"
+curl https://203-0-113-5.sslip.io/api/v1/health     # HTTP 200, database healthy
+docker compose logs -f caddy                        # confirm the cert was issued
+docker compose logs -f beat                         # see it enqueue scheduled tasks
+docker compose logs -f worker                       # see it consume them
 ```
-Open `https://api.yourdomain.com/docs` in a browser for the API docs.
+Open `https://203-0-113-5.sslip.io/docs` in a browser for the API docs.
 
 ---
 
@@ -101,8 +115,8 @@ Open `https://api.yourdomain.com/docs` in a browser for the API docs.
 2. **Root Directory:** set to `frontend` (this repo is a monorepo; Vercel must
    build from the frontend subfolder). Framework auto-detects as Next.js.
 3. **Environment Variables** (Project Settings → Environment Variables):
-   - `NEXT_PUBLIC_API_URL` = `https://api.yourdomain.com/api/v1`
-   - `NEXT_PUBLIC_WS_URL` = `wss://api.yourdomain.com/ws/v1`
+   - `NEXT_PUBLIC_API_URL` = `https://203-0-113-5.sslip.io/api/v1`
+   - `NEXT_PUBLIC_WS_URL` = `wss://203-0-113-5.sslip.io/ws/v1`
    - `NEXT_PUBLIC_SUPABASE_URL` = *(same as backend SUPABASE_URL)*
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = *(same as backend SUPABASE_ANON_KEY)*
 4. **Deploy.** Vercel gives you a URL like `https://central-intelligence.vercel.app`.
@@ -130,13 +144,16 @@ Vercel redeploys the frontend automatically on every push to the tracked branch.
 - `INTEGRATIONS_ENCRYPTION_KEY` must stay constant, or stored integration creds
   won't decrypt.
 
-## No domain? (skip HTTPS)
-Caddy needs a domain for a cert. To test without one, you can temporarily expose
-the API on the droplet IP over plain HTTP: remove the `caddy` service, publish
-`api`'s port (`ports: ["8000:8000"]`), and set the frontend to
-`http://<droplet IP>:8000/...`. Note: browsers block `ws://`+`https://` mixing,
-and Vercel is HTTPS — so for a real demo you DO want a domain + Caddy. Cheapest
-path: a $1/yr-ish domain or a free subdomain from a dynamic-DNS provider.
+## About sslip.io (no-domain HTTPS)
+`sslip.io` is a free public wildcard-DNS service: `<ip-with-dashes>.sslip.io`
+always resolves to that IP, so Caddy can complete a Let's Encrypt HTTP-01
+challenge and serve real HTTPS — which is what lets the HTTPS Vercel frontend
+talk to the backend (browsers block HTTPS→HTTP and `wss`→`ws`). It's ideal for a
+dev/staging box. If the droplet IP ever changes, update `API_DOMAIN`,
+`PUBLIC_API_BASE_URL`, and the Vercel `NEXT_PUBLIC_*` vars, then rebuild both.
+
+If the cert doesn't issue: make sure ports 80 and 443 are open (see firewall
+below) and `dig +short <your>.sslip.io` returns the droplet IP before you `up`.
 
 ## Firewall (recommended)
 ```bash
