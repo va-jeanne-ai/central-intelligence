@@ -7,6 +7,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Insights "Team" tab (PR 3 of 3)
+
+The /insights page gains an Overview / Team tab bar (amber active underline). The Team tab:
+window select (7d/30d/90d/all), KPI row (team outbound, open strikes, active reps, weighted
+team call score — the one documented client-side derivation), a rep leaderboard sorted by
+outbound (status pill, per-metric values with sample sizes, trend pills incl. the amber
+"insufficient data" state), and expandable rows revealing the rep's full metric blocks +
+open recommendations in SuggestionPanel style. Loading/empty/error states included; every
+number is API-verbatim (`null` renders "—", never 0). New: `insights/team-tab.tsx`,
+`team-pills.tsx`, `team-formatting.ts` (pure helpers). Overview content unchanged.
+
 ### Added — Team analytics API + rep-aware CI chat (PR 2 of 3)
 
 - **`GET /analytics/team`** — the rep leaderboard: one entry per non-terminated rep
