@@ -7,6 +7,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Team analytics API + rep-aware CI chat (PR 2 of 3)
+
+- **`GET /analytics/team`** — the rep leaderboard: one entry per non-terminated rep
+  (roster from `sales_reps`) with per-metric blocks (latest snapshot value, sample size,
+  trend verdict via the engine) and the rep's open recommendations, plus a team rollup
+  (total outbound, open strikes, active reps). Reps without snapshot history read
+  `insufficient_data` with `value=null` — the endpoint never derives values outside the
+  snapshot store. Auth-protected like every analytics route.
+- **`scope` query param** on `GET /analytics/trends` and `/analytics/recommendations`
+  (default `global`, format-validated, 422 on garbage).
+- **CI chat**: `get_analytics_verdicts` gains an optional `rep` argument, resolved against
+  `sales_reps` by rep_id, case-insensitive name containment (ambiguity → structured error,
+  never a guess), or historical alias; response includes the resolved rep identity.
+- New assembly module `backend/app/analytics/team.py`; tests 112 → 131.
+
 ### Added — Per-rep scope + channel-mix metrics in the statistical engine (PR 1 of 3)
 
 Per the approved proposal (docs/rep-channel-analytics-proposal.html), the engine now watches

@@ -4,6 +4,7 @@ Serves the shared engine to BOTH the Insights dashboard and CI chat:
   GET  /analytics/metrics          — latest snapshot per metric (current values)
   GET  /analytics/trends           — verdict per metric (improving/declining/flat/…)
   GET  /analytics/recommendations  — active data-cited recommendations
+  GET  /analytics/team             — per-rep metric blocks + trend verdicts + open findings
   GET  /analytics/metrics/{key}/history — a metric's snapshot timeseries (for charts)
   GET  /analytics/metrics/{key}/history-asof — rolling history derived live from source
                                      tables (no snapshots needed; read-only)
@@ -12,6 +13,11 @@ Serves the shared engine to BOTH the Insights dashboard and CI chat:
 
 Everything here is data-derived. The numbers come from metric_snapshots /
 recommendations (populated by the snapshot task) and the registry — no heuristics.
+
+``scope`` on /trends and /recommendations: optional, defaults to "global" (byte-
+identical to the pre-scope behavior). Pass "rep:<rep_id>" to scope either endpoint
+to one rep's series/findings instead. Validated via ``team.validate_scope`` — a
+malformed value 422s rather than silently matching nothing.
 """
 
 import logging
@@ -23,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analytics.asof import build_asof_history_sql
 from app.analytics.registry import all_metrics, get_metric
+from app.analytics.team import LatestSnapshot, RepRow, assemble_team_snapshot, validate_scope
 from app.database import get_session
 
 logger = logging.getLogger(__name__)
@@ -73,6 +80,49 @@ class RecommendationItem(BaseModel):
     evidence: dict
     status: str
     updated_at: str | None
+
+
+class RepMetricBlock(BaseModel):
+    """One rep's latest value + trend verdict for one rep-scoped metric.
+
+    ``value``/``sample_size`` are ``None`` when the rep has no snapshot row for
+    this metric/window yet — paired with ``verdict="insufficient_data"``. Never
+    a fabricated 0.
+    """
+
+    metric_key: str
+    label: str
+    area: str
+    unit: str
+    higher_is_better: bool
+    value: float | None
+    sample_size: int | None
+    verdict: str
+    rel_change: float | None
+    baseline_value: float | None
+    reason: str
+
+
+class TeamRepEntry(BaseModel):
+    rep_id: str
+    full_name: str
+    role: str | None
+    status: str
+    metrics: dict[str, RepMetricBlock]
+    recommendations: list[RecommendationItem]
+
+
+class TeamRollup(BaseModel):
+    total_outbound: float
+    open_strikes: float
+    active_reps: int
+    total_reps: int
+
+
+class TeamAnalyticsResponse(BaseModel):
+    window: str
+    reps: list[TeamRepEntry]
+    rollup: TeamRollup
 
 
 class OverallInsightResponse(BaseModel):
@@ -139,11 +189,17 @@ async def list_metrics(
 async def list_trends(
     window: str = Query("30d"),
     area: str | None = Query(None),
+    scope: str = Query("global", description="'global' (default) or 'rep:<rep_id>'."),
     session: AsyncSession = Depends(get_session),
 ):
-    """Compute the trend verdict for each metric from its snapshot history (pure stats)."""
+    """Compute the trend verdict for each metric from its snapshot history (pure stats).
+
+    ``scope`` defaults to "global" — identical behavior to before this param existed.
+    """
     if window not in _VALID_WINDOWS:
         raise HTTPException(422, f"window must be one of {sorted(_VALID_WINDOWS)}")
+    if not validate_scope(scope):
+        raise HTTPException(422, "scope must be 'global' or 'rep:<rep_id>'")
 
     # Reuse the engine's evaluation logic over rows we fetch via the async session.
     from app.analytics.trends import evaluate  # local import: engine is sync-first
@@ -155,10 +211,10 @@ async def list_trends(
             """
             SELECT value, sample_size, captured_date
             FROM metric_snapshots
-            WHERE metric_key = :k AND "window" = :w AND scope = 'global'
+            WHERE metric_key = :k AND "window" = :w AND scope = :scope
             ORDER BY captured_date ASC
             """
-        ), {"k": m.key, "w": window})).mappings().all()
+        ), {"k": m.key, "w": window, "scope": scope})).mappings().all()
         t = evaluate(m, [dict(r) for r in rows], window)
         out.append(TrendItem(
             metric_key=t.metric_key, area=t.area, label=t.label, unit=t.unit,
@@ -173,14 +229,18 @@ async def list_trends(
 async def list_recommendations(
     status: str | None = Query(None, description="Filter by lifecycle status."),
     area: str | None = Query(None),
+    scope: str = Query("global", description="'global' (default) or 'rep:<rep_id>'."),
     session: AsyncSession = Depends(get_session),
 ):
-    """Data-cited recommendations. Defaults to the non-resolved ones (the live findings)."""
+    """Data-cited recommendations. Defaults to the non-resolved, global findings —
+    identical behavior to before ``scope`` existed. Pass ``scope='rep:<rep_id>'`` to
+    see one rep's findings instead."""
     from app.analytics.recommend import fetch_recommendation_rows
 
-    # scope="global" explicitly: this route must keep returning only company-wide
-    # findings by default so the existing UI doesn't suddenly show per-rep findings.
-    rows = await fetch_recommendation_rows(session, status=status, area=area, scope="global")
+    if not validate_scope(scope):
+        raise HTTPException(422, "scope must be 'global' or 'rep:<rep_id>'")
+
+    rows = await fetch_recommendation_rows(session, status=status, area=area, scope=scope)
     return [
         RecommendationItem(
             id=r["id"], metric_key=r["metric_key"], area=r["area"], window=r["window"],
@@ -190,6 +250,86 @@ async def list_recommendations(
         )
         for r in rows
     ]
+
+
+@router.get("/team", response_model=TeamAnalyticsResponse, summary="Per-rep metric blocks + trends")
+async def team_analytics(
+    window: str = Query("30d"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Every non-terminated rep, with a per-metric block (latest value + trend
+    verdict) for each rep-scoped metric, plus their open recommendations and a
+    small team-level rollup.
+
+    Reads the roster + latest snapshots via this (async) session, then reuses
+    ``trends.trend_for`` — which is sync — over a short-lived sync session, the
+    same pattern ``POST /analytics/refresh`` already uses for the sync engine.
+    """
+    if window not in _VALID_WINDOWS:
+        raise HTTPException(422, f"window must be one of {sorted(_VALID_WINDOWS)}")
+
+    from app.analytics.recommend import fetch_recommendation_rows
+    from app.analytics.team import rep_scoped_metrics
+    from app.tasks.db import make_sync_session
+
+    rep_rows = (await session.execute(text(
+        """
+        SELECT rep_id, full_name, role, status
+        FROM sales_reps
+        WHERE status <> 'terminated'
+        ORDER BY full_name
+        """
+    ))).mappings().all()
+    reps = [
+        RepRow(rep_id=r["rep_id"], full_name=r["full_name"], role=r["role"], status=r["status"])
+        for r in rep_rows
+    ]
+
+    metrics = rep_scoped_metrics()
+    snapshots_by_rep_and_metric: dict[tuple[str, str], LatestSnapshot] = {}
+    if metrics:
+        metric_keys = [m.key for m in metrics]
+        snap_rows = (await session.execute(text(
+            """
+            SELECT DISTINCT ON (metric_key, scope) metric_key, scope, value, sample_size
+            FROM metric_snapshots
+            WHERE metric_key = ANY(:keys) AND "window" = :w AND scope LIKE 'rep:%'
+            ORDER BY metric_key, scope, captured_date DESC
+            """
+        ), {"keys": metric_keys, "w": window})).mappings().all()
+        for r in snap_rows:
+            rep_id = r["scope"].removeprefix("rep:")
+            snapshots_by_rep_and_metric[(rep_id, r["metric_key"])] = LatestSnapshot(
+                value=float(r["value"]), sample_size=int(r["sample_size"])
+            )
+
+    recommendations_by_rep: dict[str, list[dict]] = {}
+    for rep in reps:
+        rec_rows = await fetch_recommendation_rows(session, scope=f"rep:{rep.rep_id}")
+        recommendations_by_rep[rep.rep_id] = [
+            {
+                "id": r["id"], "metric_key": r["metric_key"], "area": r["area"],
+                "window": r["window"], "verdict": r["verdict"], "severity": r["severity"],
+                "title": r["title"], "body": r["body"], "evidence": r["evidence"],
+                "status": r["status"],
+                "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+            }
+            for r in rec_rows
+        ]
+
+    db = make_sync_session()
+    try:
+        payload = assemble_team_snapshot(
+            db,
+            reps=reps,
+            window=window,
+            snapshots_by_rep_and_metric=snapshots_by_rep_and_metric,
+            recommendations_by_rep=recommendations_by_rep,
+        )
+    finally:
+        db.close()
+
+    return TeamAnalyticsResponse(**payload)
 
 
 @router.get("/metrics/{metric_key}/history", summary="A metric's snapshot timeseries")
