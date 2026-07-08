@@ -39,6 +39,7 @@ celery_app = Celery(
         "app.tasks.wgr_sync",
         "app.tasks.metric_snapshots",
         "app.tasks.overall_insight",
+        "app.tasks.weekly_digest",
     ],
 )
 
@@ -79,6 +80,15 @@ celery_app.conf.beat_schedule = {
         # COST: one paid Claude call per run when mock_mode=False; a free mock otherwise.
         # Idempotent per day (upsert on insight_date).
         "schedule": crontab(minute=5, hour=4),
+    },
+    "weekly-digest-mondays": {
+        "task": "app.tasks.weekly_digest.capture_weekly_digest",
+        # 05:05 UTC Mondays — 1 hour AFTER the daily overall-insight run so the digest
+        # can read Monday's own fresh daily assessment as part of the week it covers.
+        # COST: at most one paid Claude call per run when mock_mode=False; no-ops
+        # entirely (no call) if there's no data for the week. Idempotent per week
+        # (upsert on insight_date=week-start, period='weekly').
+        "schedule": crontab(minute=5, hour=5, day_of_week=1),
     },
     "social-stats-every-6h": {
         "task": "app.tasks.social_stats.update_social_stats",

@@ -7,6 +7,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Engine expansion: new metrics, CI chat verdict tool, weekly digest, RAG gaps closed
+
+Extends the statistical recommendation engine along the north-star roadmap (§5/§7):
+
+- **Metric registry: 9 → 12 metrics** (`backend/app/analytics/registry.py`). New:
+  `marketing.social_engagement` (live: 5.3 avg engagement, n=2),
+  `marketing.funnel_conversion` (registered; `funnel_stats` still empty and its writer never
+  populates `conversion_rate` — flagged in-code; reads `insufficient_data` until data lands),
+  `fulfillment.goal_completion` (registered; `goals` table currently empty). All 12 metrics'
+  SQL verified executing against the live DB.
+- **CI chat: `get_analytics_verdicts` tool** — replaces the ad-hoc `analytics_insights` prose
+  helper with a structured tool over the engine's real code paths (`registry.all_metrics`,
+  `trends.evaluate`, `recommend.fetch_recommendation_rows`). Optional `area`/`metric_key`/
+  `window` filters; returns verdicts + open recommendations with evidence; never originates
+  numbers. System prompt updated to instruct citing returned figures verbatim. Per the
+  architecture rule, CI-only — directors stay department-scoped.
+- **Weekly digest** — `capture_weekly_digest` Celery task (Mondays 05:05 UTC, after the daily
+  04:05 run) synthesizes the week's daily insights + trend verdicts + recommendation activity
+  into one narrative via the same LLM-phrases-evidence contract. Stored in `overall_insights`
+  with a new `period` discriminator (`daily`/`weekly`) + `period_end` (migration
+  `u2f3a4b5c6d7`, applied; existing rows backfilled `daily`). New endpoints:
+  `GET /analytics/weekly-digest` and `POST /analytics/weekly-digest/refresh`. Shared helpers
+  (`call_claude_for_json`, `coerce_health_assessment`) factored out of `overall_insight.py`.
+- **RAG: Mailchimp campaigns now embedded** — `backfill_email_campaigns_embeddings` in
+  `embed_backfill.py` (name + subject + de-HTML'd body via a new stdlib-only `html_to_text`),
+  auto-chained after `update_email_stats` and after non-empty WGR syncs. 2,403 campaigns
+  pending first backfill. Live social comments verified already covered (collector writes to
+  the same `social_comments` table the `wgr_social_comment` backfill scans). INTEGRATIONS.md
+  RAG section corrected from the stale "five sources" to the actual 13-source list.
+
 ### Security — Auth now fails closed; unauthenticated data access removed
 
 - **Removed six stale auth-exempt prefixes** (`/api/v1/dashboard/`, `/leads`, `/members`,

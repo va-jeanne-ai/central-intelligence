@@ -218,6 +218,18 @@ def update_email_stats(self) -> dict:
         finally:
             db.close()
 
+        # Feed newly-synced/updated campaigns into the RAG corpus (project
+        # RAG-everything policy) — without this, Mailchimp campaigns are
+        # queryable via the dashboard but invisible to chat. Idempotent:
+        # `_enqueue_missing` dedups on content_hash, so this is a no-op when
+        # nothing changed since the last run. Only worth enqueuing when we
+        # actually wrote rows this run.
+        if checked > 0:
+            # Lazy import — avoids a task-module import cycle at worker startup.
+            from app.tasks.embed_backfill import backfill_email_campaigns_embeddings
+            backfill_email_campaigns_embeddings.delay()
+            logger.info("update_email_stats: enqueued email_campaigns embedding backfill")
+
         logger.info(
             "update_email_stats completed — task_id=%s source=%s checked=%d",
             task_id, source, checked,

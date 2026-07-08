@@ -168,12 +168,19 @@ def sync_wgr(since: str | None = None) -> dict:
     if result["total"] > 0:
         # Lazy import — avoids a task-module import cycle at worker startup.
         from app.tasks.embed_backfill import (
+            backfill_email_campaigns_embeddings,
             backfill_insights_embeddings,
             backfill_wgr_embeddings,
         )
         backfill_wgr_embeddings.delay()
         backfill_insights_embeddings.delay()
+        # email_campaigns is one of the tables WGR mirrors directly (see
+        # wgr_sync/upsert.py) — a WGR sync can bring in campaigns the
+        # Mailchimp task never saw, so chain the same embed backfill here too.
+        backfill_email_campaigns_embeddings.delay()
         enqueued = True
-        logger.info("wgr_sync: enqueued WGR + insights embedding backfills")
+        logger.info(
+            "wgr_sync: enqueued WGR + insights + email_campaigns embedding backfills"
+        )
 
     return {"status": "ok", "embed_backfills_enqueued": enqueued, **result}

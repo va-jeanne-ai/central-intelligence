@@ -236,9 +236,15 @@ _SALES_METRICS: list[Metric] = [
 
 
 # ─── Marketing metrics ──────────────────────────────────────────────────────────
-# Only metrics backed by REAL data are registered (verified 2026-06-29): email_campaigns
-# has 2,396 rows; funnel_stats / social_stats / ads_stats are EMPTY, so those metrics are
-# intentionally omitted until the data exists (snapshotting zeros forever isn't a signal).
+# email_campaigns has 2,400+ rows. social_stats now has real rows too (verified
+# 2026-07-08: 2 rows — linkedin/tiktok — with engagement_rate populated), so
+# marketing.social_engagement is registered. funnel_stats is still EMPTY
+# (verified 2026-07-08) — the writer task (app/tasks/funnel_stats.py) only ever
+# populates event_count, never conversion_rate, so today this metric has zero
+# sample_size / value 0 either way. It's registered anyway per the engine's
+# insufficient_data design (thin/empty data degrades gracefully rather than
+# being hidden) and will start reflecting real numbers the moment the funnel
+# pipeline starts writing conversion_rate.
 
 _MARKETING_METRICS: list[Metric] = [
     Metric(
@@ -293,12 +299,67 @@ _MARKETING_METRICS: list[Metric] = [
         asof_sample_expr="COALESCE(SUM(recipients_count), 0)",
         asof_row_filter="deleted_at IS NULL AND sent_at IS NOT NULL",
     ),
+    Metric(
+        key="marketing.social_engagement",
+        area="marketing",
+        label="Social Engagement Rate",
+        unit="ratio",
+        higher_is_better=True,
+        description="Average engagement_rate across social_stats rows (one row per "
+        "platform per aggregation period) whose period_end falls in the window. "
+        "Simple average across platforms, not follower-weighted — each platform's "
+        "period snapshot counts equally. sample_size is the number of platform-period "
+        "rows behind the average (thin today: 2 platforms as of 2026-07-08).",
+        sql=text(
+            """
+            SELECT
+                COALESCE(AVG(engagement_rate), 0) AS value,
+                COUNT(*) FILTER (WHERE engagement_rate IS NOT NULL) AS sample_size
+            FROM social_stats
+            WHERE deleted_at IS NULL
+              AND (:since IS NULL OR period_end >= :since)
+            """
+        ),
+        asof_table="social_stats",
+        asof_date_col="period_end",
+        asof_value_expr="COALESCE(AVG(engagement_rate), 0)",
+        asof_sample_expr="COUNT(*) FILTER (WHERE engagement_rate IS NOT NULL)",
+        asof_row_filter="deleted_at IS NULL",
+    ),
+    Metric(
+        key="marketing.funnel_conversion",
+        area="marketing",
+        label="Funnel Conversion Rate",
+        unit="ratio",
+        higher_is_better=True,
+        description="Average of the per-stage conversion_rate recorded in funnel_stats "
+        "for periods overlapping the window. NOTE: as of 2026-07-08 funnel_stats is "
+        "empty and its writer task (update_funnel_stats) only populates event_count, "
+        "never conversion_rate — so this metric currently reads 0 value / 0 sample_size "
+        "and the engine's insufficient_data verdict applies. It starts reflecting real "
+        "numbers once the funnel pipeline computes and persists conversion_rate.",
+        sql=text(
+            """
+            SELECT
+                COALESCE(AVG(conversion_rate), 0) AS value,
+                COUNT(*) FILTER (WHERE conversion_rate IS NOT NULL) AS sample_size
+            FROM funnel_stats
+            WHERE :since IS NULL OR period_end >= :since
+            """
+        ),
+        asof_table="funnel_stats",
+        asof_date_col="period_end",
+        asof_value_expr="COALESCE(AVG(conversion_rate), 0)",
+        asof_sample_expr="COUNT(*) FILTER (WHERE conversion_rate IS NOT NULL)",
+    ),
 ]
 
 
 # ─── Fulfillment metrics ────────────────────────────────────────────────────────
-# Verified 2026-06-29: sales_coaching_strikes has 15 rows (status active/open, severity
-# flag). goals table is EMPTY, so goal-completion is omitted until data exists.
+# sales_coaching_strikes has real rows (status active/open, severity flag). goals
+# is still EMPTY (verified 2026-07-08, 0 rows total including soft-deleted) —
+# fulfillment.goal_completion is registered anyway per the insufficient_data
+# design; it will light up once member goals start getting created/completed.
 
 _FULFILLMENT_METRICS: list[Metric] = [
     Metric(
@@ -324,6 +385,44 @@ _FULFILLMENT_METRICS: list[Metric] = [
         asof_value_expr="COUNT(*)",
         asof_sample_expr="COUNT(*)",
         asof_row_filter="status IN ('active', 'open')",
+    ),
+    Metric(
+        key="fulfillment.goal_completion",
+        area="fulfillment",
+        label="Goal Completion Rate",
+        unit="ratio",
+        higher_is_better=True,
+        description="completed / (completed + active + abandoned) for member goals "
+        "created in the window. Windowed on goals.created_at (no separate "
+        "completed_at column exists). Status vocabulary follows goal_stats.py: "
+        "active / completed / abandoned (case-insensitive, matched via LOWER). "
+        "Member-scoped (member_id IS NOT NULL) to mirror the existing goal_stats "
+        "repository, which excludes lead-attached goals from this same ratio.",
+        sql=text(
+            """
+            SELECT
+                COALESCE(
+                    COUNT(*) FILTER (WHERE LOWER(status) = 'completed')::float
+                    / NULLIF(COUNT(*) FILTER (WHERE LOWER(status) IN ('completed', 'active', 'abandoned')), 0),
+                    0
+                ) AS value,
+                COUNT(*) FILTER (WHERE LOWER(status) IN ('completed', 'active', 'abandoned')) AS sample_size
+            FROM goals
+            WHERE deleted_at IS NULL
+              AND member_id IS NOT NULL
+              AND (:since IS NULL OR created_at >= :since)
+            """
+        ),
+        asof_table="goals",
+        asof_date_col="created_at",
+        asof_value_expr=(
+            "COALESCE(COUNT(*) FILTER (WHERE LOWER(status) = 'completed')::float "
+            "/ NULLIF(COUNT(*) FILTER (WHERE LOWER(status) IN ('completed', 'active', 'abandoned')), 0), 0)"
+        ),
+        asof_sample_expr=(
+            "COUNT(*) FILTER (WHERE LOWER(status) IN ('completed', 'active', 'abandoned'))"
+        ),
+        asof_row_filter="deleted_at IS NULL AND member_id IS NOT NULL",
     ),
 ]
 

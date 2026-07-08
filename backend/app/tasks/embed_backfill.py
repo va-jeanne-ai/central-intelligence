@@ -1,10 +1,13 @@
 """One-shot embedding backfills for already-in-DB sources.
 
-Three Celery tasks:
+Celery tasks (one per source, plus the multi-source WGR backfill):
 
   * ``backfill_email_messages_embeddings``
   * ``backfill_lead_notes_embeddings``
   * ``backfill_insights_embeddings``
+  * ``backfill_email_campaigns_embeddings``
+  * ``reembed_drive_files``
+  * ``backfill_wgr_embeddings``
 
 Each one SELECTs the source rows that aren't already in ``embeddings``
 (or whose ``content_hash`` differs), computes the hash, and INSERTs an
@@ -22,7 +25,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import uuid
+from html import unescape
 from typing import Any
 
 from sqlalchemy import text
@@ -34,6 +39,42 @@ logger = logging.getLogger(__name__)
 
 
 _BATCH_SIZE = 500  # how many source rows to enqueue per task run
+
+# Tags whose contents are never useful as text (script/style payloads, HTML
+# comments). Stripped whole rather than just having their tags removed.
+_HTML_SKIP_BLOCK_RE = re.compile(
+    r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL,
+)
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_HTML_BLOCK_BREAK_RE = re.compile(
+    r"</(p|div|br|tr|table|li|h[1-6])\b[^>]*>", re.IGNORECASE,
+)
+_WHITESPACE_RE = re.compile(r"[ \t]+")
+_BLANK_LINES_RE = re.compile(r"\n{3,}")
+
+
+def html_to_text(html: str | None) -> str:
+    """Dependency-free HTML → plain-text for embedding payloads.
+
+    Not a full HTML parser — good enough for Mailchimp's templated
+    marketing HTML (tables/divs/paragraphs), which is all this feeds
+    today. Strips script/style blocks and comments, converts common
+    block-level closing tags to newlines so paragraphs/rows don't run
+    together, drops all remaining tags, unescapes entities, and
+    collapses excess whitespace.
+    """
+    if not html:
+        return ""
+    cleaned = _HTML_SKIP_BLOCK_RE.sub(" ", html)
+    cleaned = _HTML_COMMENT_RE.sub(" ", cleaned)
+    cleaned = _HTML_BLOCK_BREAK_RE.sub("\n", cleaned)
+    cleaned = _HTML_TAG_RE.sub(" ", cleaned)
+    cleaned = unescape(cleaned)
+    cleaned = _WHITESPACE_RE.sub(" ", cleaned)
+    lines = [line.strip() for line in cleaned.splitlines()]
+    cleaned = "\n".join(line for line in lines if line)
+    return _BLANK_LINES_RE.sub("\n\n", cleaned).strip()
 
 
 def _hash(text_in: str | None) -> str:
@@ -219,6 +260,62 @@ def backfill_insights_embeddings(self, batch_size: int = _BATCH_SIZE) -> dict[st
         session.commit()
     logger.info(
         "backfill_insights_embeddings: enqueued=%d (of %d candidates)",
+        enqueued, len(rows),
+    )
+    return {"enqueued": enqueued, "candidates": len(rows)}
+
+
+@celery_app.task(
+    bind=True, name="app.tasks.embed_backfill.backfill_email_campaigns_embeddings",
+)
+def backfill_email_campaigns_embeddings(self, batch_size: int = _BATCH_SIZE) -> dict[str, Any]:
+    """Enqueue every ``email_campaigns`` row missing an embedding.
+
+    Covers both Mailchimp-sourced and seed/manual campaigns (no filter on
+    ``source`` — a campaign is a campaign regardless of provenance). Payload
+    is name + subject + a plain-text conversion of the rendered HTML body
+    (``body_html``, pulled from Mailchimp's ``/campaigns/{id}/content``) —
+    the HTML markup itself is pure noise for semantic search, but the
+    marketing copy inside it is exactly the kind of "what did we say in
+    that email" content the chat agent should be able to surface.
+    """
+    with make_sync_session() as session:
+        rows = session.execute(
+            text("""
+                SELECT id::text AS id, name, subject, body_html
+                FROM email_campaigns
+                WHERE deleted_at IS NULL
+                  AND (
+                      coalesce(name, '') <> '' OR
+                      coalesce(subject, '') <> '' OR
+                      coalesce(body_html, '') <> ''
+                  )
+                ORDER BY coalesce(sent_at, created_at) ASC NULLS LAST
+                LIMIT :n
+            """),
+            {"n": batch_size},
+        ).mappings().all()
+        candidates = [
+            (
+                r["id"],
+                "\n\n".join(
+                    part for part in (
+                        r["name"] or "",
+                        r["subject"] or "",
+                        html_to_text(r["body_html"]),
+                    ) if part
+                ),
+            )
+            for r in rows
+        ]
+        enqueued = _enqueue_missing(
+            session,
+            source_table="email_campaigns",
+            rows=candidates,
+        )
+        session.commit()
+    logger.info(
+        "backfill_email_campaigns_embeddings: enqueued=%d (of %d candidates)",
         enqueued, len(rows),
     )
     return {"enqueued": enqueued, "candidates": len(rows)}
