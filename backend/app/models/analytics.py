@@ -79,12 +79,17 @@ class Recommendation(Base):
 
     Lifecycle: open → acknowledged → acted → resolved (the feedback loop: as more data
     arrives we re-check whether the metric moved). Recommendations are upserted on the
-    natural key (metric_key, window) so a standing finding refreshes rather than piles up.
+    natural key (metric_key, window, scope) so a standing finding refreshes rather than
+    piles up. ``scope`` mirrors ``MetricSnapshot.scope``: "global" for the existing
+    company-wide findings, "rep:<rep_id>" for a per-rep finding — the same metric can
+    have both an open global finding and an open finding for one specific rep at once.
     """
 
     __tablename__ = "recommendations"
     __table_args__ = (
-        UniqueConstraint("metric_key", "window", name="uq_recommendations_metric_window"),
+        UniqueConstraint(
+            "metric_key", "window", "scope", name="uq_recommendations_metric_window_scope"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -92,6 +97,7 @@ class Recommendation(Base):
     metric_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     area: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     window: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope: Mapped[str] = mapped_column(String(64), nullable=False, default="global")
 
     # What the data says.
     verdict: Mapped[str] = mapped_column(String(24), nullable=False)  # declining / improving / …

@@ -92,6 +92,42 @@ def test_get_metric_lookup() -> None:
     check("get_metric returns None for unknown key", get_metric("nonexistent.metric.key") is None)
 
 
+def test_rep_sql_contract_for_metrics_that_declare_it() -> None:
+    # Mirrors the rep-scoped SQL contract documented in the registry module docstring:
+    # binds :since, groups by rep_id (or equivalent), and aliases rep_id/value/sample_size.
+    rep_metrics = [m for m in REGISTRY if m.rep_sql is not None]
+    check("at least one metric declares rep_sql", len(rep_metrics) > 0)
+    for m in rep_metrics:
+        sql_text = str(m.rep_sql)
+        sql_lower = sql_text.lower()
+        check(f"{m.key}: rep_sql references :since", ":since" in sql_text)
+        check(f"{m.key}: rep_sql groups by rep_id", "group by rep_id" in sql_lower)
+        check(f"{m.key}: rep_sql selects rep_id", "rep_id" in sql_lower.split("from")[0])
+        check(f"{m.key}: rep_sql aliases value", "as value" in sql_lower)
+        check(f"{m.key}: rep_sql aliases sample_size", "sample_size" in sql_lower)
+        check(f"{m.key}: rep_sql excludes NULL rep_id", "rep_id is not null" in sql_lower)
+
+
+def test_channel_response_rate_is_global_only() -> None:
+    m = get_metric("sales.channel_response_rate")
+    check("channel_response_rate is registered", m is not None)
+    check("channel_response_rate has no rep_sql (inbound has no rep attribution)", m.rep_sql is None)
+    check("channel_response_rate is a ratio", m.unit == "ratio")
+    check("channel_response_rate is higher-is-better", m.higher_is_better is True)
+    sql_text = str(m.sql)
+    check("channel_response_rate sql references :since", ":since" in sql_text)
+    check("channel_response_rate sql selects value/sample_size", "value" in sql_text.lower() and "sample_size" in sql_text.lower())
+
+
+def test_outbound_volume_registered_with_rep_sql() -> None:
+    m = get_metric("sales.outbound_volume")
+    check("outbound_volume is registered", m is not None)
+    check("outbound_volume declares rep_sql", m.rep_sql is not None)
+    check("outbound_volume is a count", m.unit == "count")
+    check("outbound_volume is higher-is-better", m.higher_is_better is True)
+    check("outbound_volume has asof support", m.has_asof is True)
+
+
 def test_has_asof_property() -> None:
     # has_asof should be True only when ALL four asof_* fields are populated.
     for m in REGISTRY:
@@ -123,6 +159,9 @@ def main() -> int:
         test_all_metrics_returns_a_copy,
         test_metrics_for_area_filters_correctly,
         test_get_metric_lookup,
+        test_rep_sql_contract_for_metrics_that_declare_it,
+        test_channel_response_rate_is_global_only,
+        test_outbound_volume_registered_with_rep_sql,
         test_has_asof_property,
     ):
         print(fn.__name__)

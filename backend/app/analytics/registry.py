@@ -21,6 +21,19 @@ All SQL below was verified against the live schema + real data (2026-06-29):
   - closed_sales.lead_id is the raw WGR string → joins to leads.external_id (NOT leads.id).
   - appointment statuses are: completed / cancelled / scheduled / no_show.
   - sales_call_scores.score is 0–10; scored_at is populated.
+
+The rep-scoped SQL contract (``rep_sql``, optional — see the ``Metric`` docstring):
+  - SELECT exactly three columns aliased ``rep_id``, ``value``, ``sample_size``.
+  - GROUP BY rep_id (or equivalent), one row per rep that has data in-window — a rep
+    absent from the result set simply gets no snapshot that day, which is correct
+    (not a zero; we never fabricate a value for a rep with no activity).
+  - Honor the exact same window rule as the global ``sql``: bind ``:since`` and use
+    ``(:since IS NULL OR col >= :since)``.
+  - COALESCE the value expression so no row's ``value`` is ever NULL (a rep with rows
+    in-window always has a computable value; only the "no rows at all" case is
+    excluded via the GROUP BY rather than represented as 0).
+  - Verified live 2026-07-08/09: 7 reps in sales_reps; e.g. REP_MAKYLA_THOMPSON has
+    ~5k outbound sales_activities rows in the trailing 30d window.
 """
 
 from __future__ import annotations
@@ -52,6 +65,11 @@ class Metric:
     higher_is_better: bool
     sql: TextClause
     description: str = ""
+
+    # Optional per-rep breakdown of the same metric. See the rep-scoped SQL contract
+    # in the module docstring. None → this metric has no per-rep snapshot (either it
+    # can't be rep-attributed, e.g. inbound activity, or it hasn't been wired up yet).
+    rep_sql: TextClause | None = None
 
     # As-of history support (optional; None → metric has no derived history).
     asof_table: str | None = None
@@ -123,6 +141,19 @@ _SALES_METRICS: list[Metric] = [
               AND (:since IS NULL OR COALESCE(scored_at, created_at) >= :since)
             """
         ),
+        rep_sql=text(
+            """
+            SELECT
+                rep_id,
+                COALESCE(AVG(score), 0) AS value,
+                COUNT(*)                AS sample_size
+            FROM sales_call_scores
+            WHERE score IS NOT NULL
+              AND rep_id IS NOT NULL
+              AND (:since IS NULL OR COALESCE(scored_at, created_at) >= :since)
+            GROUP BY rep_id
+            """
+        ),
         asof_table="sales_call_scores",
         asof_date_col="COALESCE(scored_at, created_at)",
         asof_value_expr="COALESCE(AVG(score), 0)",
@@ -177,6 +208,19 @@ _SALES_METRICS: list[Metric] = [
               AND (:since IS NULL OR close_date >= (:since)::date)
             """
         ),
+        rep_sql=text(
+            """
+            SELECT
+                rep_id,
+                COUNT(*) AS value,
+                COUNT(*) AS sample_size
+            FROM closed_sales
+            WHERE close_date IS NOT NULL
+              AND rep_id IS NOT NULL
+              AND (:since IS NULL OR close_date >= (:since)::date)
+            GROUP BY rep_id
+            """
+        ),
         asof_table="closed_sales",
         asof_date_col="close_date",
         asof_value_expr="COUNT(*)",
@@ -198,6 +242,19 @@ _SALES_METRICS: list[Metric] = [
             FROM closed_sales
             WHERE close_date IS NOT NULL
               AND (:since IS NULL OR close_date >= (:since)::date)
+            """
+        ),
+        rep_sql=text(
+            """
+            SELECT
+                rep_id,
+                COALESCE(SUM(amount_collected), 0) AS value,
+                COUNT(*) FILTER (WHERE amount_collected IS NOT NULL) AS sample_size
+            FROM closed_sales
+            WHERE close_date IS NOT NULL
+              AND rep_id IS NOT NULL
+              AND (:since IS NULL OR close_date >= (:since)::date)
+            GROUP BY rep_id
             """
         ),
         asof_table="closed_sales",
@@ -231,6 +288,81 @@ _SALES_METRICS: list[Metric] = [
         asof_value_expr="COALESCE(SUM(revenue_earned), 0)",
         asof_sample_expr="COUNT(*) FILTER (WHERE revenue_earned IS NOT NULL)",
         asof_row_filter="close_date IS NOT NULL",
+    ),
+    Metric(
+        key="sales.outbound_volume",
+        area="sales",
+        label="Outbound Volume",
+        unit="count",
+        higher_is_better=True,
+        description="Count of rep-attributed outbound touchpoints (call/email/sms/"
+        "social_dm with activity_type ending '_outbound') occurring in the window. "
+        "Windowed on sales_activities.occurred_at. Rows with a NULL rep_id are "
+        "excluded (unattributed outbound activity — see sales_activities model note); "
+        "the global value still counts every outbound row, attributed or not, so a "
+        "rep's own attributed volume is naturally ≤ the global count.",
+        sql=text(
+            """
+            SELECT
+                COUNT(*) AS value,
+                COUNT(*) AS sample_size
+            FROM sales_activities
+            WHERE activity_type LIKE '%_outbound'
+              AND (:since IS NULL OR occurred_at >= :since)
+            """
+        ),
+        rep_sql=text(
+            """
+            SELECT
+                rep_id,
+                COUNT(*) AS value,
+                COUNT(*) AS sample_size
+            FROM sales_activities
+            WHERE activity_type LIKE '%_outbound'
+              AND rep_id IS NOT NULL
+              AND (:since IS NULL OR occurred_at >= :since)
+            GROUP BY rep_id
+            """
+        ),
+        asof_table="sales_activities",
+        asof_date_col="occurred_at",
+        asof_value_expr="COUNT(*)",
+        asof_sample_expr="COUNT(*)",
+        asof_row_filter="activity_type LIKE '%_outbound'",
+    ),
+    Metric(
+        key="sales.channel_response_rate",
+        area="sales",
+        label="Channel Response Rate",
+        unit="ratio",
+        higher_is_better=True,
+        description="Inbound / outbound sales_activities in the window — a rough proxy "
+        "for how much inbound engagement each unit of outbound effort generates. "
+        "GLOBAL ONLY: inbound sales_activities rows carry no rep attribution (ALL "
+        "inbound rows have rep_id NULL, verified 2026-07-08), so this metric cannot be "
+        "broken out per rep and intentionally has no rep_sql. Windowed on occurred_at "
+        "for both the numerator and denominator independently (each side counts rows "
+        "whose own occurred_at falls in the window).",
+        sql=text(
+            """
+            SELECT
+                COALESCE(
+                    (SELECT COUNT(*) FROM sales_activities
+                     WHERE activity_type LIKE '%_inbound'
+                       AND (:since IS NULL OR occurred_at >= :since))::float
+                    / NULLIF(
+                        (SELECT COUNT(*) FROM sales_activities
+                         WHERE activity_type LIKE '%_outbound'
+                           AND (:since IS NULL OR occurred_at >= :since)),
+                        0
+                    ),
+                    0
+                ) AS value,
+                (SELECT COUNT(*) FROM sales_activities
+                 WHERE activity_type LIKE '%_outbound'
+                   AND (:since IS NULL OR occurred_at >= :since)) AS sample_size
+            """
+        ),
     ),
 ]
 
@@ -378,6 +510,19 @@ _FULFILLMENT_METRICS: list[Metric] = [
             FROM sales_coaching_strikes
             WHERE status IN ('active', 'open')
               AND (:since IS NULL OR triggered_at >= :since)
+            """
+        ),
+        rep_sql=text(
+            """
+            SELECT
+                rep_id,
+                COUNT(*) AS value,
+                COUNT(*) AS sample_size
+            FROM sales_coaching_strikes
+            WHERE status IN ('active', 'open')
+              AND rep_id IS NOT NULL
+              AND (:since IS NULL OR triggered_at >= :since)
+            GROUP BY rep_id
             """
         ),
         asof_table="sales_coaching_strikes",

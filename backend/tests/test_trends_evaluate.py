@@ -17,6 +17,28 @@ from app.analytics.trends import MIN_REL_CHANGE, MIN_SAMPLE, evaluate
 _failures: list[str] = []
 
 
+class _FakeSession:
+    """Records every executed statement's bound params; returns canned rows.
+
+    Used only by the scope-default-equivalence tests below — ``evaluate`` itself
+    (exercised everywhere else in this file) never touches a session.
+    """
+
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+        self.calls: list[dict] = []
+
+    def execute(self, stmt, params=None):
+        self.calls.append(dict(params or {}))
+        return self
+
+    def mappings(self):
+        return self
+
+    def all(self):
+        return self._rows
+
+
 def check(name: str, cond: bool) -> None:
     if cond:
         print(f"  ok   {name}")
@@ -218,6 +240,68 @@ def test_result_carries_metric_metadata() -> None:
     check("as_dict works", t.as_dict()["verdict"] == t.verdict)
 
 
+# ─── scope parameter — default must be byte-identical to pre-scope behavior ──
+
+
+def test_trend_for_defaults_to_global_scope() -> None:
+    from app.analytics.trends import trend_for
+
+    session = _FakeSession([row(0.5, MIN_SAMPLE, D1), row(0.6, MIN_SAMPLE, D2)])
+    trend_for(session, "sales.avg_call_score", window="30d")
+    check("trend_for defaults scope to 'global'", session.calls[-1]["scope"] == "global")
+
+
+def test_trend_for_passes_through_explicit_scope() -> None:
+    from app.analytics.trends import trend_for
+
+    session = _FakeSession([row(0.5, MIN_SAMPLE, D1), row(0.6, MIN_SAMPLE, D2)])
+    trend_for(session, "sales.avg_call_score", window="30d", scope="rep:REP_X")
+    check("trend_for passes explicit scope through", session.calls[-1]["scope"] == "rep:REP_X")
+
+
+def test_all_trends_defaults_to_global_scope() -> None:
+    from app.analytics.trends import all_trends
+
+    session = _FakeSession([row(0.5, MIN_SAMPLE, D1), row(0.6, MIN_SAMPLE, D2)])
+    all_trends(session, window="30d", area="sales")
+    check(
+        "all_trends defaults every query's scope to 'global'",
+        all(c["scope"] == "global" for c in session.calls),
+    )
+    check("all_trends issued at least one query", len(session.calls) > 0)
+
+
+def test_all_trends_passes_through_explicit_scope() -> None:
+    from app.analytics.trends import all_trends
+
+    session = _FakeSession([row(0.5, MIN_SAMPLE, D1), row(0.6, MIN_SAMPLE, D2)])
+    all_trends(session, window="30d", area="sales", scope="rep:REP_X")
+    check(
+        "all_trends passes explicit scope through to every query",
+        all(c["scope"] == "rep:REP_X" for c in session.calls),
+    )
+
+
+def test_rep_scopes_for_metric_queries_distinct_rep_scopes() -> None:
+    from app.analytics.trends import rep_scopes_for_metric
+
+    class _ScopeSession:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def execute(self, stmt, params=None):
+            self.calls.append(dict(params or {}))
+            return self
+
+        def all(self):
+            return [("rep:REP_A",), ("rep:REP_B",)]
+
+    session = _ScopeSession()
+    scopes = rep_scopes_for_metric(session, "sales.avg_call_score")
+    check("rep_scopes_for_metric returns the scope strings", scopes == ["rep:REP_A", "rep:REP_B"])
+    check("rep_scopes_for_metric binds metric_key", session.calls[0]["metric_key"] == "sales.avg_call_score")
+
+
 def main() -> int:
     for fn in (
         test_empty_series_is_insufficient_data,
@@ -238,6 +322,11 @@ def main() -> int:
         test_zero_baseline_negative_latest_direction,
         test_uses_first_and_last_row_not_middle,
         test_result_carries_metric_metadata,
+        test_trend_for_defaults_to_global_scope,
+        test_trend_for_passes_through_explicit_scope,
+        test_all_trends_defaults_to_global_scope,
+        test_all_trends_passes_through_explicit_scope,
+        test_rep_scopes_for_metric_queries_distinct_rep_scopes,
     ):
         print(fn.__name__)
         fn()

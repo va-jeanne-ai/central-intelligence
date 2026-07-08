@@ -63,8 +63,21 @@ _SERIES = text(
     FROM metric_snapshots
     WHERE metric_key = :metric_key
       AND "window"   = :window
-      AND scope      = 'global'
+      AND scope      = :scope
     ORDER BY captured_date ASC
+    """
+)
+
+# Every distinct per-rep scope with at least one snapshot for a metric — lets
+# recommend.py fan out over "whichever reps actually have data" without hardcoding
+# the roster or querying sales_reps from this module.
+_REP_SCOPES_FOR_METRIC = text(
+    """
+    SELECT DISTINCT scope
+    FROM metric_snapshots
+    WHERE metric_key = :metric_key
+      AND scope LIKE 'rep:%'
+    ORDER BY scope
     """
 )
 
@@ -152,20 +165,46 @@ def evaluate(metric: Metric, rows: list[dict], window: str) -> TrendResult:
     )
 
 
-def trend_for(db: Session, metric_key: str, window: str = DEFAULT_WINDOW) -> TrendResult | None:
-    """Compute the verdict for one metric. None if the metric_key is unknown."""
+def trend_for(
+    db: Session, metric_key: str, window: str = DEFAULT_WINDOW, scope: str = "global"
+) -> TrendResult | None:
+    """Compute the verdict for one metric in one scope. None if the metric_key is unknown.
+
+    ``scope`` defaults to "global" — byte-identical to the pre-scope behavior. Pass
+    e.g. ``"rep:REP_X"`` to evaluate a per-rep series instead.
+    """
     metric = get_metric(metric_key)
     if metric is None:
         return None
-    rows = db.execute(_SERIES, {"metric_key": metric_key, "window": window}).mappings().all()
+    rows = db.execute(
+        _SERIES, {"metric_key": metric_key, "window": window, "scope": scope}
+    ).mappings().all()
     return evaluate(metric, list(rows), window)
 
 
-def all_trends(db: Session, window: str = DEFAULT_WINDOW, area: str | None = None) -> list[TrendResult]:
-    """Verdicts for every registered metric (optionally one area)."""
+def all_trends(
+    db: Session, window: str = DEFAULT_WINDOW, area: str | None = None, scope: str = "global"
+) -> list[TrendResult]:
+    """Verdicts for every registered metric (optionally one area), in one scope.
+
+    ``scope`` defaults to "global" — byte-identical to the pre-scope behavior.
+    """
     metrics = [m for m in all_metrics() if area is None or m.area == area]
     results: list[TrendResult] = []
     for m in metrics:
-        rows = db.execute(_SERIES, {"metric_key": m.key, "window": window}).mappings().all()
+        rows = db.execute(
+            _SERIES, {"metric_key": m.key, "window": window, "scope": scope}
+        ).mappings().all()
         results.append(evaluate(m, list(rows), window))
     return results
+
+
+def rep_scopes_for_metric(db: Session, metric_key: str) -> list[str]:
+    """Every ``"rep:<rep_id>"`` scope with at least one snapshot for this metric.
+
+    Used by ``recommend.py`` to fan out rep-scoped evaluation over exactly the reps
+    that have data for a given metric, without hardcoding or re-deriving the roster
+    here. Returns scopes sorted for deterministic iteration order.
+    """
+    rows = db.execute(_REP_SCOPES_FOR_METRIC, {"metric_key": metric_key}).all()
+    return [row[0] for row in rows]

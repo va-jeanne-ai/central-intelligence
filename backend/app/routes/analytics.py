@@ -178,7 +178,9 @@ async def list_recommendations(
     """Data-cited recommendations. Defaults to the non-resolved ones (the live findings)."""
     from app.analytics.recommend import fetch_recommendation_rows
 
-    rows = await fetch_recommendation_rows(session, status=status, area=area)
+    # scope="global" explicitly: this route must keep returning only company-wide
+    # findings by default so the existing UI doesn't suddenly show per-rep findings.
+    rows = await fetch_recommendation_rows(session, status=status, area=area, scope="global")
     return [
         RecommendationItem(
             id=r["id"], metric_key=r["metric_key"], area=r["area"], window=r["window"],
