@@ -56,6 +56,11 @@ MOCK_OVERALL_INSIGHT = {
 
 
 # ─── Input gathering ──────────────────────────────────────────────────────────
+#
+# ``_latest_metric_values`` / ``_active_recommendations`` / ``_gather_evidence`` are
+# reused as-is by ``app.analytics.weekly_digest`` (same distilled-evidence shape); kept
+# public-ish (module-level, no leading-underscore renaming) so that import stays a
+# straight function reference rather than a copy-paste.
 
 
 def _latest_metric_values(db: Session, window: str) -> list[dict]:
@@ -122,17 +127,18 @@ def _gather_evidence(db: Session) -> dict:
 
 
 def _fetch_previous(db: Session) -> dict | None:
-    """The most recent assessment from a strictly-earlier day (None if none).
+    """The most recent DAILY assessment from a strictly-earlier day (None if none).
 
     Strictly-earlier so a same-day regenerate never links to itself and never corrupts
-    tomorrow's chain.
+    tomorrow's chain. Scoped to period='daily' so the weekly digest (which shares this
+    table) is never mistaken for yesterday's daily assessment.
     """
     row = db.execute(
         text(
             """
             SELECT id, insight_date, health_verdict, narrative
             FROM overall_insights
-            WHERE insight_date < CURRENT_DATE
+            WHERE insight_date < CURRENT_DATE AND period = 'daily'
             ORDER BY insight_date DESC LIMIT 1
             """
         )
@@ -181,6 +187,31 @@ def _build_user_prompt(evidence: dict, previous: dict | None) -> str:
 
 
 # ─── LLM call ─────────────────────────────────────────────────────────────────
+#
+# ``call_claude_for_json`` is the shared "hit Claude, extract the JSON object" plumbing
+# — reused by ``app.analytics.weekly_digest`` so the client construction / model choice
+# / JSON-extraction path lives in exactly one place. Mock-mode / missing-key handling
+# stays per-caller (each has its own MOCK_* constant shaped like its own output).
+
+
+def call_claude_for_json(system_prompt: str, user_prompt: str, *, max_tokens: int = 2048) -> dict:
+    """Call Claude with a system+user prompt pair and return the parsed JSON object.
+
+    No mock handling here — callers check ``settings.anthropic_api_key`` /
+    ``settings.mock_mode`` themselves first (they each have their own canned fallback
+    shaped like their own output contract).
+    """
+    import anthropic  # lazy import — large module
+
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    message = client.messages.create(
+        model=MODEL,
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    raw = message.content[0].text
+    return json.loads(extract_json_object(raw))
 
 
 def _synthesize(evidence: dict, previous: dict | None) -> tuple[dict, str]:
@@ -191,22 +222,18 @@ def _synthesize(evidence: dict, previous: dict | None) -> tuple[dict, str]:
         )
         return dict(MOCK_OVERALL_INSIGHT), "mock"
 
-    import anthropic  # lazy import — large module
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    message = client.messages.create(
-        model=MODEL,
-        max_tokens=2048,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": _build_user_prompt(evidence, previous)}],
-    )
-    raw = message.content[0].text
-    parsed = json.loads(extract_json_object(raw))
+    parsed = call_claude_for_json(_SYSTEM_PROMPT, _build_user_prompt(evidence, previous))
     return parsed, MODEL
 
 
-def _coerce(parsed: dict) -> dict:
-    """Validate/normalize the LLM output into the three stored fields."""
+def coerce_health_assessment(parsed: dict) -> dict:
+    """Validate/normalize an LLM assessment into the three stored fields.
+
+    Shared by the daily overall insight AND the weekly digest — both ask Claude for
+    the same ``{health_verdict, narrative, key_shifts}`` shape, so both validate it the
+    same way. A neutral 'watch' default beats failing the whole generation on a
+    malformed verdict.
+    """
     verdict = str(parsed.get("health_verdict", "")).strip().lower()
     if verdict not in _VALID_VERDICTS:
         verdict = "watch"  # neutral default rather than fail the whole generation
@@ -220,17 +247,22 @@ def _coerce(parsed: dict) -> dict:
     return {"health_verdict": verdict, "narrative": narrative.strip(), "key_shifts": shifts}
 
 
+# Back-compat alias — keep the original private name working for any existing callers
+# / tests that import ``_coerce`` directly.
+_coerce = coerce_health_assessment
+
+
 # ─── Persistence ──────────────────────────────────────────────────────────────
 
 _UPSERT = text(
     """
     INSERT INTO overall_insights
-        (insight_date, status, health_verdict, narrative, key_shifts, evidence,
+        (insight_date, period, status, health_verdict, narrative, key_shifts, evidence,
          model, previous_insight_id, generated_at)
     VALUES
-        (CURRENT_DATE, 'published', :health_verdict, :narrative, :key_shifts, :evidence,
-         :model, :previous_insight_id, now())
-    ON CONFLICT (insight_date) DO UPDATE SET
+        (CURRENT_DATE, 'daily', 'published', :health_verdict, :narrative, :key_shifts,
+         :evidence, :model, :previous_insight_id, now())
+    ON CONFLICT (insight_date, period) DO UPDATE SET
         status              = 'published',
         health_verdict      = EXCLUDED.health_verdict,
         narrative           = EXCLUDED.narrative,

@@ -113,29 +113,43 @@ class Recommendation(Base):
 
 
 class OverallInsight(Base):
-    """A daily, LLM-synthesized company-level health assessment.
+    """A daily (or weekly), LLM-synthesized company-level health assessment.
 
     Unlike ``Recommendation`` (a per-metric, statistics-only finding), this is a
     holistic narrative over the whole analytics picture — verdict + prose + key shifts.
-    It *compounds*: each day's assessment is generated from today's analytics PLUS the
-    previous day's narrative, so the story carries forward. ``previous_insight_id``
-    links to the immediately-earlier day (NULL for the genesis assessment).
+    It *compounds*: each assessment is generated from the fresh analytics PLUS the
+    previous assessment's narrative (same period), so the story carries forward.
+    ``previous_insight_id`` links to the immediately-earlier row of the SAME period
+    (NULL for the genesis assessment of that period).
+
+    ``period`` discriminates 'daily' (the original per-day assessment; see
+    ``app.analytics.overall_insight``) from 'weekly' (the digest that synthesizes the
+    last 7 days; see ``app.analytics.weekly_digest``). Both share this table because the
+    shape and the "LLM only phrases recorded evidence" contract are identical — only the
+    cadence and the range of evidence differ. ``insight_date`` is the anchor date
+    (the day for 'daily'; the first day of the covered week for 'weekly') and
+    ``period_end`` is NULL for 'daily' and the last day of the covered week for 'weekly'.
 
     ``evidence`` records the analytics inputs the LLM was given (trends, recs, latest
-    values) so the narrative is auditable. One row per ``insight_date`` — a regenerate
-    upserts (replaces) the same day rather than piling up.
+    values) so the narrative is auditable. One row per (``insight_date``, ``period``) —
+    a regenerate upserts (replaces) the same slot rather than piling up.
     """
 
     __tablename__ = "overall_insights"
     __table_args__ = (
-        UniqueConstraint("insight_date", name="uq_overall_insights_date"),
+        UniqueConstraint("insight_date", "period", name="uq_overall_insights_date_period"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
-    # One assessment per calendar day; the idempotency key.
+    # One assessment per (calendar day, period); the idempotency key.
     insight_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="published")
+
+    # 'daily' (default, matches all pre-existing rows) or 'weekly'. period_end is the
+    # last day of the covered range for 'weekly' digests; NULL for 'daily'.
+    period: Mapped[str] = mapped_column(String(16), nullable=False, default="daily", index=True)
+    period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # The assessment itself.
     health_verdict: Mapped[str] = mapped_column(String(16), nullable=False)  # healthy/watch/at_risk

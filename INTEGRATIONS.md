@@ -165,13 +165,20 @@ The Central Intelligence chat agent has **three retrieval tools**; the LLM picks
 | `query_calendar` | Time-window calendar questions ("Friday", "next week", attendee filter) | `google_calendar_events` table (structured range query, not vector) |
 | `search_knowledge_base` | Semantic / "find anything about…" questions | `embeddings` table; pgvector cosine against the Voyage-embedded chunks |
 
-Embeddings cover five sources today, all polymorphic-keyed by `(source_table, source_id)`:
+Embeddings cover twelve sources today, all polymorphic-keyed by `(source_table, source_id)`. Each `source_table` tag is a distinct row in `app.tasks.embed_backfill` — that module is the source of truth for the list; the enumeration below mirrors it:
 
 - `google_drive_files` — primary RAG corpus. Docs/Sheets/Slides exported via Drive API to `text/plain` or `text/csv`; PDFs via pdfplumber; DOCX via python-docx; plain text + markdown as-is. Files >15MB are indexed at metadata level only.
 - `email_messages` — subject + body_text concatenated per message.
 - `google_calendar_events` — title + description + attendees + when concatenated (so semantic queries like "find the budget review meeting" hit on the right event).
 - `lead_notes` — staff-side journal entries.
 - `insights` — call insights (raw_quote + what_they_say + the_real_problem + emotional_driver + marketing_translation concatenated).
+- `email_campaigns` — **added 2026-07-08.** Mailchimp (and seed/manual) email campaigns: name + subject + a plain-text conversion of the rendered `body_html` (dependency-free tag-stripping helper, `embed_backfill.html_to_text` — no new library added). Covers both Mailchimp-API-sourced rows (`update_email_stats`) and WGR-mirrored rows (`wgr_sync`), since both write the same `email_campaigns` table.
+- `wgr_call_transcript` — WGR call transcripts (`calls.transcript_text` where `source='wgr'`) — the richest verbatim source.
+- `wgr_call_analysis` — WGR call summary + AI notes (`calls.summary` + `calls.notes`).
+- `wgr_call_score` — per-category call-score coaching rationale (`sales_call_scores.notes`).
+- `wgr_content_idea` — ready-to-use content hooks/premises/CTAs (`content_ideas`).
+- `wgr_business_profile` — brand grounding (mission, target audience, brand voice, core values, differentiators) for system-prompt context.
+- `wgr_social_comment` — substantive social comments (voice-of-customer), filtered to drop bare GHL keyword triggers ("Info"/"Agent" DM-funnel noise). Reads from the `social_comments` table, which is a single shared table for **both** the WGR mirror and the live `collect_social_comments` collector task — there is no separate live-comments table, so this one source already covers comments regardless of which pipeline wrote them.
 
 Chunking: `tiktoken` cl100k_base, 1024 tokens per chunk with 200-token overlap. Embeddings stored on every chunk; one source row → many `embeddings` rows.
 
@@ -224,7 +231,10 @@ Chunking: `tiktoken` cl100k_base, 1024 tokens per chunk with 200-token overlap. 
 - **Quota:** Gmail API and Drive API both have generous quotas (1B units/day per project on Gmail; 1k req/100s per user on Drive). The sweep stays well under these for typical team sizes.
 - **Voyage cost guardrails.** Token usage is reported by Voyage on every embed call and decremented against `embedding_budget.tokens_used_today`. Default cap is **50M tokens/day** (~$3/day at Voyage `voyage-3` pricing). The worker pauses when the cap is hit and resets on a rolling 24h window. To adjust: `UPDATE embedding_budget SET daily_token_cap = <N> WHERE id = 1`.
 - **Re-embed semantics.** Each source row's `content_hash` (sha256[:64]) is compared to the most recent `embeddings` row for `(source_table, source_id)`. If unchanged, the embed is skipped. When content changes the worker DELETEs the old chunks for that source row before inserting the new ones — no version sprawl.
-- **Backfill the other three sources.** `app.tasks.embed_backfill` provides three one-shot tasks (`backfill_email_messages_embeddings`, `backfill_lead_notes_embeddings`, `backfill_insights_embeddings`) that enqueue every row missing an embedding. Invoke from a Celery shell or via `.delay()` from a Python REPL after the migration runs.
+- **Backfill tasks.** `app.tasks.embed_backfill` provides one-shot tasks per source — `backfill_email_messages_embeddings`, `backfill_lead_notes_embeddings`, `backfill_insights_embeddings`, `backfill_email_campaigns_embeddings`, `reembed_drive_files`, and `backfill_wgr_embeddings` (covers the six `wgr_*` sources in one call) — each enqueuing every row missing an embedding. None are on the beat schedule directly; they're invoked manually (Celery shell / `.delay()` from a REPL) or chained automatically after the task that populates their source table:
+  - `wgr_sync.sync_wgr` chains `backfill_wgr_embeddings`, `backfill_insights_embeddings`, and `backfill_email_campaigns_embeddings` after a non-empty sync (WGR mirrors `email_campaigns` directly, independent of Mailchimp).
+  - `email_stats.update_email_stats` (the Mailchimp poller) chains `backfill_email_campaigns_embeddings` after any run that wrote campaign rows, so Mailchimp-sourced campaigns reach the vector store on the same 6-hourly cycle as the dashboard data, without waiting for the next WGR sync.
+  - `google_drive_files` is enqueued incrementally by the nightly Drive sync itself; `reembed_drive_files` is only for a full re-embed after a payload-shape change.
 - **Why the state parameter is encrypted, not just signed.** The state encodes `{user_id, nonce, issued_at}` and is Fernet-encrypted with the integrations master key. Encryption gives us tamper-proofing + freshness-checking + opacity in one primitive without adding a session store. TTL is 10 min — enough for the OAuth round-trip.
 
 ---

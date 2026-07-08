@@ -87,6 +87,21 @@ class OverallInsightResponse(BaseModel):
     generated_at: str
 
 
+class WeeklyDigestResponse(BaseModel):
+    """The latest weekly digest (see analytics/weekly_digest.py) — shares the
+    ``overall_insights`` table with the daily assessment, distinguished by
+    ``period='weekly'``."""
+
+    week_start: str
+    week_end: str | None
+    health_verdict: str  # healthy | watch | at_risk
+    narrative: str
+    key_shifts: list[str]
+    previous_week_start: str | None
+    model: str
+    generated_at: str
+
+
 # ─── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("/metrics", response_model=list[MetricValue], summary="Latest value per metric")
@@ -383,3 +398,74 @@ async def refresh_overall_insight(
     finally:
         db.close()
     return OverallInsightResponse(**result)
+
+
+# ===================================================================
+# Weekly Digest — a weekly synthesis of the statistical engine's output
+# ===================================================================
+
+@router.get(
+    "/weekly-digest",
+    response_model=WeeklyDigestResponse,
+    summary="Latest weekly digest",
+)
+async def get_weekly_digest(
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+):
+    """The most recent weekly digest, or 204 when none has been generated yet."""
+    row = (await session.execute(text(
+        """
+        SELECT o.insight_date AS week_start, o.period_end AS week_end, o.health_verdict,
+               o.narrative, o.key_shifts, o.model, o.generated_at,
+               p.insight_date AS previous_week_start
+        FROM overall_insights o
+        LEFT JOIN overall_insights p ON p.id = o.previous_insight_id
+        WHERE o.period = 'weekly'
+        ORDER BY o.insight_date DESC
+        LIMIT 1
+        """
+    ))).mappings().first()
+
+    if row is None:
+        response.status_code = 204
+        return None
+
+    return WeeklyDigestResponse(
+        week_start=row["week_start"].isoformat(),
+        week_end=(row["week_end"].isoformat() if row["week_end"] else None),
+        health_verdict=row["health_verdict"],
+        narrative=row["narrative"],
+        key_shifts=list(row["key_shifts"] or []),
+        previous_week_start=(
+            row["previous_week_start"].isoformat() if row["previous_week_start"] else None
+        ),
+        model=row["model"],
+        generated_at=row["generated_at"].isoformat(),
+    )
+
+
+@router.post(
+    "/weekly-digest/refresh",
+    response_model=WeeklyDigestResponse,
+    summary="Generate (or regenerate) this week's digest — at most one paid LLM call",
+)
+async def refresh_weekly_digest():
+    """Trigger a fresh weekly synthesis. Makes at most ONE Claude call (unless
+    mock_mode is on), and no-ops (204) if there's no data for the week at all.
+
+    Runs the sync generation over a short-lived sync session, mirroring
+    POST /overall-insight/refresh.
+    """
+    from app.analytics.weekly_digest import generate_weekly_digest
+    from app.tasks.db import make_sync_session
+
+    db = make_sync_session()
+    try:
+        result = generate_weekly_digest(db)
+    finally:
+        db.close()
+
+    if result is None:
+        return Response(status_code=204)
+    return WeeklyDigestResponse(**result)

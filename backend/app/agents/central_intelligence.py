@@ -537,29 +537,62 @@ async def _delegate_to_fulfillment_director(task: str) -> str:
     )
 
 
-# ─── Analytics insights tool — the data-intelligence engine, as prose ───────────
-# Answers "what's working / what needs to change" from the SAME engine that backs the
-# Insights dashboard. Pure data: returns the statistical verdicts + active
-# recommendations with the numbers behind them. The LLM relays these; it must not
-# invent a finding the engine didn't produce.
+# ─── Analytics verdicts tool — the data-intelligence engine, as structured JSON ──
+# Answers "how is the business / a department / a metric doing, what's improving or
+# declining, what should be acted on" from the SAME engine that backs the Insights
+# dashboard (app/routes/analytics.py). Returns strict JSON built ONLY from the
+# engine's real computed values (registry.py catalog → trends.evaluate() verdicts →
+# recommend.fetch_recommendation_rows() open findings) — the tool never fabricates
+# a number; the LLM may only phrase what's returned.
+#
+# This is the ONLY analytics tool on CI. There is no separate ad-hoc prose reader —
+# folding the previous helper in here avoids two paths to the same engine data.
 
-async def _analytics_insights(area: str | None = None, window: str = "30d") -> str:
-    """Return the engine's trend verdicts + active recommendations as a prose brief."""
+_ANALYTICS_VALID_WINDOWS = {"7d", "30d", "90d", "all"}
+_ANALYTICS_VALID_AREAS = {"sales", "marketing", "fulfillment"}
+
+
+async def _get_analytics_verdicts(
+    area: str | None = None,
+    metric_key: str | None = None,
+    window: str = "30d",
+) -> str:
+    """Return the engine's trend verdicts + open recommendations as structured JSON.
+
+    Every field is read straight off ``TrendResult`` / the ``recommendations`` table —
+    nothing here is computed or guessed by this function or the LLM.
+    """
     from app.analytics.trends import evaluate
-    from app.analytics.registry import all_metrics
+    from app.analytics.registry import all_metrics, get_metric
+    from app.analytics.recommend import fetch_recommendation_rows
     from app.database import AsyncSessionLocal
     from sqlalchemy import text
 
-    valid_windows = {"7d", "30d", "90d", "all"}
-    window = window if window in valid_windows else "30d"
+    window = window if window in _ANALYTICS_VALID_WINDOWS else "30d"
+
+    if area is not None and area not in _ANALYTICS_VALID_AREAS:
+        return json.dumps({
+            "error": f"Unknown area '{area}'. Valid areas: "
+                     f"{sorted(_ANALYTICS_VALID_AREAS)}.",
+        })
+
+    if metric_key is not None and get_metric(metric_key) is None:
+        return json.dumps({"error": f"Unknown metric_key '{metric_key}'."})
 
     try:
         async with AsyncSessionLocal() as s:
             metrics = [m for m in all_metrics() if area is None or m.area == area]
+            if metric_key is not None:
+                metrics = [m for m in metrics if m.key == metric_key]
             if not metrics:
-                return f"No metrics are registered for area '{area}'."
+                return json.dumps({
+                    "window": window,
+                    "metrics": [],
+                    "recommendations": [],
+                    "note": "No metrics are registered for the given filter(s).",
+                })
 
-            lines: list[str] = [f"Data-derived findings ({window} window):"]
+            metric_out: list[dict] = []
             for m in metrics:
                 rows = (await s.execute(text(
                     'SELECT value, sample_size, captured_date FROM metric_snapshots '
@@ -567,29 +600,56 @@ async def _analytics_insights(area: str | None = None, window: str = "30d") -> s
                     "ORDER BY captured_date ASC"
                 ), {"k": m.key, "w": window})).mappings().all()
                 t = evaluate(m, [dict(r) for r in rows], window)
-                lines.append(f"- {t.label}: {t.verdict.replace('_', ' ')}. {t.reason}")
+                metric_out.append({
+                    "metric_key": t.metric_key,
+                    "area": t.area,
+                    "label": t.label,
+                    "unit": t.unit,
+                    "higher_is_better": t.higher_is_better,
+                    "window": t.window,
+                    "verdict": t.verdict,
+                    "latest_value": t.latest_value,
+                    "baseline_value": t.baseline_value,
+                    "rel_change": t.rel_change,
+                    "latest_sample": t.latest_sample,
+                    "baseline_sample": t.baseline_sample,
+                    "latest_date": t.latest_date,
+                    "baseline_date": t.baseline_date,
+                    "reason": t.reason,
+                })
 
-            # Active recommendations (the threshold-crossing findings).
-            recs = (await s.execute(text(
-                "SELECT severity, title, body FROM recommendations "
-                "WHERE status <> 'resolved'"
-                + (" AND area = :area" if area else "")
-                + " ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END"
-            ), ({"area": area} if area else {}))).mappings().all()
-            if recs:
-                lines.append("\nActive recommendations:")
-                for r in recs:
-                    lines.append(f"- [{r['severity']}] {r['title']} — {r['body']}")
-            else:
-                lines.append(
-                    "\nNo active recommendations: no metric currently crosses the "
-                    "significance threshold with enough data. (Findings appear as more "
-                    "daily data accrues — the engine won't guess.)"
-                )
-            return "\n".join(lines)
+            # Open recommendations — same shared helper the HTTP API uses, so the
+            # chat surface and the Insights dashboard never disagree.
+            rec_rows = await fetch_recommendation_rows(
+                s, area=area,
+            )
+            if metric_key is not None:
+                rec_rows = [r for r in rec_rows if r["metric_key"] == metric_key]
+
+            recommendations_out = [
+                {
+                    "metric_key": r["metric_key"],
+                    "area": r["area"],
+                    "window": r["window"],
+                    "verdict": r["verdict"],
+                    "severity": r["severity"],
+                    "title": r["title"],
+                    "body": r["body"],
+                    "evidence": r["evidence"],
+                    "status": r["status"],
+                    "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+                }
+                for r in rec_rows
+            ]
+
+            return json.dumps({
+                "window": window,
+                "metrics": metric_out,
+                "recommendations": recommendations_out,
+            })
     except Exception as exc:  # noqa: BLE001 — never crash the CI tool loop
-        logger.warning("analytics_insights tool error: %s", exc)
-        return "Couldn't read the analytics engine right now."
+        logger.warning("get_analytics_verdicts tool error: %s", exc)
+        return json.dumps({"error": "Couldn't read the analytics engine right now."})
 
 
 class CentralIntelligence(BaseAgent):
@@ -643,15 +703,21 @@ class CentralIntelligence(BaseAgent):
         )
 
         self.register_tool(
-            name="analytics_insights",
+            name="get_analytics_verdicts",
             description=(
-                "Get data-derived findings on what's working and what needs to change: "
-                "statistical trend verdicts (improving / declining / flat / need-more-data) "
-                "per outcome metric, plus active recommendations — all computed purely from "
-                "the data with the numbers cited. Use this for questions like \"what's "
-                "working in sales?\", \"what should we fix?\", \"how are we trending?\". "
-                "These findings are authoritative and already statistical — relay them "
-                "as-is; do NOT invent conclusions the data didn't produce."
+                "Call this when the user asks how the business, a department, or a "
+                "specific metric is doing, what's improving or declining, or what "
+                "should be acted on. Returns the data-intelligence engine's "
+                "statistical verdicts (improving / declining / flat / "
+                "insufficient_data) for each outcome metric — with the exact change "
+                "%, sample sizes, and dates behind each verdict — plus the engine's "
+                "open recommendations (severity, title, evidence). This is the SAME "
+                "engine that powers the Insights dashboard: every number is computed "
+                "directly from real data, never guessed or estimated. Relay the "
+                "returned verdicts, numbers, and recommendation text as-is — you may "
+                "only rephrase them into natural language, never invent, adjust, or "
+                "round a figure the tool didn't return. If a metric's verdict is "
+                "'insufficient_data', say so rather than implying a trend exists."
             ),
             input_schema={
                 "type": "object",
@@ -661,6 +727,12 @@ class CentralIntelligence(BaseAgent):
                         "description": "Optional area filter: 'sales', 'marketing', or "
                         "'fulfillment'. Omit for all areas.",
                     },
+                    "metric_key": {
+                        "type": "string",
+                        "description": "Optional exact metric key to scope to a single "
+                        "metric (e.g. 'sales.lead_to_close_rate'). Omit to get every "
+                        "metric in the selected area(s).",
+                    },
                     "window": {
                         "type": "string",
                         "description": "Lookback window: '7d', '30d' (default), '90d', or 'all'.",
@@ -668,7 +740,7 @@ class CentralIntelligence(BaseAgent):
                 },
                 "required": [],
             },
-            handler=_analytics_insights,
+            handler=_get_analytics_verdicts,
         )
 
         self.register_tool(
