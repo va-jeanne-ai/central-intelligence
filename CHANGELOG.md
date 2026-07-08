@@ -7,6 +7,41 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Fixed — Marketing generator tools now render real API output (no more mock content)
+
+The four generator pages (`marketing/ads/generator`, `marketing/social/scripts`,
+`marketing/offers/builder`, `marketing/dm/templates`) POSTed to the backend but discarded the
+response and rendered hardcoded MOCK_* content — users saw fabricated ad copy/scripts/offers
+regardless of input.
+
+- All four pages now render the actual API response (shapes verified against
+  `backend/app/schemas/*`): ads/social/dm render the markdown `analysis` (conditionally
+  `script`/`sequence`/`recommendations` when populated); offers shows the real Celery
+  queued-task confirmation with a link to the Offers library instead of a fabricated preview.
+- New shared `frontend/src/components/marketing/generator-layout.tsx` (header, generate button,
+  results panel with empty/loading/error/content state machine — Skeleton, EmptyState, toast
+  errors). MOCK_* constants deleted.
+- `DmAnalyzeResponse.sequence` type corrected to the real `string[]`; `SocialAnalyzeResponse`
+  typed.
+
+### Changed — Dashboard recommendations now come from the statistical engine
+
+`GET /dashboard/recommendations` no longer asks an LLM (claude-3-haiku) to invent "exactly 4
+actionable recommendations" — the fabrication pattern banned by the 2026-06-29 data-intelligence
+pivot. It now reads open `Recommendation` rows from the same engine as `/analytics/recommendations`
+via a new shared helper `fetch_recommendation_rows` (`backend/app/analytics/recommend.py`), with a
+deterministic severity→icon mapping. Empty list is a valid response — no padding. The LLM prompt,
+call, and process-local cache were deleted. (`/dashboard/weekly-focus` is a separate LLM path,
+flagged in-code, unchanged.)
+
+### Fixed — Navigation dead links and placeholder stats
+
+- Removed the sidebar "Data Import" entry (`/data-import` has no page — guaranteed 404).
+- Added the fully-built but unreachable ICP page (`/marketing/icp`) to the marketing sidebar.
+- Marketing overview: quick-link to Promo Calendar pointed at `/promo-calendar` (404) instead of
+  `/marketing/promo-calendar`; removed the `PLACEHOLDER_STATS` tiles that rendered as "—".
+- Deleted dead `frontend/src/lib/mock-data/leads.ts` (zero imports).
+
 ### Added — Chat history for the department directors (parity with /chat)
 
 The marketing / sales / fulfillment director chats now persist, with a per-director history

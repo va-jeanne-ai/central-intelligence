@@ -29,15 +29,6 @@ const EMPTY_STATS: DashboardStats = {
   lead_volume: [],
 };
 
-// ─── Placeholder stats appended to live stats ─────────────────────────────────
-// These will be wired to real data in a future sprint.
-
-const PLACEHOLDER_STATS: DepartmentStat[] = [
-  { label: "Social Posts Scheduled", value: "—" },
-  { label: "Ad Spend MTD", value: "—" },
-  { label: "Email Open Rate", value: "—" },
-];
-
 // ─── Marketing tool quick links ───────────────────────────────────────────────
 
 interface ToolLink {
@@ -53,7 +44,7 @@ const TOOL_LINKS: ToolLink[] = [
   { label: "Ads", href: "/marketing/ads", icon: "📢" },
   { label: "DM", href: "/marketing/dm", icon: "💬" },
   { label: "Offers", href: "/marketing/offers", icon: "🎁" },
-  { label: "Promo Calendar", href: "/promo-calendar", icon: "📅" },
+  { label: "Promo Calendar", href: "/marketing/promo-calendar", icon: "📅" },
 ];
 
 // ─── KPI stat tile (uses atomic KpiCard) ─────────────────────────────────────
@@ -209,11 +200,7 @@ export default function MarketingPage() {
     };
   }, [authLoading]);
 
-  // Combine live marketing stats with placeholder tiles.
-  const allStats: DepartmentStat[] = [
-    ...stats.departments.marketing.stats,
-    ...PLACEHOLDER_STATS,
-  ];
+  const allStats: DepartmentStat[] = stats.departments.marketing.stats;
 
   return (
     <>

@@ -161,27 +161,9 @@ async def list_recommendations(
     session: AsyncSession = Depends(get_session),
 ):
     """Data-cited recommendations. Defaults to the non-resolved ones (the live findings)."""
-    where = ["1 = 1"]
-    params: dict[str, object] = {}
-    if status:
-        where.append("status = :status")
-        params["status"] = status
-    else:
-        where.append("status <> 'resolved'")
-    if area:
-        where.append("area = :area")
-        params["area"] = area
+    from app.analytics.recommend import fetch_recommendation_rows
 
-    rows = (await session.execute(text(
-        f"""
-        SELECT id, metric_key, area, "window", verdict, severity, title, body,
-               evidence, status, updated_at
-        FROM recommendations
-        WHERE {" AND ".join(where)}
-        ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END,
-                 updated_at DESC
-        """
-    ), params)).mappings().all()
+    rows = await fetch_recommendation_rows(session, status=status, area=area)
     return [
         RecommendationItem(
             id=r["id"], metric_key=r["metric_key"], area=r["area"], window=r["window"],

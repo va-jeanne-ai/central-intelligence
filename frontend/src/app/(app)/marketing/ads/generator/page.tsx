@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
+import { showApiError } from "@/lib/toast";
+import { CopyButton } from "@/components/ui/button";
+import { GeneratorHeader, GenerateButton, ResultsPanel } from "@/components/marketing/generator-layout";
 import type { AdsAnalyzeResponse } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -17,40 +19,6 @@ type CampaignGoal = (typeof CAMPAIGN_GOALS)[number];
 const BRAND_VOICES = ["Professional", "Casual", "Energetic", "Bold"] as const;
 type BrandVoice = (typeof BRAND_VOICES)[number];
 
-// ─── Mock variant data ─────────────────────────────────────────────────────────
-
-interface AdVariant {
-  label: string;
-  angle: string;
-  headline: string;
-  body: string;
-  cta: string;
-}
-
-const MOCK_VARIANTS: AdVariant[] = [
-  {
-    label: "Variant A",
-    angle: "Awareness",
-    headline: "Transform Your Business in 90 Days",
-    body: "Join 500+ coaches who scaled with our proven system. Results guaranteed or your money back.",
-    cta: "Learn More",
-  },
-  {
-    label: "Variant B",
-    angle: "Conversions",
-    headline: "Limited Spots — Apply Now",
-    body: "Only 5 clients accepted this month. Discover how our clients 3x their revenue without burnout.",
-    cta: "Apply Today",
-  },
-  {
-    label: "Variant C",
-    angle: "Retargeting",
-    headline: "Still Thinking About It?",
-    body: "You've seen what's possible. Take the first step — book a free strategy call and get your custom roadmap.",
-    cta: "Book My Call",
-  },
-];
-
 // ─── Form state ───────────────────────────────────────────────────────────────
 
 interface FormState {
@@ -60,70 +28,68 @@ interface FormState {
   context: string;
 }
 
-// ─── Ad variant card ──────────────────────────────────────────────────────────
+type ResultStatus = "empty" | "loading" | "error" | "content";
 
-function AdVariantCard({ variant }: { variant: AdVariant }) {
+// ─── Analysis result card ─────────────────────────────────────────────────────
+// The `/ads` endpoint returns a single markdown-ish `analysis` string (the
+// director's copy + reasoning combined) plus `ad_copy` and `recommendations`
+// fields that are currently always empty on the backend (see
+// backend/app/routes/ads.py). We render exactly what the API gives us and
+// omit the sections it doesn't populate — no invented variant cards.
+
+function AnalysisResultCard({ result }: { result: AdsAnalyzeResponse }) {
   return (
-    <div className="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-emerald-50">
-        <div className="flex items-center gap-2">
-          <span className="text-base" aria-hidden="true">
-            ✨
-          </span>
-          <h3 className="text-sm font-bold text-gray-900">{variant.label}</h3>
+    <div className="flex flex-col gap-4 p-5">
+      <div className="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-emerald-50">
+          <div className="flex items-center gap-2">
+            <span className="text-base" aria-hidden="true">
+              ✨
+            </span>
+            <h3 className="text-sm font-bold text-gray-900">Ad Copy Analysis</h3>
+          </div>
+          <CopyButton text={result.analysis} label="Copy" />
         </div>
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-white border border-emerald-200 text-emerald-700">
-          {variant.angle}
-        </span>
-      </div>
-      <div className="px-5 py-4 flex flex-col gap-3">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
-            Headline
-          </span>
-          <p className="text-sm font-semibold text-gray-900">{variant.headline}</p>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
-            Body
-          </span>
-          <p className="text-sm text-gray-700 leading-relaxed">{variant.body}</p>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
-            CTA
-          </span>
-          <p className="text-sm font-semibold text-gray-900">{variant.cta}</p>
-        </div>
-        <div className="pt-1">
-          <button
-            type="button"
-            onClick={() => {
-              const text = `${variant.headline}\n\n${variant.body}\n\n${variant.cta}`;
-              void navigator.clipboard.writeText(text);
-            }}
-            className="text-xs font-medium px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors duration-150"
-          >
-            Copy
-          </button>
+        <div className="px-5 py-4">
+          <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
+            {result.analysis || "No analysis returned."}
+          </pre>
         </div>
       </div>
-    </div>
-  );
-}
 
-// ─── Variants empty state ─────────────────────────────────────────────────────
+      {/* ad_copy is a real field but currently always "" on the backend —
+          only render it when the API actually populates it. */}
+      {result.ad_copy !== "" && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100">
+            <h3 className="text-sm font-bold text-gray-900">Ad Copy</h3>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {result.ad_copy}
+            </p>
+          </div>
+        </div>
+      )}
 
-function VariantsEmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <span className="text-4xl" aria-hidden="true">
-        📢
-      </span>
-      <p className="text-sm font-medium text-gray-500">No variants generated yet.</p>
-      <p className="text-xs text-gray-400">
-        Fill in the form above and click Generate Variants.
-      </p>
+      {/* recommendations is always [] today — only render when populated. */}
+      {result.recommendations.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100">
+            <h3 className="text-sm font-bold text-gray-900">Recommendations</h3>
+          </div>
+          <ul className="px-5 py-4 flex flex-col gap-2">
+            {result.recommendations.map((rec, i) => (
+              <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
+                <span className="text-emerald-500 flex-shrink-0" aria-hidden="true">
+                  →
+                </span>
+                {rec}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -137,49 +103,31 @@ export default function AdCopyGeneratorPage() {
     brandVoice: "Professional",
     context: "",
   });
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [hasResult, setHasResult] = useState(false);
+  const [status, setStatus] = useState<ResultStatus>("empty");
+  const [result, setResult] = useState<AdsAnalyzeResponse | null>(null);
+
+  const isGenerating = status === "loading";
 
   async function handleGenerate() {
     if (form.context.trim() === "") return;
-    setIsGenerating(true);
-    setHasResult(false);
+    setStatus("loading");
 
     try {
-      await apiClient.post<AdsAnalyzeResponse>("/ads", {
-        action: "generate_copy",
-        platform: form.platform,
-        goal: form.goal,
-        context: form.context,
-      }, { silent: true });
-
-      // API succeeded — show mock variants (real API returns analysis, not structured variants yet)
-      setIsGenerating(false);
-      setHasResult(true);
-    } catch {
-      // Fall back to mock variants on error.
-      setIsGenerating(false);
-      setHasResult(true);
-    }
-  }
-
-  async function handleRegenerate() {
-    setIsGenerating(true);
-    setHasResult(false);
-
-    try {
-      await apiClient.post<AdsAnalyzeResponse>("/ads", {
-        action: "generate_copy",
-        platform: form.platform,
-        goal: form.goal,
-        context: form.context,
-      }, { silent: true });
-
-      setIsGenerating(false);
-      setHasResult(true);
-    } catch {
-      setIsGenerating(false);
-      setHasResult(true);
+      const response = await apiClient.post<AdsAnalyzeResponse>(
+        "/ads",
+        {
+          action: "generate_copy",
+          platform: form.platform,
+          goal: form.goal,
+          context: form.context,
+        },
+        { silent: true },
+      );
+      setResult(response);
+      setStatus("content");
+    } catch (err) {
+      showApiError(err instanceof Error ? err.message : "Failed to generate ad copy.");
+      setStatus("error");
     }
   }
 
@@ -188,20 +136,12 @@ export default function AdCopyGeneratorPage() {
       <Header title="Ads" />
 
       <main className="flex-1 overflow-y-auto p-7 space-y-6">
-        {/* Page heading */}
-        <div>
-          <Link
-            href="/marketing/ads"
-            className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors mb-2"
-          >
-            <span aria-hidden="true">←</span>
-            Back to Ads
-          </Link>
-          <h1 className="text-xl font-bold text-gray-900">AI Ad Copy Generator</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Generate compelling ad variants tailored to your platform and campaign goals.
-          </p>
-        </div>
+        <GeneratorHeader
+          title="AI Ad Copy Generator"
+          description="Generate compelling ad variants tailored to your platform and campaign goals."
+          backHref="/marketing/ads"
+          backLabel="Back to Ads"
+        />
 
         {/* Generator form card */}
         <section aria-label="Ad copy generator form">
@@ -300,78 +240,37 @@ export default function AdCopyGeneratorPage() {
               />
             </div>
 
-            {/* Generate button */}
-            <button
-              type="button"
+            <GenerateButton
               onClick={handleGenerate}
-              disabled={form.context.trim() === "" || isGenerating}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-200 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors duration-150 active:scale-95 shadow-sm"
-            >
-              {isGenerating ? (
-                <>
-                  <svg
-                    className="animate-spin w-4 h-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  Generating…
-                </>
-              ) : (
-                <>
-                  <span aria-hidden="true">✨</span>
-                  Generate Variants
-                </>
-              )}
-            </button>
+              disabled={form.context.trim() === ""}
+              isGenerating={isGenerating}
+              idleLabel="Generate Variants"
+            />
           </div>
         </section>
 
         {/* Generated variants area */}
         <section aria-label="Generated ad variants">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-bold text-gray-900">Generated Variants</h2>
-              {hasResult && (
-                <span className="text-xs text-gray-400">3 variants</span>
-              )}
-            </div>
-
-            {hasResult ? (
-              <div className="p-5 flex flex-col gap-4">
-                {MOCK_VARIANTS.map((variant) => (
-                  <AdVariantCard key={variant.label} variant={variant} />
-                ))}
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={handleRegenerate}
-                    disabled={isGenerating}
-                    className="text-xs font-medium px-3 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors duration-150"
-                  >
-                    Regenerate
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <VariantsEmptyState />
-            )}
-          </div>
+          <ResultsPanel
+            title="Generated Variants"
+            status={status}
+            emptyIcon="📢"
+            emptyTitle="No variants generated yet."
+            emptyDescription="Fill in the form above and click Generate Variants."
+            errorDescription="Something went wrong generating ad copy. Try again."
+            headerAction={
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                className="text-xs font-medium px-3 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors duration-150"
+              >
+                Regenerate
+              </button>
+            }
+          >
+            {result && <AnalysisResultCard result={result} />}
+          </ResultsPanel>
         </section>
       </main>
     </>

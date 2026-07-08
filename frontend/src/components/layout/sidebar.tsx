@@ -88,6 +88,7 @@ const NAV_SECTIONS: NavSection[] = [
       // Standalone links first…
       { label: "Marketing Overview", icon: "📊", href: "/marketing", department: "marketing" },
       { label: "Marketing Director", icon: "📣", href: "/marketing-director", department: "marketing" },
+      { label: "ICP", icon: "🎯", href: "/marketing/icp", department: "marketing" },
       // …then nested groups.
       {
         id: "marketing-ci",
@@ -116,15 +117,6 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Promo Calendar", icon: "📅", href: "/marketing/promo-calendar", department: "marketing" },
         ],
       },
-    ],
-  },
-  {
-    id: "admin",
-    label: "Admin",
-    department: "admin",
-    collapsible: false,
-    entries: [
-      { label: "Data Import", icon: "📥", href: "/data-import", department: "admin" },
     ],
   },
   {

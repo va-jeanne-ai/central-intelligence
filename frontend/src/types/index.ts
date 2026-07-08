@@ -307,7 +307,20 @@ export interface DmData {
 
 export interface DmAnalyzeResponse {
   analysis: string;
-  sequence: { step: number; message: string; delay_hours: number }[];
+  // Backend (`app/schemas/dm.py::DMAnalyzeResponse`) currently always returns
+  // an empty list here — message blocks live inline in `analysis` (markdown).
+  // Typed as the real `list[str]` contract, not the richer shape we'd like.
+  sequence: string[];
+  recommendations: string[];
+  data_used: Record<string, unknown>;
+}
+
+// ─── Social ──────────────────────────────────────────────────────────────────
+
+export interface SocialAnalyzeResponse {
+  analysis: string;
+  // Backend currently echoes the same text into `analysis` and `script`.
+  script: string;
   recommendations: string[];
   data_used: Record<string, unknown>;
 }
