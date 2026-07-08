@@ -147,9 +147,15 @@ class ApiClient {
     }
   }
 
-  private buildHeaders(extra: HeadersInit = {}): Headers {
+  /**
+   * Builds the standard header set. `skipJsonContentType` is used for
+   * FormData bodies, where the browser must set its own
+   * `multipart/form-data; boundary=...` Content-Type — setting it manually
+   * (even to the JSON default) breaks the multipart boundary.
+   */
+  private buildHeaders(extra: HeadersInit = {}, skipJsonContentType = false): Headers {
     const headers = new Headers({
-      "Content-Type": "application/json",
+      ...(skipJsonContentType ? {} : { "Content-Type": "application/json" }),
       "X-Request-Id": generateRequestId(),
       ...extra,
     });
@@ -165,6 +171,7 @@ class ApiClient {
     path: string,
     fetchOptions: RequestInit = {},
     clientOptions: RequestOptions = {},
+    responseType: "json" | "blob" = "json",
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const timeoutMs = clientOptions.timeout ?? DEFAULT_TIMEOUT_MS;
@@ -172,6 +179,7 @@ class ApiClient {
       ? clientOptions.retries + 1
       : MAX_ATTEMPTS;
     const silent = clientOptions.silent ?? false;
+    const isFormData = fetchOptions.body instanceof FormData;
 
     const retryDelaysMs = [1000, 2000];
 
@@ -195,7 +203,10 @@ class ApiClient {
 
       const mergedOptions: RequestInit = {
         ...fetchOptions,
-        headers: this.buildHeaders(fetchOptions.headers as HeadersInit | undefined),
+        headers: this.buildHeaders(
+          fetchOptions.headers as HeadersInit | undefined,
+          isFormData,
+        ),
         signal: controller.signal,
       };
 
@@ -281,6 +292,10 @@ class ApiClient {
       // 204 No Content
       if (response.status === 204) {
         return undefined as T;
+      }
+
+      if (responseType === "blob") {
+        return (await response.blob()) as unknown as T;
       }
 
       return response.json() as Promise<T>;
@@ -389,11 +404,34 @@ class ApiClient {
 
   // ─── Convenience methods ─────────────────────────────────────────────────────
 
+  /** Returns the configured API base URL (e.g. for building display-only copy). */
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   get = <T>(path: string, options?: RequestOptions): Promise<T> =>
     this.request<T>(path, {}, options);
 
+  /**
+   * GET a binary/text response (e.g. `transcript.txt` downloads) as a Blob,
+   * routed through the same base URL, auth header, timeout, retry, and
+   * error-envelope handling as `get`. Use this instead of a raw `fetch` for
+   * any endpoint that returns plain text or a file rather than JSON.
+   */
+  getBlob = (path: string, options?: RequestOptions): Promise<Blob> =>
+    this.request<Blob>(path, {}, options, "blob");
+
   post = <T>(path: string, body: unknown, options?: RequestOptions): Promise<T> =>
     this.request<T>(path, { method: "POST", body: JSON.stringify(body) }, options);
+
+  /**
+   * POST a FormData body (multipart upload) — reuses the same base URL, auth
+   * header, timeout, retry, and error-envelope handling as `post`, but skips
+   * forcing a JSON Content-Type so the browser can set the multipart
+   * boundary itself.
+   */
+  postForm = <T>(path: string, formData: FormData, options?: RequestOptions): Promise<T> =>
+    this.request<T>(path, { method: "POST", body: formData }, options);
 
   put = <T>(path: string, body: unknown, options?: RequestOptions): Promise<T> =>
     this.request<T>(path, { method: "PUT", body: JSON.stringify(body) }, options);

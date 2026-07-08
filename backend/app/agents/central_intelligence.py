@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from sqlalchemy import text
 
 from app.agents.base import BaseAgent
+from app.config import settings
 from app.database import AsyncSessionLocal
 from app.prompts.central_intelligence_v1 import CENTRAL_INTELLIGENCE_SYSTEM_PROMPT_V1
 from app.services import voyage_client
@@ -544,7 +545,7 @@ async def _delegate_to_fulfillment_director(task: str) -> str:
 
 async def _analytics_insights(area: str | None = None, window: str = "30d") -> str:
     """Return the engine's trend verdicts + active recommendations as a prose brief."""
-    from app.analytics.trends import _evaluate
+    from app.analytics.trends import evaluate
     from app.analytics.registry import all_metrics
     from app.database import AsyncSessionLocal
     from sqlalchemy import text
@@ -565,7 +566,7 @@ async def _analytics_insights(area: str | None = None, window: str = "30d") -> s
                     'WHERE metric_key = :k AND "window" = :w AND scope = \'global\' '
                     "ORDER BY captured_date ASC"
                 ), {"k": m.key, "w": window})).mappings().all()
-                t = _evaluate(m, [dict(r) for r in rows], window)
+                t = evaluate(m, [dict(r) for r in rows], window)
                 lines.append(f"- {t.label}: {t.verdict.replace('_', ' ')}. {t.reason}")
 
             # Active recommendations (the threshold-crossing findings).
@@ -603,7 +604,7 @@ class CentralIntelligence(BaseAgent):
         super().__init__(
             agent_id="CI-CORE-00",
             name="Central Intelligence",
-            model="claude-sonnet-4-6",
+            model=settings.anthropic_model_default,
         )
         self.system_prompt = CENTRAL_INTELLIGENCE_SYSTEM_PROMPT_V1
         self._register_tools()

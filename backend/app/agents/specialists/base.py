@@ -15,6 +15,7 @@ from typing import Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import BaseAgent
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class SpecialistAgent(BaseAgent):
         spec_id: str,
         name: str,
         domain: str,
-        model: str = "claude-haiku-4-5-20251001",
+        model: str = settings.anthropic_model_light,
         max_tokens: int = 2048,
         session: AsyncSession | None = None,
     ):

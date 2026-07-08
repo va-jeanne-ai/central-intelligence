@@ -38,7 +38,7 @@ class TranscriberOperator(BaseAgent):
         super().__init__(
             agent_id="op-transcriber",
             name="Transcriber Operator",
-            model="claude-sonnet-4-5-20250514",
+            model=settings.anthropic_model_default,
             max_tokens=2048,
         )
 

@@ -9,7 +9,20 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000"]
     debug: bool = False
     app_name: str = "Central Intelligence API"
-    mock_mode: bool = True  # Set to False when ANTHROPIC_API_KEY is configured
+    # Fail closed: mock mode (which bypasses ALL auth) must be an explicit
+    # opt-in via MOCK_MODE=true — a missing env var must never disable auth.
+    mock_mode: bool = False
+
+    # ------------------------------------------------------------------
+    # Anthropic model IDs — single source of truth. Use aliases (no date
+    # suffixes) so we track the current snapshot of each tier. Verified
+    # against the Anthropic model catalog 2026-07-08.
+    #   default tier — directors, CI orchestrator, call analyzer, ICP,
+    #                  overall insight, transcriber
+    #   light tier   — specialists (high-volume, cost-sensitive)
+    # ------------------------------------------------------------------
+    anthropic_model_default: str = "claude-sonnet-4-6"
+    anthropic_model_light: str = "claude-haiku-4-5"
 
     # ------------------------------------------------------------------
     # Supabase — leave empty to run auth in mock mode (no live project

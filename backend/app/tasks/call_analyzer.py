@@ -124,7 +124,7 @@ def _call_claude(transcript_text: str, call_type: str | None) -> tuple[str | Non
         user_prompt = build_user_prompt(transcript_text, call_type=call_type)
 
     message = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=settings.anthropic_model_default,
         # The 21-field structured output for 3–8 insights can run long.
         # 8192 tokens gives ~6000 words of room — comfortable headroom.
         max_tokens=8192,
@@ -169,7 +169,7 @@ def _call_claude_content_ideas(
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     message = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=settings.anthropic_model_default,
         # 16-field briefs × up to 8 ideas can run long; 8192 gives headroom.
         max_tokens=8192,
         system=CONTENT_IDEA_GENERATOR_SYSTEM_PROMPT_V1,

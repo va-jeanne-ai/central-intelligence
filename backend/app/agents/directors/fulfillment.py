@@ -14,6 +14,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.agents.directors.base import DirectorAgent, WINDOW_PARAMS, build_window
 from app.prompts.fulfillment_director_v1 import FULFILLMENT_DIRECTOR_SYSTEM_PROMPT_V1
 
@@ -40,7 +41,7 @@ class FulfillmentDirector(DirectorAgent):
         session: AsyncSession,
         director_id: str = "fulfillment-director",
         name: str = "Fulfillment Director",
-        model: str = "claude-sonnet-4-6",
+        model: str = settings.anthropic_model_default,
     ):
         self._session = session
         super().__init__(

@@ -69,7 +69,7 @@ _SERIES = text(
 )
 
 
-def _evaluate(metric: Metric, rows: list[dict], window: str) -> TrendResult:
+def evaluate(metric: Metric, rows: list[dict], window: str) -> TrendResult:
     """Turn a metric's snapshot series into a verdict. Pure arithmetic."""
     base_kwargs = dict(
         metric_key=metric.key,
@@ -158,7 +158,7 @@ def trend_for(db: Session, metric_key: str, window: str = DEFAULT_WINDOW) -> Tre
     if metric is None:
         return None
     rows = db.execute(_SERIES, {"metric_key": metric_key, "window": window}).mappings().all()
-    return _evaluate(metric, list(rows), window)
+    return evaluate(metric, list(rows), window)
 
 
 def all_trends(db: Session, window: str = DEFAULT_WINDOW, area: str | None = None) -> list[TrendResult]:
@@ -167,5 +167,5 @@ def all_trends(db: Session, window: str = DEFAULT_WINDOW, area: str | None = Non
     results: list[TrendResult] = []
     for m in metrics:
         rows = db.execute(_SERIES, {"metric_key": m.key, "window": window}).mappings().all()
-        results.append(_evaluate(m, list(rows), window))
+        results.append(evaluate(m, list(rows), window))
     return results

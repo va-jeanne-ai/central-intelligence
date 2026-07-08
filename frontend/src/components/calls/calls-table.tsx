@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagination } from "@/hooks/use-pagination";
 import { showError, showWarning } from "@/lib/toast";
@@ -69,24 +69,18 @@ function formatDate(iso: string | null): string {
 }
 
 async function downloadTranscript(callId: string): Promise<void> {
-  const token = apiClient.getToken();
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
-  const headers: HeadersInit = {};
-  if (token !== null) headers["Authorization"] = `Bearer ${token}`;
-
-  const res = await fetch(`${apiBase}/ci/calls/${callId}/transcript.txt`, {
-    method: "GET",
-    headers,
-  });
-  if (!res.ok) {
-    if (res.status === 404) {
+  let blob: Blob;
+  try {
+    blob = await apiClient.getBlob(`/ci/calls/${callId}/transcript.txt`, { silent: true });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
       showWarning("No transcript on file for this call.");
     } else {
-      showError(`Download failed (${res.status})`);
+      const status = err instanceof ApiError ? err.status : "unknown";
+      showError(`Download failed (${status})`);
     }
     return;
   }
-  const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

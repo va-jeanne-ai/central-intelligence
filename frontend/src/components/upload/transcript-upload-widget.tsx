@@ -314,33 +314,11 @@ export function TranscriptUploadWidget({
           if (leadId !== undefined) formData.append("leadId", leadId);
           if (memberId !== undefined) formData.append("memberId", memberId);
 
-          const token = apiClient.getToken();
-          const headers: HeadersInit = {};
-          if (token !== null) {
-            headers["Authorization"] = `Bearer ${token}`;
-          }
-
-          const apiBase =
-            process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
-
-          const response = await fetch(`${apiBase}/transcribe/upload`, {
-            method: "POST",
-            headers,
-            body: formData,
-          });
-
-          if (!response.ok) {
-            let msg = `Upload failed (${response.status})`;
-            try {
-              const body = (await response.json()) as { message?: string; detail?: string };
-              msg = body.message ?? body.detail ?? msg;
-            } catch {
-              // Non-JSON body — use default message.
-            }
-            throw new Error(msg);
-          }
-
-          const data = (await response.json()) as TranscribeUploadResponse;
+          const data = await apiClient.postForm<TranscribeUploadResponse>(
+            "/transcribe/upload",
+            formData,
+            { silent: true },
+          );
 
           complete();
           setResultCallId(data.call_id);

@@ -14,6 +14,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.agents.directors.base import DirectorAgent, WINDOW_PARAMS, build_window
 from app.prompts.sales_director_v1 import SALES_DIRECTOR_SYSTEM_PROMPT_V1
 
@@ -40,7 +41,7 @@ class SalesDirector(DirectorAgent):
         session: AsyncSession,
         director_id: str = "sales-director",
         name: str = "Sales Director",
-        model: str = "claude-sonnet-4-6",
+        model: str = settings.anthropic_model_default,
     ):
         self._session = session
         super().__init__(director_id=director_id, name=name, department="sales", model=model)

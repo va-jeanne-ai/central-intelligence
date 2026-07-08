@@ -7,6 +7,46 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Security — Auth now fails closed; unauthenticated data access removed
+
+- **Removed six stale auth-exempt prefixes** (`/api/v1/dashboard/`, `/leads`, `/members`,
+  `/appointments`, `/goals`, `/tech-sos`) from `backend/app/middleware/auth.py` — leftovers
+  from before the login page existed. Until now the client's entire dataset was readable
+  without a token on the live deployment. All data routes now return 401 unauthenticated
+  (verified via TestClient); the frontend is unaffected because `api-client.ts` always sends
+  a Bearer token. Webhooks, OAuth callback, `/api/v1/auth/`, health, and docs remain exempt.
+- **`mock_mode` now defaults to `False`** (`backend/app/config.py`) — mock mode bypasses ALL
+  auth, so it must be an explicit `MOCK_MODE=true` opt-in; a missing env var can no longer
+  silently disable authentication. **Deploy note:** droplet env should still set it explicitly.
+
+### Fixed — Invalid Anthropic model ID; model IDs centralized in config
+
+`claude-sonnet-4-5-20250514` is not a real model ID (Sonnet 4.5's snapshot is `-20250929`;
+`-20250514` belongs to Sonnet 4) — any request with it 404s. It was the explicit model in the
+transcriber operator and the default in `agents/base.py` and `directors/base.py`. All model IDs
+now live in `config.py` as `anthropic_model_default` (`claude-sonnet-4-6` — directors, CI,
+call analyzer, ICP, overall insight, transcriber) and `anthropic_model_light`
+(`claude-haiku-4-5` — specialists), overridable via env. No hardcoded `claude-*` IDs remain.
+
+### Added — Analytics engine test coverage (60 new tests, 94 total)
+
+The statistical engine (the product's core differentiator) had zero tests. Added:
+`tests/test_trends_evaluate.py` (verdict arithmetic, MIN_SAMPLE gating, flat threshold,
+direction semantics, zero-baseline edges), `tests/test_analytics_registry.py` (metric shape,
+`:since` SQL contract, unique keys), `tests/test_recommend.py` (severity/phrasing, lifecycle
+open→resolve→re-open against a fake session), `tests/test_overall_insight_coerce.py` and
+`tests/test_analytics_json_extract.py` (pure validators). Also renamed the private
+`trends._evaluate` to public `evaluate` and updated both cross-module importers.
+
+### Changed — Frontend requests unified through the API client
+
+Five files inlined the API base URL and used raw `fetch()` (bypassing retry/timeout/auth/
+error handling): coaching-calls list + detail, sales-calls detail, calls-table, and the
+transcript upload widget. `api-client.ts` gained `getBlob`, `postForm` (FormData-safe
+headers), and `getBaseUrl`; all five call sites now go through it. The integrations page no
+longer shows a hardcoded `http://localhost:8000` OAuth redirect URI — it derives the shown
+URI from the configured API base.
+
 ### Fixed — Marketing generator tools now render real API output (no more mock content)
 
 The four generator pages (`marketing/ads/generator`, `marketing/social/scripts`,

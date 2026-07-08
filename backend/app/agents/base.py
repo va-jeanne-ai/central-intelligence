@@ -10,6 +10,8 @@ import asyncio
 import logging
 from typing import AsyncIterator, Callable, Any
 
+from app.config import settings
+
 from anthropic import (
     AsyncAnthropic,
     APIError,
@@ -88,7 +90,7 @@ class BaseAgent:
         self,
         agent_id: str,
         name: str,
-        model: str = "claude-sonnet-4-5-20250514",
+        model: str = settings.anthropic_model_default,
         max_tokens: int = 4096,
         max_tool_rounds: int = 10,
     ):
