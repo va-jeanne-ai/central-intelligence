@@ -8,9 +8,10 @@ Aggregates real-time metrics from the database across three departments
 (Sales, Fulfillment, Marketing) plus top-level KPIs, an 8-week lead-volume
 series, and a recent-activity feed.
 
-The recommendations endpoint queries key business metrics and sends them to
-Claude (claude-3-haiku-20240307) to generate 4 actionable recommendations.
-Results are cached in-memory for 15 minutes.
+The recommendations endpoint reads open findings from the statistical
+recommendation engine (app/analytics/recommend.py) — threshold-triggered,
+data-cited Recommendation rows, no LLM involved. Returns however many open
+recommendations exist (zero, one, or several); never padded or fabricated.
 
 All queries run as raw SQL via sqlalchemy.text() in a single async session
 to avoid the overhead of instantiating multiple ORM repositories for simple
@@ -33,7 +34,6 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-import anthropic
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -367,38 +367,48 @@ async def get_dashboard_stats(
 
 
 # ---------------------------------------------------------------------------
-# Recommendations endpoint — helpers, cache, and route
+# Recommendations endpoint — served from the statistical recommendation engine
 # ---------------------------------------------------------------------------
-
-# Simple module-level in-memory cache (survives across requests within the
-# same process; intentionally not shared across workers).
-_recommendations_cache: dict = {"data": None, "timestamp": 0}
-_CACHE_TTL_SECONDS = 900  # 15 minutes
+#
+# NOTE: this endpoint used to build a metrics prompt and ask Claude
+# (claude-3-haiku-20240307) for "exactly 4 actionable recommendations" — the
+# fabrication pattern banned by the 2026-06-29 data-intelligence pivot. It now
+# reads open findings straight from app.analytics.recommend (threshold-
+# triggered, evidence-cited Recommendation rows) via the same query helper
+# `/analytics/recommendations` uses, and maps them onto the dashboard's
+# existing response shape. No LLM call, no cache needed — the query is cheap
+# and the underlying rows only change when the recommendation-generation task
+# runs.
 
 # Weekly-focus runs Central Intelligence, which fans out to all three Directors
 # (several chained Claude calls) — so it is cached more aggressively than the
 # recommendations endpoint to avoid re-running that fan-out on every load.
+# This is a separate, still-LLM-driven path — out of scope for this change.
 _weekly_focus_cache: dict = {"data": None, "timestamp": 0}
 _WEEKLY_FOCUS_TTL_SECONDS = 900  # 15 minutes
 
-RECOMMENDATIONS_PROMPT = """You are Central Intelligence, the AI business intelligence for a coaching/consulting business.
+# severity → icon, deterministic (no LLM). Mirrors the emoji vocabulary the
+# old prompt used so the widget's look-and-feel is unchanged.
+_SEVERITY_ICON = {
+    "critical": "🔥",
+    "warn": "📈",
+    "info": "⭐",
+}
 
-Based on the following business metrics, generate exactly 4 actionable recommendations. Each should be a single concise sentence that a business owner can act on this week.
 
-Business Metrics:
-{metrics_json}
+def _recommendation_row_to_item(row: dict) -> RecommendationItem:
+    """Map an `analytics.recommendations` row onto the dashboard's response shape.
 
-Return a JSON array of exactly 4 objects. Each object has:
-- "icon": a single emoji that represents the recommendation type (use 📞 for follow-ups, 📈 for growth/trends, 🎯 for retention, ⭐ for insights, 🔥 for urgent, 💡 for ideas)
-- "text": one sentence with key numbers/phrases wrapped in <strong> tags
-
-Example format:
-[
-  {{"icon": "📞", "text": "Follow up on <strong>5 stale leads</strong> — average age is 14 days"}},
-  {{"icon": "📈", "text": "Webinar source drives <strong>33%</strong> of leads — increase ad spend"}}
-]
-
-Return ONLY the JSON array, no other text."""
+    verdict/severity drive the icon deterministically; `title` is used as the
+    display text (already a single plain-language sentence built from the
+    evidence in app/analytics/recommend.py — no HTML/<strong> markup, unlike
+    the retired LLM path, so the widget just renders it as plain text).
+    """
+    return RecommendationItem(
+        id=f"rec-{row['id']}",
+        icon=_SEVERITY_ICON.get(row["severity"], "💡"),
+        text=row["title"],
+    )
 
 
 async def _query_recommendation_metrics(session: AsyncSession) -> dict:
@@ -621,118 +631,42 @@ def _fallback_recommendations(metrics: dict) -> list[RecommendationItem]:
     return recs[:4]
 
 
-async def _call_claude_for_recommendations(
-    metrics: dict,
-) -> list[RecommendationItem]:
-    """
-    Send business metrics to Claude and parse the returned JSON array into
-    RecommendationItem instances.  Raises on API or parse failure so the
-    caller can fall back to deterministic recommendations.
-    """
-    prompt = RECOMMENDATIONS_PROMPT.format(metrics_json=json.dumps(metrics, indent=2))
-
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-    message = await client.messages.create(
-        model="claude-3-haiku-20240307",
-        max_tokens=512,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw_text: str = message.content[0].text.strip()
-
-    # Claude should return a bare JSON array; parse and validate shape
-    parsed = json.loads(raw_text)
-    if not isinstance(parsed, list):
-        raise ValueError(f"Claude response is not a JSON array: {raw_text[:200]}")
-
-    items: list[RecommendationItem] = []
-    for idx, item in enumerate(parsed[:4], start=1):
-        items.append(
-            RecommendationItem(
-                id=f"rec-{idx}",
-                icon=str(item.get("icon", "💡")),
-                text=str(item.get("text", "")),
-            )
-        )
-
-    if len(items) < 4:
-        raise ValueError(f"Claude returned only {len(items)} recommendations, expected 4")
-
-    return items
-
-
 @router.get(
     "/dashboard/recommendations",
     response_model=RecommendationsResponse,
-    summary="AI-generated business recommendations",
+    summary="Statistical business recommendations",
     description=(
-        "Queries key business metrics and asks Claude to produce 4 actionable "
-        "recommendations.  Results are cached in-memory for 15 minutes to avoid "
-        "redundant API calls on repeated dashboard loads."
+        "Returns the currently open, data-cited recommendations from the "
+        "statistical recommendation engine (app/analytics/recommend.py) — "
+        "the same threshold-triggered findings served by "
+        "GET /analytics/recommendations, adapted to the dashboard widget's "
+        "response shape. No LLM call. Returns however many open "
+        "recommendations exist; an empty list is a valid response."
     ),
 )
 async def get_dashboard_recommendations() -> RecommendationsResponse:
-    """Return AI-generated actionable recommendations based on live business metrics."""
+    """Return open statistical recommendations, mapped onto the dashboard shape."""
 
-    now = time.monotonic()
-
-    # Serve from cache if still fresh
-    if (
-        _recommendations_cache["data"] is not None
-        and (now - _recommendations_cache["timestamp"]) < _CACHE_TTL_SECONDS
-    ):
-        logger.debug("Serving recommendations from cache")
-        cached_payload: RecommendationsResponse = _recommendations_cache["data"]
-        return RecommendationsResponse(
-            recommendations=cached_payload.recommendations,
-            generated_at=cached_payload.generated_at,
-            cached=True,
-        )
-
-    # Open a fresh session (not via Depends so we control lifetime here)
-    async with AsyncSessionLocal() as session:
-        try:
-            metrics = await _query_recommendation_metrics(session)
-        except Exception:
-            logger.exception("Failed to query recommendation metrics")
-            metrics = {}
+    from app.analytics.recommend import fetch_recommendation_rows
 
     generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    used_ai = False
 
-    # Attempt Claude call; fall back to deterministic recommendations on any error
-    if settings.anthropic_api_key:
+    async with AsyncSessionLocal() as session:
         try:
-            recommendations = await _call_claude_for_recommendations(metrics)
-            used_ai = True
+            rows = await fetch_recommendation_rows(session)
         except Exception:
-            logger.exception(
-                "Claude recommendations call failed — falling back to deterministic output"
-            )
-            recommendations = _fallback_recommendations(metrics)
-    else:
-        logger.debug(
-            "anthropic_api_key not configured — using deterministic recommendations"
-        )
-        recommendations = _fallback_recommendations(metrics)
+            logger.exception("Failed to query recommendation engine rows")
+            rows = []
 
-    logger.info(
-        "Recommendations generated — ai=%s stale_leads=%d",
-        used_ai,
-        metrics.get("stale_leads", {}).get("count", 0),
-    )
+    recommendations = [_recommendation_row_to_item(r) for r in rows]
 
-    payload = RecommendationsResponse(
+    logger.info("Dashboard recommendations served — open=%d", len(recommendations))
+
+    return RecommendationsResponse(
         recommendations=recommendations,
         generated_at=generated_at,
         cached=False,
     )
-
-    # Store in cache
-    _recommendations_cache["data"] = payload
-    _recommendations_cache["timestamp"] = now
-
-    return payload
 
 
 # ---------------------------------------------------------------------------

@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
+import { showApiError } from "@/lib/toast";
+import { GeneratorHeader, GenerateButton, ResultsPanel } from "@/components/marketing/generator-layout";
+import type { SocialAnalyzeResponse } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -12,23 +15,7 @@ type Platform = (typeof PLATFORMS)[number];
 const BRAND_VOICES = ["Professional", "Casual", "Energetic", "Inspiring"] as const;
 type BrandVoice = (typeof BRAND_VOICES)[number];
 
-// ─── Mock script result ───────────────────────────────────────────────────────
-
-const MOCK_SCRIPT = `Hook: "Stop scrolling — this changed everything for me."
-
-[0:00–0:05] Open with your bold result or transformation statement.
-
-[0:05–0:20] Quickly establish the problem your audience faces and why they haven't solved it yet.
-
-[0:20–0:40] Share your unique insight or method in plain, conversational language. Use one concrete example.
-
-[0:40–0:55] Reinforce with a quick social proof moment — a client result, a number, or a vivid before/after.
-
-[0:55–1:00] CTA: "Follow for more" or "Drop a comment below with your biggest challenge."
-
-Caption: Share your [topic] journey using #YourBrand. Tag someone who needs to hear this today.`;
-
-// ─── Form section ─────────────────────────────────────────────────────────────
+// ─── Form state ─────────────────────────────────────────────────────────────
 
 interface FormState {
   platform: Platform;
@@ -36,81 +23,70 @@ interface FormState {
   topic: string;
 }
 
-// ─── Generated script card ────────────────────────────────────────────────────
-
-function GeneratedScriptCard({
-  platform,
-  brandVoice,
-  topic,
-  script,
-  onRegenerate,
-}: {
+interface ResultMeta {
   platform: Platform;
   brandVoice: BrandVoice;
   topic: string;
   script: string;
+}
+
+type ResultStatus = "empty" | "loading" | "error" | "content";
+
+// ─── Generated script card ────────────────────────────────────────────────────
+
+function GeneratedScriptCard({
+  meta,
+  onRegenerate,
+}: {
+  meta: ResultMeta;
   onRegenerate: () => void;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-emerald-50">
-        <div className="flex items-center gap-2">
-          <span className="text-base" aria-hidden="true">
-            ✨
-          </span>
-          <h3 className="text-sm font-bold text-gray-900">Generated Script</h3>
+    <div className="p-5">
+      <div className="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-emerald-50">
+          <div className="flex items-center gap-2">
+            <span className="text-base" aria-hidden="true">
+              ✨
+            </span>
+            <h3 className="text-sm font-bold text-gray-900">Generated Script</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-white border border-emerald-200 text-emerald-700">
+              {meta.platform}
+            </span>
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600">
+              {meta.brandVoice}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-white border border-emerald-200 text-emerald-700">
-            {platform}
-          </span>
-          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600">
-            {brandVoice}
-          </span>
+        <div className="px-5 py-4">
+          {meta.topic !== "" && (
+            <p className="text-xs text-gray-400 mb-3">
+              Topic: <span className="font-medium text-gray-600">{meta.topic}</span>
+            </p>
+          )}
+          <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
+            {meta.script}
+          </pre>
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => void navigator.clipboard.writeText(meta.script)}
+              className="text-xs font-medium px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors duration-150"
+            >
+              Copy Script
+            </button>
+            <button
+              type="button"
+              onClick={onRegenerate}
+              className="text-xs font-medium px-3 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors duration-150"
+            >
+              Regenerate
+            </button>
+          </div>
         </div>
       </div>
-      <div className="px-5 py-4">
-        {topic !== "" && (
-          <p className="text-xs text-gray-400 mb-3">
-            Topic: <span className="font-medium text-gray-600">{topic}</span>
-          </p>
-        )}
-        <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
-          {script}
-        </pre>
-        <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => void navigator.clipboard.writeText(script)}
-            className="text-xs font-medium px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors duration-150"
-          >
-            Copy Script
-          </button>
-          <button
-            type="button"
-            onClick={onRegenerate}
-            className="text-xs font-medium px-3 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors duration-150"
-          >
-            Regenerate
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Scripts empty state ──────────────────────────────────────────────────────
-
-function ScriptsEmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <span className="text-4xl" aria-hidden="true">
-        ✍️
-      </span>
-      <p className="text-sm font-medium text-gray-500">No scripts generated yet.</p>
-      <p className="text-xs text-gray-400">
-        Fill in the form above and click Generate.
-      </p>
     </div>
   );
 }
@@ -123,42 +99,34 @@ export default function SocialScriptsPage() {
     brandVoice: "Casual",
     topic: "",
   });
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [hasResult, setHasResult] = useState(false);
-  const [resultMeta, setResultMeta] = useState<FormState | null>(null);
-  const [generatedScript, setGeneratedScript] = useState<string>(MOCK_SCRIPT);
+  const [status, setStatus] = useState<ResultStatus>("empty");
+  const [resultMeta, setResultMeta] = useState<ResultMeta | null>(null);
+
+  const isGenerating = status === "loading";
 
   async function handleGenerate() {
     if (form.topic.trim() === "") return;
-    setIsGenerating(true);
-    setHasResult(false);
+    setStatus("loading");
 
     try {
-      const result = await apiClient.post<{
-        analysis: string;
-        script: string;
-        recommendations: string[];
-        data_used: Record<string, unknown>;
-      }>("/social", {
-        topic: form.topic,
-        platform: form.platform.toLowerCase(),
-        brand_voice: form.brandVoice.toLowerCase(),
-      }, { silent: true });
+      const result = await apiClient.post<SocialAnalyzeResponse>(
+        "/social",
+        {
+          topic: form.topic,
+          platform: form.platform.toLowerCase(),
+          brand_voice: form.brandVoice.toLowerCase(),
+        },
+        { silent: true },
+      );
 
       // Backend currently echoes the same text into both `analysis` and
-      // `script`. Prefer `script`; fall through to `analysis`. The old
-      // MOCK_SCRIPT fallback masked real Claude responses — drop it.
-      setGeneratedScript(
-        result.script || result.analysis || "No script generated. Try again."
-      );
-      setResultMeta({ ...form });
-      setHasResult(true);
-    } catch {
-      setGeneratedScript("Script generation failed. Try again or check your network.");
-      setResultMeta({ ...form });
-      setHasResult(true);
-    } finally {
-      setIsGenerating(false);
+      // `script`. Prefer `script`; fall through to `analysis`.
+      const script = result.script || result.analysis || "No script generated. Try again.";
+      setResultMeta({ ...form, script });
+      setStatus("content");
+    } catch (err) {
+      showApiError(err instanceof Error ? err.message : "Failed to generate script.");
+      setStatus("error");
     }
   }
 
@@ -167,13 +135,10 @@ export default function SocialScriptsPage() {
       <Header title="Social Media" />
 
       <main className="flex-1 overflow-y-auto p-7 space-y-6">
-        {/* Page heading */}
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">AI Script Generator</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Generate platform-optimized social media scripts tailored to your brand voice.
-          </p>
-        </div>
+        <GeneratorHeader
+          title="AI Script Generator"
+          description="Generate platform-optimized social media scripts tailored to your brand voice."
+        />
 
         {/* Generator form card */}
         <section aria-label="Script generator form">
@@ -248,69 +213,29 @@ export default function SocialScriptsPage() {
               />
             </div>
 
-            {/* Generate button */}
-            <button
-              type="button"
+            <GenerateButton
               onClick={handleGenerate}
-              disabled={form.topic.trim() === "" || isGenerating}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-200 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors duration-150 active:scale-95 shadow-sm"
-            >
-              {isGenerating ? (
-                <>
-                  <svg
-                    className="animate-spin w-4 h-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  Generating…
-                </>
-              ) : (
-                <>
-                  <span aria-hidden="true">✨</span>
-                  Generate Script
-                </>
-              )}
-            </button>
+              disabled={form.topic.trim() === ""}
+              isGenerating={isGenerating}
+              idleLabel="Generate Script"
+            />
           </div>
         </section>
 
         {/* Generated scripts area */}
         <section aria-label="Generated scripts">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-bold text-gray-900">Generated Scripts</h2>
-            </div>
-
-            {hasResult && resultMeta !== null ? (
-              <div className="p-5">
-                <GeneratedScriptCard
-                  platform={resultMeta.platform}
-                  brandVoice={resultMeta.brandVoice}
-                  topic={resultMeta.topic}
-                  script={generatedScript}
-                  onRegenerate={handleGenerate}
-                />
-              </div>
-            ) : (
-              <ScriptsEmptyState />
+          <ResultsPanel
+            title="Generated Scripts"
+            status={status}
+            emptyIcon="✍️"
+            emptyTitle="No scripts generated yet."
+            emptyDescription="Fill in the form above and click Generate."
+            errorDescription="Something went wrong generating the script. Try again."
+          >
+            {resultMeta && (
+              <GeneratedScriptCard meta={resultMeta} onRegenerate={handleGenerate} />
             )}
-          </div>
+          </ResultsPanel>
         </section>
       </main>
     </>

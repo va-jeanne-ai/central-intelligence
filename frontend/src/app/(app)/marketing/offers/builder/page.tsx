@@ -4,6 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
+import { showApiError, showSuccess } from "@/lib/toast";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { OfferGenerateResponse } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -36,11 +39,7 @@ interface FormState {
   ctaText: string;
 }
 
-interface AiGenerated {
-  title: string;
-  description: string;
-  cta: string;
-}
+type GenerateStatus = "empty" | "loading" | "error" | "content";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -77,13 +76,6 @@ const GUARANTEE_OPTIONS: { label: string; value: Guarantee }[] = [
   { label: "90-day money back", value: "90-day" },
   { label: "No guarantee", value: "none" },
 ];
-
-const MOCK_AI_GENERATED: AiGenerated = {
-  title: "The Elite Coaching Accelerator — Transform Your Business in 90 Days",
-  description:
-    "Join a select group of high-performing entrepreneurs who are ready to scale fast, eliminate bottlenecks, and build a business that runs without you. Our proven framework has helped 500+ coaches generate $1M+ in revenue. Spots are strictly limited — apply now before the deadline.",
-  cta: "Claim Your Spot Now",
-};
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
 
@@ -264,6 +256,14 @@ function OfferPreview({ form, onClose }: OfferPreviewProps) {
 }
 
 // ─── AI Generator panel ───────────────────────────────────────────────────────
+// `/offer-generate` enqueues a Celery task that writes generated offers
+// directly to the offers table for human review (see
+// backend/app/tasks/offer_generator.py) — there is no polling/status route
+// wired (`OfferTaskStatusResponse` exists in the schema but no route uses
+// it), so the HTTP response never carries the generated title/description/
+// CTA. We surface exactly what the API gives us: a queued confirmation with
+// the task id, and point the user at the Offers library to see the result
+// once the worker finishes. No fabricated preview.
 
 interface AiPanelProps {
   form: FormState;
@@ -271,31 +271,30 @@ interface AiPanelProps {
 
 function AiGeneratorPanel({ form }: AiPanelProps) {
   const [aiContext, setAiContext] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generated, setGenerated] = useState<AiGenerated | null>(null);
+  const [status, setStatus] = useState<GenerateStatus>("empty");
+  const [queued, setQueued] = useState<OfferGenerateResponse | null>(null);
+
+  const isGenerating = status === "loading";
 
   async function handleGenerate() {
     if (isGenerating) return;
-    setIsGenerating(true);
-    setGenerated(null);
+    setStatus("loading");
 
     try {
-      const result = await apiClient.post<OfferGenerateResponse>("/offer-generate", {
-        offer_type: form.title !== "" ? form.title : "coaching",
-        max_offers: 3,
-      }, { silent: true });
-
-      if (result.status === "queued") {
-        // Generation queued — show mock output as placeholder while task processes
-        setGenerated(MOCK_AI_GENERATED);
-      } else {
-        setGenerated(MOCK_AI_GENERATED);
-      }
-    } catch {
-      // Fall back to mock generated data on error.
-      setGenerated(MOCK_AI_GENERATED);
-    } finally {
-      setIsGenerating(false);
+      const result = await apiClient.post<OfferGenerateResponse>(
+        "/offer-generate",
+        {
+          offer_type: form.title !== "" ? form.title : "coaching",
+          max_offers: 3,
+        },
+        { silent: true },
+      );
+      setQueued(result);
+      setStatus("content");
+      showSuccess(result.message || "Offer generation queued.");
+    } catch (err) {
+      showApiError(err instanceof Error ? err.message : "Failed to queue offer generation.");
+      setStatus("error");
     }
   }
 
@@ -341,7 +340,7 @@ function AiGeneratorPanel({ form }: AiPanelProps) {
           {isGenerating ? (
             <>
               <Spinner />
-              Generating…
+              Queuing…
             </>
           ) : (
             <>
@@ -352,92 +351,55 @@ function AiGeneratorPanel({ form }: AiPanelProps) {
         </button>
 
         {/* Result area */}
-        {generated === null && !isGenerating ? (
-          /* Empty state */
-          <div className="flex flex-col items-center justify-center flex-1 py-8 gap-3">
-            <span className="text-4xl" aria-hidden="true">
-              🎁
-            </span>
-            <p className="text-sm font-medium text-gray-500 text-center">
-              No output yet.
-            </p>
-            <p className="text-xs text-gray-400 text-center">
-              Add context above and click Generate.
-            </p>
+        {status === "loading" && (
+          <div className="flex flex-col gap-3 flex-1 py-2">
+            <Skeleton className="h-3 w-2/3" />
+            <Skeleton className="h-16 w-full rounded-lg" />
           </div>
-        ) : generated !== null ? (
-          /* Side-by-side comparison */
-          <div className="flex flex-col gap-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-              Comparison
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {/* AI Generated side */}
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 flex flex-col gap-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
-                  AI Generated
-                </span>
-                <div className="flex flex-col gap-2">
-                  <div>
-                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
-                      Title
-                    </span>
-                    <p className="text-xs text-gray-800 font-medium leading-snug mt-0.5">
-                      {generated.title}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
-                      Description
-                    </span>
-                    <p className="text-xs text-gray-700 leading-relaxed mt-0.5 line-clamp-4">
-                      {generated.description}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
-                      CTA
-                    </span>
-                    <p className="text-xs text-gray-800 font-semibold mt-0.5">{generated.cta}</p>
-                  </div>
-                </div>
-              </div>
+        )}
 
-              {/* Manual side */}
-              <div className="rounded-lg border border-gray-200 bg-white p-3 flex flex-col gap-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                  Manual
-                </span>
-                <div className="flex flex-col gap-2">
-                  <div>
-                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
-                      Title
-                    </span>
-                    <p className="text-xs text-gray-800 font-medium leading-snug mt-0.5">
-                      {form.title !== "" ? form.title : "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
-                      Description
-                    </span>
-                    <p className="text-xs text-gray-700 leading-relaxed mt-0.5 line-clamp-4">
-                      {form.description !== "" ? form.description : "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
-                      CTA
-                    </span>
-                    <p className="text-xs text-gray-800 font-semibold mt-0.5">
-                      {form.ctaText !== "" ? form.ctaText : "—"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+        {status === "error" && (
+          <div className="flex-1 flex items-center">
+            <EmptyState
+              icon="⚠️"
+              title="Couldn't queue generation"
+              description="Something went wrong reaching the offer generator. Try again."
+              className="w-full"
+            />
           </div>
-        ) : null}
+        )}
+
+        {status === "empty" && (
+          <div className="flex-1 flex items-center">
+            <EmptyState
+              icon="🎁"
+              title="No output yet."
+              description="Add context above and click Generate."
+              className="w-full"
+            />
+          </div>
+        )}
+
+        {status === "content" && queued && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 flex flex-col gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+              Generation Queued
+            </span>
+            <p className="text-xs text-gray-700 leading-relaxed">{queued.message}</p>
+            <p className="text-[11px] text-gray-500">
+              Task <span className="font-mono">{queued.task_id}</span> — status:{" "}
+              <span className="font-semibold text-emerald-700">{queued.status}</span>
+            </p>
+            <p className="text-[11px] text-gray-500">
+              Generated offers are written directly to the catalog for review —
+              check{" "}
+              <Link href="/marketing/offers" className="text-emerald-600 hover:text-emerald-700 underline">
+                Offers
+              </Link>{" "}
+              in a minute.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -680,11 +642,8 @@ export default function OfferBuilderPage() {
   const [form, setForm] = useState<FormState>(blankForm);
   const [showPreview, setShowPreview] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   async function handleSave() {
-    setSaveError(null);
-
     // CreateOfferRequest only accepts {name, description, price, status, url, notes}.
     // The builder collects richer structured data (tiers, bonuses, guarantee,
     // urgency, CTA). Park the structured fields in `notes` as JSON so they
@@ -716,9 +675,7 @@ export default function OfferBuilderPage() {
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2500);
     } catch (err) {
-      setSaveError(
-        err instanceof Error ? err.message : "Failed to save offer. Check your network.",
-      );
+      showApiError(err instanceof Error ? err.message : "Failed to save offer. Check your network.");
     }
   }
 
@@ -741,12 +698,6 @@ export default function OfferBuilderPage() {
             Build, price, and configure your offer — then use AI to generate compelling copy.
           </p>
         </div>
-
-        {saveError !== null && (
-          <div className="border border-red-200 bg-red-50 rounded-lg px-4 py-3">
-            <p className="text-xs text-red-700">{saveError}</p>
-          </div>
-        )}
 
         {/* Main two-panel layout */}
         <section aria-label="Offer builder" className="flex gap-5 items-start">

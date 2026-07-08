@@ -19,6 +19,7 @@ import json
 import logging
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.analytics.trends import DEFAULT_WINDOW, TrendResult, all_trends
@@ -140,3 +141,53 @@ def generate_recommendations(db: Session, window: str = DEFAULT_WINDOW) -> dict:
 
     logger.info("generate_recommendations: %d active finding(s) for window=%s", len(emitted), window)
     return {"window": window, "active": len(emitted), "recommendations": emitted}
+
+
+# ─── Shared read query ──────────────────────────────────────────────────────────
+#
+# Both `GET /analytics/recommendations` and `GET /dashboard/recommendations` need
+# the same "active findings" query. Defined once here so the dashboard route never
+# has to duplicate the SQL/ordering — it just adapts the rows to its own response
+# shape.
+
+_LIST_RECOMMENDATIONS_SQL = """
+    SELECT id, metric_key, area, "window", verdict, severity, title, body,
+           evidence, status, updated_at
+    FROM recommendations
+    WHERE {where}
+    ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END,
+             updated_at DESC
+"""
+
+
+async def fetch_recommendation_rows(
+    session: AsyncSession,
+    *,
+    status: str | None = None,
+    area: str | None = None,
+    limit: int | None = None,
+) -> list[dict]:
+    """Fetch active (or filtered) recommendation rows as plain dicts.
+
+    Defaults to the non-resolved findings, most severe first — identical semantics
+    to ``GET /analytics/recommendations``. No fabrication, no padding: callers get
+    back exactly however many rows match (possibly zero).
+    """
+    where = ["1 = 1"]
+    params: dict[str, object] = {}
+    if status:
+        where.append("status = :status")
+        params["status"] = status
+    else:
+        where.append("status <> 'resolved'")
+    if area:
+        where.append("area = :area")
+        params["area"] = area
+
+    sql = _LIST_RECOMMENDATIONS_SQL.format(where=" AND ".join(where))
+    if limit is not None:
+        sql += " LIMIT :limit"
+        params["limit"] = limit
+
+    rows = (await session.execute(text(sql), params)).mappings().all()
+    return [dict(r) for r in rows]
