@@ -325,6 +325,12 @@ function GoogleWorkspaceConnectCard() {
   // Show/Hide toggle overrides the heuristic.
   const [showSetupSteps, setShowSetupSteps] = useState(true);
 
+  // The OAuth redirect URI shown in the setup instructions below must match
+  // the actual deployed API base (not a hardcoded localhost), or the copied
+  // value would be wrong the moment this runs anywhere but a local dev
+  // backend. Derived from the same base URL the apiClient itself uses.
+  const oauthRedirectUri = `${apiClient.getBaseUrl()}/integrations/google_workspace/oauth/callback`;
+
   const loadConnected = useCallback(async () => {
     setLoadingList(true);
     try {
@@ -525,10 +531,10 @@ function GoogleWorkspaceConnectCard() {
                 className="flex-1 min-w-0 text-[11px] font-mono bg-gray-50 border border-gray-200 rounded-md px-3 py-2 overflow-x-auto whitespace-nowrap text-gray-800"
                 aria-label="Authorized redirect URI"
               >
-                http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback
+                {oauthRedirectUri}
               </code>
               <CopyButton
-                text="http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback"
+                text={oauthRedirectUri}
                 label="Copy"
               />
             </div>
@@ -559,7 +565,7 @@ function GoogleWorkspaceConnectCard() {
             <pre className="ml-6 text-[11px] font-mono bg-gray-50 border border-gray-200 rounded-md px-3 py-2 overflow-x-auto text-gray-800">
 {`GOOGLE_OAUTH_CLIENT_ID=...
 GOOGLE_OAUTH_CLIENT_SECRET=...
-GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/v1/integrations/google_workspace/oauth/callback
+GOOGLE_OAUTH_REDIRECT_URI=${oauthRedirectUri}
 VOYAGE_API_KEY=pa-...`}
             </pre>
             <ol

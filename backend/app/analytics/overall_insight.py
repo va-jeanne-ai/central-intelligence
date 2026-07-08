@@ -32,7 +32,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-6"
+MODEL = settings.anthropic_model_default
 _VALID_VERDICTS = {"healthy", "watch", "at_risk"}
 
 # A canned assessment used when no API key is set or mock_mode is on. Shaped exactly

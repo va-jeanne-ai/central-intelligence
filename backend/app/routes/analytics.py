@@ -131,7 +131,7 @@ async def list_trends(
         raise HTTPException(422, f"window must be one of {sorted(_VALID_WINDOWS)}")
 
     # Reuse the engine's evaluation logic over rows we fetch via the async session.
-    from app.analytics.trends import _evaluate  # local import: engine is sync-first
+    from app.analytics.trends import evaluate  # local import: engine is sync-first
 
     metrics = [m for m in all_metrics() if area is None or m.area == area]
     out: list[TrendItem] = []
@@ -144,7 +144,7 @@ async def list_trends(
             ORDER BY captured_date ASC
             """
         ), {"k": m.key, "w": window})).mappings().all()
-        t = _evaluate(m, [dict(r) for r in rows], window)
+        t = evaluate(m, [dict(r) for r in rows], window)
         out.append(TrendItem(
             metric_key=t.metric_key, area=t.area, label=t.label, unit=t.unit,
             window=t.window, verdict=t.verdict, latest_value=t.latest_value,

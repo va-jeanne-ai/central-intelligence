@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.agents.directors.base import DirectorAgent
 from app.prompts.data_integrity import DATA_INTEGRITY_RULE
 
@@ -117,7 +118,7 @@ Before responding, verify:
         session: AsyncSession,
         director_id: str = "marketing-director",
         name: str = "Marketing Director",
-        model: str = "claude-sonnet-4-6",
+        model: str = settings.anthropic_model_default,
     ):
         self._session = session
         super().__init__(director_id=director_id, name=name, department="marketing", model=model)

@@ -213,7 +213,7 @@ def _call_claude(user_prompt: str) -> list[dict]:
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     message = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=settings.anthropic_model_default,
         max_tokens=4096,
         system=ICP_GENERATOR_SYSTEM_PROMPT_V1,
         messages=[{"role": "user", "content": user_prompt}],

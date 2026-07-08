@@ -13,6 +13,7 @@ from datetime import date
 from typing import Any, Callable
 
 from app.agents.base import BaseAgent
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +123,7 @@ class DirectorAgent(BaseAgent):
         director_id: str,
         name: str,
         department: str,
-        model: str = "claude-sonnet-4-5-20250514",
+        model: str = settings.anthropic_model_default,
     ):
         super().__init__(agent_id=director_id, name=name, model=model)
         self.department = department
