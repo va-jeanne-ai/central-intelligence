@@ -289,6 +289,104 @@ function InlineTextEdit({
   );
 }
 
+interface InlineSelectEditProps {
+  value: string | null;
+  // Fixed choice list (e.g. the rep roster). The current value is offered as an
+  // extra option when it isn't in the list, so legacy/former-rep owners remain
+  // selectable instead of being silently clobbered.
+  options: string[];
+  emptyLabel?: string;
+  className?: string;
+  onSave: (next: string | null) => Promise<void> | void;
+}
+
+function InlineSelectEdit({
+  value,
+  options,
+  emptyLabel = "—",
+  className = "",
+  onSave,
+}: InlineSelectEditProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing) setDraft(value ?? "");
+  }, [value, isEditing]);
+
+  if (!isEditing) {
+    const isEmpty = !value || value.trim() === "";
+    return (
+      <button
+        type="button"
+        onClick={() => setIsEditing(true)}
+        className={`text-left hover:bg-amber-50/60 rounded px-1 -mx-1 transition-colors ${
+          isEmpty ? "text-gray-400 italic" : ""
+        } ${className}`}
+        title="Click to edit"
+      >
+        {isEmpty ? emptyLabel : value}
+      </button>
+    );
+  }
+
+  const currentNotInOptions =
+    value !== null && value.trim() !== "" && !options.includes(value);
+
+  async function commit() {
+    setIsSaving(true);
+    try {
+      await onSave(draft.trim() === "" ? null : draft);
+      setIsEditing(false);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Save failed.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <select
+        value={draft}
+        autoFocus
+        disabled={isSaving}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void commit();
+          if (e.key === "Escape") setIsEditing(false);
+        }}
+        className="border border-accent-300 rounded px-1.5 py-0.5 text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-accent-300/50"
+      >
+        <option value="">{emptyLabel}</option>
+        {currentNotInOptions && <option value={value as string}>{value} (former)</option>}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => void commit()}
+        disabled={isSaving}
+        className="text-[12px] font-medium text-accent-600 hover:text-accent-700"
+      >
+        {isSaving ? "…" : "Save"}
+      </button>
+      <button
+        type="button"
+        onClick={() => setIsEditing(false)}
+        disabled={isSaving}
+        className="text-[12px] text-gray-400 hover:text-gray-600"
+      >
+        Cancel
+      </button>
+    </span>
+  );
+}
+
 interface InlineTextareaEditProps {
   value: string | null;
   rows?: number;
@@ -611,6 +709,28 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
   const [isDeletingInsight, setIsDeletingInsight] = useState(false);
   const [isReanalyzing, setIsReanalyzing] = useState(false);
 
+  // Rep roster for the Owner dropdown. Empty until loaded (or on failure), in
+  // which case the Owner field falls back to the free-text inline edit.
+  const [repNames, setRepNames] = useState<string[]>([]);
+  useEffect(() => {
+    if (authLoading) return;
+    let cancelled = false;
+    apiClient
+      .get<{ reps: { rep_id: string; full_name: string; status: string }[] }>(
+        "/reps",
+        { silent: true },
+      )
+      .then((data) => {
+        if (!cancelled) setRepNames(data.reps.map((r) => r.full_name));
+      })
+      .catch(() => {
+        // Roster unavailable — Owner stays a free-text edit.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading]);
+
   // Track the processed_date at the moment Re-analyze starts so polls can
   // detect when fresh data has actually landed (vs serving stale rows).
   const reanalyzeBaselineRef = useRef<string | null>(null);
@@ -773,13 +893,22 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
             <p className="text-[13px] text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
               <span>
                 Owner:{" "}
-                <InlineTextEdit
-                  value={call.call_owner}
-                  placeholder="Call owner"
-                  emptyLabel="Unknown owner"
-                  inputClassName="text-[13px]"
-                  onSave={(v) => saveCallField("call_owner", v)}
-                />
+                {repNames.length > 0 ? (
+                  <InlineSelectEdit
+                    value={call.call_owner}
+                    options={repNames}
+                    emptyLabel="Unknown owner"
+                    onSave={(v) => saveCallField("call_owner", v)}
+                  />
+                ) : (
+                  <InlineTextEdit
+                    value={call.call_owner}
+                    placeholder="Call owner"
+                    emptyLabel="Unknown owner"
+                    inputClassName="text-[13px]"
+                    onSave={(v) => saveCallField("call_owner", v)}
+                  />
+                )}
               </span>
               <span className="text-gray-300">·</span>
               <span>

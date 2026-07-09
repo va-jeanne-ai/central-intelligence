@@ -7,6 +7,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Changed — Sales call detail: Owner is now a rep dropdown
+
+The editable Owner field on the sales-call detail page is a dropdown sourced from the rep
+roster (`GET /reps`, active + probation) instead of free text — no more typo'd owner variants
+('Colton  Lindsay'). A current owner who isn't in the roster (former reps) stays selectable,
+marked "(former)"; "Unknown owner" clears the field. Falls back to the free-text edit if the
+roster can't be loaded.
+
+
 ### Added — Appointments calendar: calendar view on /appointments + overlay on /calendar
 
 - **/appointments** gains a List | Calendar toggle. Calendar mode reuses the shared calendar
