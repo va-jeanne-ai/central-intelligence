@@ -27,6 +27,7 @@ import {
   startOfDay,
   startOfMonth,
   startOfWeek,
+  toDateInputValue,
 } from "@/lib/calendar-helpers";
 import { appointmentsClient } from "@/lib/appointments-client";
 import { appointmentsToCalendarEvents } from "@/lib/appointment-calendar-mapping";
@@ -124,6 +125,15 @@ export function AppointmentsCalendarView({ statusFilter, repFilter, search }: Ap
 
   const onToday = useCallback(() => setAnchorDate(new Date()), []);
 
+  // Jump straight to a picked date (any view; most useful in Day). Parse the
+  // YYYY-MM-DD locally — new Date("YYYY-MM-DD") would interpret it as UTC and
+  // shift the day for negative-offset timezones.
+  const onPickDate = useCallback((value: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!m) return; // cleared/partial input — keep the current anchor
+    setAnchorDate(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  }, []);
+
   return (
     <div className="rounded-xl border border-gray-200 overflow-hidden">
       {/* Nav + view tabs toolbar */}
@@ -154,6 +164,14 @@ export function AppointmentsCalendarView({ statusFilter, repFilter, search }: Ap
               →
             </button>
           </div>
+          <input
+            type="date"
+            value={toDateInputValue(anchorDate)}
+            onChange={(e) => onPickDate(e.target.value)}
+            aria-label="Jump to date"
+            title="Jump to date"
+            className="px-2 py-1 text-[12px] border border-gray-200 rounded-lg bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          />
           <div className="text-[15px] font-semibold text-gray-800 ml-2">
             {viewTitle(view, anchorDate)}
           </div>
