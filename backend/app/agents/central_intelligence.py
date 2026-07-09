@@ -556,15 +556,22 @@ async def _get_analytics_verdicts(
     area: str | None = None,
     metric_key: str | None = None,
     window: str = "30d",
+    rep: str | None = None,
 ) -> str:
     """Return the engine's trend verdicts + open recommendations as structured JSON.
 
     Every field is read straight off ``TrendResult`` / the ``recommendations`` table —
     nothing here is computed or guessed by this function or the LLM.
+
+    ``rep`` (optional) scopes the result to one sales rep, resolved against
+    ``sales_reps`` by rep_id / full_name / historical_aliases (see
+    ``app.analytics.team.resolve_rep``). Unresolvable input returns a structured
+    error with the known roster rather than guessing which rep was meant.
     """
     from app.analytics.trends import evaluate
     from app.analytics.registry import all_metrics, get_metric
     from app.analytics.recommend import fetch_recommendation_rows
+    from app.analytics.team import RepRow, resolve_rep
     from app.database import AsyncSessionLocal
     from sqlalchemy import text
 
@@ -581,9 +588,33 @@ async def _get_analytics_verdicts(
 
     try:
         async with AsyncSessionLocal() as s:
+            resolved_rep: RepRow | None = None
+            scope = "global"
+            if rep is not None and rep.strip():
+                roster_rows = (await s.execute(text(
+                    "SELECT rep_id, full_name, role, status, historical_aliases FROM sales_reps"
+                ))).mappings().all()
+                roster = [
+                    RepRow(
+                        rep_id=r["rep_id"], full_name=r["full_name"], role=r["role"],
+                        status=r["status"], historical_aliases=r["historical_aliases"],
+                    )
+                    for r in roster_rows
+                ]
+                resolved_rep = resolve_rep(rep, roster)
+                if resolved_rep is None:
+                    return json.dumps({
+                        "error": f"Could not match '{rep}' to a known sales rep.",
+                        "known_reps": sorted(r.full_name for r in roster),
+                    })
+                scope = f"rep:{resolved_rep.rep_id}"
+
             metrics = [m for m in all_metrics() if area is None or m.area == area]
             if metric_key is not None:
                 metrics = [m for m in metrics if m.key == metric_key]
+            if resolved_rep is not None:
+                # Rep scoping only makes sense for metrics with a per-rep breakdown.
+                metrics = [m for m in metrics if m.rep_sql is not None]
             if not metrics:
                 return json.dumps({
                     "window": window,
@@ -596,9 +627,9 @@ async def _get_analytics_verdicts(
             for m in metrics:
                 rows = (await s.execute(text(
                     'SELECT value, sample_size, captured_date FROM metric_snapshots '
-                    'WHERE metric_key = :k AND "window" = :w AND scope = \'global\' '
+                    'WHERE metric_key = :k AND "window" = :w AND scope = :scope '
                     "ORDER BY captured_date ASC"
-                ), {"k": m.key, "w": window})).mappings().all()
+                ), {"k": m.key, "w": window, "scope": scope})).mappings().all()
                 t = evaluate(m, [dict(r) for r in rows], window)
                 metric_out.append({
                     "metric_key": t.metric_key,
@@ -621,7 +652,7 @@ async def _get_analytics_verdicts(
             # Open recommendations — same shared helper the HTTP API uses, so the
             # chat surface and the Insights dashboard never disagree.
             rec_rows = await fetch_recommendation_rows(
-                s, area=area,
+                s, area=area, scope=scope,
             )
             if metric_key is not None:
                 rec_rows = [r for r in rec_rows if r["metric_key"] == metric_key]
@@ -642,11 +673,19 @@ async def _get_analytics_verdicts(
                 for r in rec_rows
             ]
 
-            return json.dumps({
+            result: dict = {
                 "window": window,
                 "metrics": metric_out,
                 "recommendations": recommendations_out,
-            })
+            }
+            if resolved_rep is not None:
+                result["rep"] = {
+                    "rep_id": resolved_rep.rep_id,
+                    "full_name": resolved_rep.full_name,
+                    "role": resolved_rep.role,
+                    "status": resolved_rep.status,
+                }
+            return json.dumps(result)
     except Exception as exc:  # noqa: BLE001 — never crash the CI tool loop
         logger.warning("get_analytics_verdicts tool error: %s", exc)
         return json.dumps({"error": "Couldn't read the analytics engine right now."})
@@ -717,7 +756,12 @@ class CentralIntelligence(BaseAgent):
                 "returned verdicts, numbers, and recommendation text as-is — you may "
                 "only rephrase them into natural language, never invent, adjust, or "
                 "round a figure the tool didn't return. If a metric's verdict is "
-                "'insufficient_data', say so rather than implying a trend exists."
+                "'insufficient_data', say so rather than implying a trend exists. "
+                "Pass the optional 'rep' field for rep-level questions (e.g. 'how is "
+                "Makyla doing?') — it resolves the name against the sales roster and "
+                "scopes the verdicts/recommendations to that one rep; an unresolvable "
+                "name comes back as a structured error with the known rep names, "
+                "which you should relay rather than guessing who was meant."
             ),
             input_schema={
                 "type": "object",
@@ -736,6 +780,14 @@ class CentralIntelligence(BaseAgent):
                     "window": {
                         "type": "string",
                         "description": "Lookback window: '7d', '30d' (default), '90d', or 'all'.",
+                    },
+                    "rep": {
+                        "type": "string",
+                        "description": "Optional sales rep name to scope the verdicts/"
+                        "recommendations to just that rep (e.g. 'Makyla', 'Makyla "
+                        "Thompson', or a known alias). Matched case-insensitively "
+                        "against the sales roster. Omit for company-wide (global) "
+                        "results.",
                     },
                 },
                 "required": [],
