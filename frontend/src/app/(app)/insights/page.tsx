@@ -13,6 +13,7 @@ import {
   MetricSparkline,
 } from "./insights-charts";
 import { OverallInsightCard } from "./overall-insight-card";
+import { TeamTab } from "./team-tab";
 import type { OverallInsight } from "@/types";
 
 // ─── Types (mirror /analytics responses) ────────────────────────────────────────
@@ -83,8 +84,16 @@ const AREA_LABEL: Record<string, string> = {
 
 // ─── Page ───────────────────────────────────────────────────────────────────────
 
+type InsightsTab = "overview" | "team";
+
+const TABS: { id: InsightsTab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "team", label: "Team" },
+];
+
 export default function InsightsPage() {
   const { isLoading: authLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState<InsightsTab>("overview");
   const [window, setWindow] = useState("30d");
   const [metrics, setMetrics] = useState<MetricValue[]>([]);
   const [trends, setTrends] = useState<Record<string, TrendItem>>({});
@@ -203,27 +212,51 @@ export default function InsightsPage() {
               Recommendations appear only when the numbers cross a threshold, and each cites its evidence.
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {WINDOWS.map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  onClick={() => setWindow(w)}
-                  className={`px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                    window === w ? "bg-accent-500 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  {w}
-                </button>
-              ))}
+          {activeTab === "overview" && (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {WINDOWS.map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setWindow(w)}
+                    className={`px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                      window === w ? "bg-accent-500 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {w}
+                  </button>
+                ))}
+              </div>
+              <Button variant="ghost" onClick={() => void handleRefresh()} disabled={refreshing}>
+                {refreshing ? "Refreshing…" : "↻ Refresh"}
+              </Button>
             </div>
-            <Button variant="ghost" onClick={() => void handleRefresh()} disabled={refreshing}>
-              {refreshing ? "Refreshing…" : "↻ Refresh"}
-            </Button>
-          </div>
+          )}
         </div>
 
+        {/* Tab bar — Overview (existing content) / Team (per-rep leaderboard) */}
+        <div className="flex gap-1 border-b-2 border-gray-200 -mt-2">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`-mb-0.5 border-b-2 px-3.5 py-2 text-[13px] font-semibold transition-colors ${
+                activeTab === tab.id
+                  ? "border-accent-500 text-accent-700"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "team" ? (
+          <TeamTab />
+        ) : (
+          <>
         {/* Overall health — company-level narrative assessment, the hero of the page */}
         <OverallInsightCard
           insight={overallInsight}
@@ -349,6 +382,8 @@ export default function InsightsPage() {
               </CardBody>
             </Card>
           ))
+        )}
+          </>
         )}
       </main>
     </>
