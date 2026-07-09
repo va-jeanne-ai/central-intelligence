@@ -17,6 +17,7 @@ from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analytics.team import RepRow, resolve_rep
 from app.database import get_session
 from app.models.intelligence import (
     InsightTag,
@@ -35,6 +36,7 @@ from app.models.operational import (
     PainPoint,
     Win,
 )
+from app.models.sales import SalesRep
 from app.repositories.intelligence import (
     MarketSignalRepository,
     MonthlyPreferenceRepository,
@@ -279,6 +281,35 @@ def _excerpt(transcript: str | None) -> str | None:
     return text_[:_EXCERPT_LEN] + ("…" if len(text_) > _EXCERPT_LEN else "")
 
 
+def call_owner_match_values(rep: RepRow) -> list[str]:
+    """Every raw ``call_owner`` string variant that should resolve to ``rep``.
+
+    Combines ``full_name`` with each comma-split ``historical_aliases`` entry
+    (title-cased back to a plausible display form, since aliases are stored
+    lowercase) so a SQL ``call_owner IN (...)`` (case-insensitive) filter can
+    match the messy variants WGR actually wrote ('Colton', 'Colton  Lindsay').
+    Pure — no DB access — so it's unit-testable against fixed rep rows.
+    """
+    values = {rep.full_name.strip().lower()}
+    if rep.historical_aliases:
+        for alias in rep.historical_aliases.split(","):
+            a = alias.strip().lower()
+            if a:
+                values.add(a)
+    return sorted(values)
+
+
+def resolve_call_owner(call_owner: str | None, roster: list[RepRow]) -> RepRow | None:
+    """Resolve a raw ``calls.call_owner`` display string against the roster.
+
+    Thin wrapper over ``resolve_rep`` — same match semantics (exact rep_id,
+    case-insensitive full_name, then historical_aliases containment) — kept as
+    a distinct name at the call site since the input here is always the messy
+    WGR ``call_owner`` string, never a user-typed rep query.
+    """
+    return resolve_rep(call_owner, roster) if call_owner else None
+
+
 @router.get("/calls/stats", response_model=CallStats)
 async def call_stats(session: AsyncSession = Depends(get_session)):
     """KPI tiles for the Sales Calls page: totals + this-month + pain points + ideas."""
@@ -404,6 +435,13 @@ async def list_calls(
     ),
     date_from: str | None = Query(None, description="Call date >= (ISO)."),
     date_to: str | None = Query(None, description="Call date <= (ISO)."),
+    start: str | None = Query(None, description="Call date >= (ISO date/datetime)."),
+    end: str | None = Query(None, description="Call date <= (ISO date/datetime)."),
+    rep: str | None = Query(
+        None,
+        description="Filter by rep_id. Matches calls whose call_owner resolves "
+        "(via the sales_reps roster + historical_aliases) to this rep.",
+    ),
     sort_by: str = Query("date", description="Sort column (see _CALL_SORTABLE)."),
     sort_dir: Literal["asc", "desc"] = Query("desc", description="Sort direction."),
     page: int = Query(1, ge=1),
@@ -418,6 +456,17 @@ async def list_calls(
         nonlocal stmt, count_stmt
         stmt = stmt.where(clause)
         count_stmt = count_stmt.where(clause)
+
+    # Full roster fetched once — used both for the optional `rep` filter and to
+    # resolve each returned row's call_owner → rep_id/rep_name (avoids N+1).
+    roster_rows = (await session.execute(
+        select(SalesRep.rep_id, SalesRep.full_name, SalesRep.role, SalesRep.status,
+               SalesRep.historical_aliases)
+    )).all()
+    roster = [
+        RepRow(rep_id=r[0], full_name=r[1], role=r[2], status=r[3], historical_aliases=r[4])
+        for r in roster_rows
+    ]
 
     if call_type:
         types = [t.strip() for t in call_type.split(",") if t.strip()]
@@ -452,6 +501,26 @@ async def list_calls(
         _both(Call.date >= datetime.fromisoformat(date_from))
     if date_to:
         _both(Call.date <= datetime.fromisoformat(date_to))
+    if start:
+        _both(Call.date >= datetime.fromisoformat(start))
+    if end:
+        # Bare 'YYYY-MM-DD' (native <input type="date">) needs its end boundary
+        # pushed to the end of that day, else "end=2026-06-30" excludes every
+        # call that happened during the 30th (midnight-only comparison).
+        end_dt = datetime.fromisoformat(end)
+        if len(end) <= 10:
+            end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+        _both(Call.date <= end_dt)
+    if rep:
+        rep_row = next((r for r in roster if r.rep_id == rep), None)
+        if rep_row is None:
+            # Unknown rep_id — no calls can match; short-circuit to an empty
+            # page rather than erroring (mirrors the appointments rep filter,
+            # which is similarly permissive of an unresolvable rep_id).
+            _both(Call.id.is_(None))
+        else:
+            match_values = call_owner_match_values(rep_row)
+            _both(func.lower(func.trim(Call.call_owner)).in_(match_values))
 
     total = (await session.execute(count_stmt)).scalar_one()
 
@@ -482,8 +551,12 @@ async def list_calls(
             .where(Insight.call_id.in_(call_ids))
             .group_by(Insight.call_id)
         )).all()
-        for cid, total, pain in rows:
-            insight_counts[cid] = total
+        # NOTE: loop var deliberately not named `total` — it previously shadowed
+        # the outer pagination `total` (the count_stmt result), so any response
+        # page with at least one call silently corrupted `pagination.total` to
+        # the last row's per-call insight count instead of the true match count.
+        for cid, insight_total, pain in rows:
+            insight_counts[cid] = insight_total
             pain_counts[cid] = pain
         idea_rows = (await session.execute(
             select(ContentIdea.call_id, func.count())
@@ -504,12 +577,15 @@ async def list_calls(
 
     data = []
     for c in calls:
+        resolved = resolve_call_owner(c.call_owner, roster)
         data.append(CallSummary(
             call_id=c.id,
             date=c.date,
             call_type=c.call_type,
             call_result=c.call_result,
             call_owner=c.call_owner,
+            rep_id=resolved.rep_id if resolved else None,
+            rep_name=resolved.full_name if resolved else None,
             lead_id=str(c.lead_id) if c.lead_id is not None else None,
             lead_name=lead_names.get(c.lead_id),
             transcript_quality=c.transcript_quality,

@@ -14,12 +14,20 @@ import { showSuccess, showApiError } from "@/lib/toast";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+// Real appointment statuses (app DB, verified live): completed, cancelled,
+// scheduled, no_show, plus null/unknown. The older booked/confirmed/showed/
+// no-show/rescheduled vocabulary below is kept in STATUS_CONFIG for any
+// legacy/manual rows that still carry it — resolveStatus falls back to a
+// neutral pill for anything unrecognized either way.
 type AppointmentStatus =
+  | "completed"
+  | "cancelled"
+  | "scheduled"
+  | "no_show"
   | "booked"
   | "confirmed"
   | "showed"
   | "no-show"
-  | "cancelled"
   | "rescheduled";
 
 interface AppointmentRow {
@@ -32,6 +40,14 @@ interface AppointmentRow {
   appointment_type: string | null;
   scheduledAt: string | null;
   source: string | null;
+  rep_id: string | null;
+  rep_name: string | null;
+}
+
+interface RepOption {
+  rep_id: string;
+  full_name: string;
+  status: string;
 }
 
 interface AppointmentsListResponse {
@@ -79,12 +95,18 @@ const EMPTY_LIST: AppointmentsListResponse = {
 type FilterStatus = "all" | AppointmentStatus;
 type FilterWindow = "all" | "upcoming" | "this_week";
 
+// Color convention (shared with the Sales Calls page): green = completed/
+// showed, blue = scheduled/booked, gray = cancelled, red = no-show, amber =
+// in-between states like rescheduled/confirmed.
 const STATUS_CONFIG: Record<AppointmentStatus, { label: string; dotColor: string; badgeClasses: string }> = {
+  completed: { label: "Completed", dotColor: "#10B981", badgeClasses: "bg-green-50 text-green-700" },
+  scheduled: { label: "Scheduled", dotColor: "#3B82F6", badgeClasses: "bg-blue-50 text-blue-700" },
+  cancelled: { label: "Cancelled", dotColor: "#9CA3AF", badgeClasses: "bg-gray-100 text-gray-500" },
+  no_show: { label: "No-Show", dotColor: "#EF4444", badgeClasses: "bg-red-50 text-red-700" },
   booked: { label: "Booked", dotColor: "#3B82F6", badgeClasses: "bg-blue-50 text-blue-700" },
   confirmed: { label: "Confirmed", dotColor: "#F59E0B", badgeClasses: "bg-accent-50 text-accent-700" },
   showed: { label: "Showed", dotColor: "#10B981", badgeClasses: "bg-green-50 text-green-700" },
   "no-show": { label: "No-Show", dotColor: "#EF4444", badgeClasses: "bg-red-50 text-red-700" },
-  cancelled: { label: "Cancelled", dotColor: "#9CA3AF", badgeClasses: "bg-gray-100 text-gray-500" },
   rescheduled: { label: "Rescheduled", dotColor: "#F59E0B", badgeClasses: "bg-amber-50 text-amber-700" },
 };
 
@@ -283,6 +305,7 @@ function AppointmentTableRow({ appt }: { appt: AppointmentRow }) {
           <span className="text-xs text-gray-400">{appt.contact_email ?? "—"}</span>
         </div>
       </td>
+      <td className="px-5 py-3.5 text-sm text-gray-700">{appt.rep_name ?? "—"}</td>
       <td className="px-5 py-3.5 text-sm text-gray-700">{formatScheduled(appt.scheduledAt)}</td>
       <td className="px-5 py-3.5">
         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${status.badgeClasses}`}>
@@ -305,12 +328,29 @@ export default function AppointmentsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [windowFilter, setWindowFilter] = useState<FilterWindow>("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [repFilter, setRepFilter] = useState("all");
+  const [reps, setReps] = useState<RepOption[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Pagination — page size persisted per surface in localStorage.
   const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
     usePagination("appointments");
+
+  // Rep dropdown options — active + probation reps, loaded once.
+  useEffect(() => {
+    if (authLoading) return;
+    void (async () => {
+      try {
+        const data = await apiClient.get<{ reps: RepOption[] }>("/reps", { silent: true });
+        setReps(data.reps ?? []);
+      } catch {
+        setReps([]);
+      }
+    })();
+  }, [authLoading]);
 
   // Stats
   useEffect(() => {
@@ -345,6 +385,9 @@ export default function AppointmentsPage() {
         if (statusFilter !== "all") params.set("status", statusFilter);
         if (windowFilter !== "all") params.set("window", windowFilter);
         if (search) params.set("search", search);
+        if (startDate) params.set("start", startDate);
+        if (endDate) params.set("end", endDate);
+        if (repFilter !== "all") params.set("rep", repFilter);
         params.set("page", String(page));
         params.set("per_page", String(pageSize));
         try {
@@ -367,14 +410,14 @@ export default function AppointmentsPage() {
       };
     }
     return doFetch();
-  }, [authLoading, statusFilter, windowFilter, search, refreshKey, page, pageSize]);
+  }, [authLoading, statusFilter, windowFilter, search, startDate, endDate, repFilter, refreshKey, page, pageSize]);
 
   // When a filter/search narrows the set, jump back to page 1 so the user
   // isn't stranded on a page that no longer exists.
   useEffect(() => {
     resetToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, windowFilter, search]);
+  }, [statusFilter, windowFilter, search, startDate, endDate, repFilter]);
 
   const kpiCards = [
     { label: "Total Appointments", value: String(kpis.total), sub: "All time" },
@@ -456,12 +499,41 @@ export default function AppointmentsPage() {
               <option value="this_week">This Week</option>
               <option value="upcoming">Upcoming</option>
             </select>
+            <select
+              value={repFilter}
+              onChange={(e) => setRepFilter(e.target.value)}
+              className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-600"
+            >
+              <option value="all">All Reps</option>
+              {reps.map((r) => (
+                <option key={r.rep_id} value={r.rep_id}>
+                  {r.full_name}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                aria-label="Start date"
+                className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-600"
+              />
+              <span className="text-xs text-gray-400">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                aria-label="End date"
+                className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-600"
+              />
+            </div>
           </div>
 
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                {["Contact", "Scheduled", "Status", "Type"].map((h) => (
+                {["Contact", "Rep", "Scheduled", "Status", "Type"].map((h) => (
                   <th key={h} className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     {h}
                   </th>
@@ -471,7 +543,7 @@ export default function AppointmentsPage() {
             <tbody>
               {listData.appointments.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-5 py-12 text-center text-sm text-gray-400">
+                  <td colSpan={5} className="px-5 py-12 text-center text-sm text-gray-400">
                     No appointments match your filters.
                   </td>
                 </tr>

@@ -10,7 +10,8 @@ points, and recent call insights. Mirrors the marketing summary endpoint.
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -60,4 +61,35 @@ async def get_sales_summary(
             "kpis": appt["kpis"],
             "status_breakdown": appt["status_breakdown"],
         },
+    }
+
+
+@router.get(
+    "/reps",
+    summary="Light reps listing for filter dropdowns",
+    description=(
+        "Returns id/full_name/status for sales_reps whose status is active or "
+        "probation — the set relevant to a rep filter dropdown (terminated reps "
+        "excluded). Lighter than /analytics/team, which also assembles metrics."
+    ),
+)
+async def list_reps(
+    include_all: bool = Query(
+        default=False,
+        description="Include every status (including terminated) instead of just active/probation.",
+    ),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    where = "" if include_all else "WHERE status IN ('active', 'probation')"
+    rows = (await session.execute(
+        text(
+            f"SELECT rep_id, full_name, status FROM sales_reps {where} "  # noqa: S608 — where is a fixed literal, no user input
+            "ORDER BY full_name ASC"
+        )
+    )).mappings().all()
+    return {
+        "reps": [
+            {"rep_id": r["rep_id"], "full_name": r["full_name"], "status": r["status"]}
+            for r in rows
+        ]
     }

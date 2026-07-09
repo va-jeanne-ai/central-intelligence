@@ -92,6 +92,27 @@ def _parse_dt(value: str | None) -> datetime | None:
         raise HTTPException(status_code=400, detail=f"Invalid datetime: {value!r}") from exc
 
 
+def _parse_date_boundary(value: str | None, *, end_of_day: bool) -> datetime | None:
+    """Parse a `start`/`end` query param into a timezone-aware datetime.
+
+    Accepts either a bare date (native ``<input type="date">`` sends
+    'YYYY-MM-DD') or a full ISO datetime. asyncpg requires an actual
+    date/datetime object for a timestamptz comparison — a raw string errors
+    with 'expected a datetime.date or datetime.datetime instance' — so this
+    must run before the value reaches the query params. A bare date's `end`
+    boundary is pushed to 23:59:59 so the whole day is included.
+    """
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid date: {value!r}") from exc
+    if end_of_day and len(str(value)) <= 10:  # bare 'YYYY-MM-DD', no time component
+        dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return dt
+
+
 # ---------------------------------------------------------------------------
 # GET /appointments
 # ---------------------------------------------------------------------------
@@ -104,6 +125,9 @@ async def list_appointments(
     window: Literal["all", "upcoming", "this_week"] = Query(default="all"),
     from_date: str | None = Query(default=None, alias="from"),
     to_date: str | None = Query(default=None, alias="to"),
+    start: str | None = Query(default=None, description="scheduled_at >= (ISO date/datetime)"),
+    end: str | None = Query(default=None, description="scheduled_at <= (ISO date/datetime)"),
+    rep: str | None = Query(default=None, description="Filter by rep_id"),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=50, ge=1, le=200),
     sort_by: str = Query(default="scheduled_at"),
@@ -117,49 +141,74 @@ async def list_appointments(
     if sort_dir not in _SORT_DIRS:
         sort_dir = "desc"
 
-    where_parts: list[str] = ["deleted_at IS NULL"]
+    where_parts: list[str] = ["a.deleted_at IS NULL"]
     params: dict[str, object] = {}
 
     if status:
-        where_parts.append("LOWER(status) = :status_filter")
+        where_parts.append("LOWER(a.status) = :status_filter")
         params["status_filter"] = status.lower()
     if search:
         where_parts.append(
-            "(LOWER(contact_name) LIKE :search OR LOWER(contact_email) LIKE :search)"
+            "(LOWER(COALESCE(a.contact_name, l.name)) LIKE :search "
+            "OR LOWER(a.contact_email) LIKE :search)"
         )
         params["search"] = f"%{search.lower()}%"
     if window == "upcoming":
-        where_parts.append("scheduled_at >= NOW() AND LOWER(status) <> 'cancelled'")
+        where_parts.append("a.scheduled_at >= NOW() AND LOWER(a.status) <> 'cancelled'")
     elif window == "this_week":
         where_parts.append(
-            "scheduled_at >= NOW() AND scheduled_at < NOW() + INTERVAL '7 days' "
-            "AND LOWER(status) <> 'cancelled'"
+            "a.scheduled_at >= NOW() AND a.scheduled_at < NOW() + INTERVAL '7 days' "
+            "AND LOWER(a.status) <> 'cancelled'"
         )
     if from_date:
-        where_parts.append("scheduled_at >= :from_date")
+        where_parts.append("a.scheduled_at >= :from_date")
         params["from_date"] = from_date
     if to_date:
-        where_parts.append("scheduled_at <= :to_date")
+        where_parts.append("a.scheduled_at <= :to_date")
         params["to_date"] = to_date
+    # start/end — date-range filter (client-facing name for the Appointments +
+    # Sales Calls filter bars). Additive with the legacy from/to aliases above.
+    # Parsed into real datetimes (not raw strings) — asyncpg rejects a bare
+    # string against a timestamptz column.
+    start_dt = _parse_date_boundary(start, end_of_day=False)
+    end_dt = _parse_date_boundary(end, end_of_day=True)
+    if start_dt:
+        where_parts.append("a.scheduled_at >= :start_date")
+        params["start_date"] = start_dt
+    if end_dt:
+        where_parts.append("a.scheduled_at <= :end_date")
+        params["end_date"] = end_dt
+    if rep:
+        where_parts.append("a.rep_id = :rep_id")
+        params["rep_id"] = rep
 
     where_sql = " AND ".join(where_parts)
+    # contact_name / member_id / lead_id / sort columns are unqualified in
+    # _SORTABLE_COLUMNS; the join is left outer so appointments without a
+    # linked lead still appear. `a.` prefix keeps the appointments table
+    # columns unambiguous against `leads.name`.
+    from_sql = "FROM appointments a LEFT JOIN leads l ON l.id = a.lead_id LEFT JOIN sales_reps r ON r.rep_id = a.rep_id"
 
     total = _int((await session.execute(
-        text(f"SELECT COUNT(*) FROM appointments WHERE {where_sql}"),  # noqa: S608
+        text(f"SELECT COUNT(*) {from_sql} WHERE {where_sql}"),  # noqa: S608
         params,
     )).scalar())
 
     params["limit"] = per_page
     params["offset"] = (page - 1) * per_page
+    sort_col = f"a.{sort_by}" if sort_by != "contact_name" else "COALESCE(a.contact_name, l.name)"
     rows = (await session.execute(
         text(
             f"""
-            SELECT id::text AS id, contact_name, contact_email,
-                   lead_id::text AS lead_id, member_id::text AS member_id,
-                   status, appointment_type, scheduled_at, source
-            FROM appointments
+            SELECT a.id::text AS id,
+                   COALESCE(a.contact_name, l.name) AS contact_name,
+                   a.contact_email,
+                   a.lead_id::text AS lead_id, a.member_id::text AS member_id,
+                   a.status, a.appointment_type, a.scheduled_at, a.source,
+                   a.rep_id, r.full_name AS roster_rep_name, a.appointment_owner
+            {from_sql}
             WHERE {where_sql}
-            ORDER BY {sort_by} {sort_dir} NULLS LAST
+            ORDER BY {sort_col} {sort_dir} NULLS LAST
             LIMIT :limit OFFSET :offset
             """  # noqa: S608 — sort_by/sort_dir whitelisted, where_sql parametrised
         ),
@@ -177,6 +226,11 @@ async def list_appointments(
             appointment_type=r["appointment_type"],
             scheduledAt=r["scheduled_at"].isoformat() if r["scheduled_at"] else None,
             source=r["source"],
+            rep_id=r["rep_id"],
+            # Roster full_name wins when rep_id resolves; otherwise fall back to
+            # the raw WGR appointment_owner display string (covers former reps
+            # no longer on the roster, e.g. "Ryan Verey").
+            rep_name=r["roster_rep_name"] or r["appointment_owner"],
         )
         for r in rows
     ]

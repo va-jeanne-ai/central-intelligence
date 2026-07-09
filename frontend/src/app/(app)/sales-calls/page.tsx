@@ -27,7 +27,9 @@ interface CallSummary {
   date: string | null;
   call_type: string | null;
   call_result: string | null;
-  call_owner: string | null; // the rep/CSR who ran the call
+  call_owner: string | null; // the rep/CSR who ran the call (raw WGR string)
+  rep_id: string | null; // call_owner resolved against the sales_reps roster
+  rep_name: string | null;
   lead_id: string | null; // the prospect on the call
   lead_name: string | null;
   processed_date: string | null;
@@ -37,6 +39,12 @@ interface CallSummary {
   duration_minutes: number | null;
   transcript_excerpt: string | null;
   source: string | null;
+}
+
+interface RepOption {
+  rep_id: string;
+  full_name: string;
+  status: string;
 }
 
 interface CallsResponse {
@@ -80,11 +88,15 @@ function initials(name: string | null): string {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "—";
 }
 
-// Map the real call_result values to colored status pills. Unknown values fall
+// Map the real call_result values (verified live: No Show, Follow-up
+// Scheduled, Deposit Paid, Not Qualified, Booked, Enrolled, No Sale, Pending)
+// to colored status pills. Palette matches the Appointments page convention:
+// green = won/completed, blue = scheduled/booked, gray = no-show/neutral,
+// red = lost/disqualified, amber = pending/in-progress. Unknown values fall
 // back to a neutral gray pill rather than breaking.
 const RESULT_STYLE: { match: (r: string) => boolean; classes: string; dot: string }[] = [
-  { match: (r) => /booked|won|sale|sold/.test(r), classes: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
-  { match: (r) => /follow.?up|scheduled/.test(r), classes: "bg-violet-50 text-violet-700", dot: "bg-violet-500" },
+  { match: (r) => /won|sale|sold|enrolled|deposit|paid/.test(r), classes: "bg-green-50 text-green-700", dot: "bg-green-500" },
+  { match: (r) => /booked|follow.?up|scheduled/.test(r), classes: "bg-blue-50 text-blue-700", dot: "bg-blue-500" },
   { match: (r) => /no.?show/.test(r), classes: "bg-gray-100 text-gray-600", dot: "bg-gray-400" },
   { match: (r) => /not.?qualified|no.?sale|lost/.test(r), classes: "bg-red-50 text-red-700", dot: "bg-red-500" },
   { match: (r) => /pending|processing/.test(r), classes: "bg-amber-50 text-amber-700", dot: "bg-amber-500" },
@@ -268,10 +280,13 @@ function CallCard({ call, onChanged }: { call: CallSummary; onChanged: () => voi
 
   // Primary identity = the LEAD (prospect). call_owner is the rep, shown as
   // "with <rep>". Unlinked calls fall back to a neutral label + a link action.
+  // Prefer the roster-resolved rep_name (clean) over the raw call_owner string
+  // (can carry whitespace/typo variants) when available.
   const leadDisplay = call.lead_name || (call.lead_id ? "Lead" : null);
   const title = `${leadDisplay ?? "Unlinked call"}${call.call_type ? ` — ${call.call_type} Call` : ""}`;
+  const repDisplay = call.rep_name || call.call_owner;
   const metaParts = [
-    call.call_owner ? `with ${call.call_owner}` : null,
+    repDisplay ? `with ${repDisplay}` : null,
     formatDate(call.date),
     call.duration_minutes ? `${Math.round(call.duration_minutes)} min` : null,
     call.source === "wgr" ? "WGR" : "CI",
@@ -408,6 +423,24 @@ export default function SalesCallsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // Date range + rep filters (server-side, mirrors the Appointments page).
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [repFilter, setRepFilter] = useState("all");
+  const [reps, setReps] = useState<RepOption[]>([]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    void (async () => {
+      try {
+        const data = await apiClient.get<{ reps: RepOption[] }>("/reps", { silent: true });
+        setReps(data.reps ?? []);
+      } catch {
+        setReps([]);
+      }
+    })();
+  }, [authLoading]);
+
   // Multi-select result filter. `null` = not yet initialized (defaults seed from
   // the facets the first time they load: every result ON except "No Show").
   const [resultOptions, setResultOptions] = useState<string[]>([]);
@@ -450,6 +483,9 @@ export default function SalesCallsPage() {
         params.set("call_result", Array.from(selectedResults).join(","));
       }
       if (debouncedSearch) params.set("search", debouncedSearch);
+      if (startDate) params.set("start", startDate);
+      if (endDate) params.set("end", endDate);
+      if (repFilter !== "all") params.set("rep", repFilter);
       const [statsData, callsData] = await Promise.all([
         apiClient.get<CallStats>("/ci/calls/stats", { silent: true }),
         apiClient.get<CallsResponse>(`/ci/calls?${params.toString()}`, { silent: true }),
@@ -462,18 +498,19 @@ export default function SalesCallsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedResults, resultOptions.length, page, pageSize, debouncedSearch]);
+  }, [selectedResults, resultOptions.length, page, pageSize, debouncedSearch, startDate, endDate, repFilter]);
 
   useEffect(() => {
     if (authLoading || selectedResults === null) return;
     void load();
   }, [authLoading, load, refreshKey, selectedResults]);
 
-  // Changing the result filter or search narrows the set — jump back to page 1.
+  // Changing the result filter, search, date range, or rep narrows the set —
+  // jump back to page 1.
   useEffect(() => {
     resetToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedResults, debouncedSearch]);
+  }, [selectedResults, debouncedSearch, startDate, endDate, repFilter]);
 
   const toggleResult = useCallback((result: string) => {
     setSelectedResults((prev) => {
@@ -569,6 +606,38 @@ export default function SalesCallsPage() {
                 )}
               </div>
               <span className="text-xs text-gray-400 flex-shrink-0">Most recent first</span>
+            </div>
+            {/* Date range + rep filters — server-side, mirrors Appointments. */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <select
+                value={repFilter}
+                onChange={(e) => setRepFilter(e.target.value)}
+                className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-600"
+              >
+                <option value="all">All Reps</option>
+                {reps.map((r) => (
+                  <option key={r.rep_id} value={r.rep_id}>
+                    {r.full_name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  aria-label="Start date"
+                  className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-600"
+                />
+                <span className="text-xs text-gray-400">to</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  aria-label="End date"
+                  className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-600"
+                />
+              </div>
             </div>
             {/* Multi-select result filter — all on except "No Show" by default. */}
             {resultOptions.length > 0 && selectedResults && (
