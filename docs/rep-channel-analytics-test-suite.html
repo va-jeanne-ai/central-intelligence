@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Per-Rep Analytics — Verification Test Suite</title>
+<style>
+  :root {
+    --ground: #FAFAF7; --surface: #FFFFFF; --ink: #24272C; --ink-soft: #5A5F66;
+    --line: #E4E2DC; --accent: #A8770D; --accent-soft: #FBF3DF;
+    --good: #0E7C4A; --good-soft: #E3F3EA; --bad: #B3382C; --bad-soft: #F9E9E7;
+    --dim: #8A8F96; --dim-soft: #EFEFEC; --code-bg: #F4F3EF; --auto: #2563EB; --auto-soft: #E8EFFD;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ground:#16181B; --surface:#1E2125; --ink:#E6E4DE; --ink-soft:#A6A9AE;
+      --line:#33373D; --accent:#E3AC2E; --accent-soft:#2E2712; --good:#4CBE8A; --good-soft:#16301F;
+      --bad:#E07A6E; --bad-soft:#3A1F1B; --dim:#7E838A; --dim-soft:#26292E; --code-bg:#24272C;
+      --auto:#7AA7F7; --auto-soft:#1D2940; }
+  }
+  :root[data-theme="light"] { --ground:#FAFAF7; --surface:#FFFFFF; --ink:#24272C; --ink-soft:#5A5F66;
+    --line:#E4E2DC; --accent:#A8770D; --accent-soft:#FBF3DF; --good:#0E7C4A; --good-soft:#E3F3EA;
+    --bad:#B3382C; --bad-soft:#F9E9E7; --dim:#8A8F96; --dim-soft:#EFEFEC; --code-bg:#F4F3EF;
+    --auto:#2563EB; --auto-soft:#E8EFFD; }
+  :root[data-theme="dark"] { --ground:#16181B; --surface:#1E2125; --ink:#E6E4DE; --ink-soft:#A6A9AE;
+    --line:#33373D; --accent:#E3AC2E; --accent-soft:#2E2712; --good:#4CBE8A; --good-soft:#16301F;
+    --bad:#E07A6E; --bad-soft:#3A1F1B; --dim:#7E838A; --dim-soft:#26292E; --code-bg:#24272C;
+    --auto:#7AA7F7; --auto-soft:#1D2940; }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+    font: 15.5px/1.6 "Avenir Next", "Helvetica Neue", -apple-system, "Segoe UI", sans-serif; }
+  .page { max-width: 920px; margin: 0 auto; padding: 52px 26px 96px; }
+  .eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent);
+    font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .eyebrow::before { content: ""; width: 22px; height: 3px; background: var(--accent); }
+  h1 { font-size: 31px; line-height: 1.15; margin: 12px 0 6px; letter-spacing: -.015em; text-wrap: balance; }
+  .meta { color: var(--ink-soft); font-size: 13.5px; display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
+  h2 { font-size: 20px; margin: 46px 0 2px; letter-spacing: -.01em; }
+  h2 .sec { color: var(--accent); margin-right: 6px; }
+  .secdesc { color: var(--ink-soft); font-size: 14px; margin: 2px 0 14px; max-width: 74ch; }
+  p { max-width: 74ch; }
+
+  /* progress header */
+  .progress { position: sticky; top: 0; z-index: 5; background: var(--ground); padding: 10px 0 12px;
+    border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .pbar { height: 8px; background: var(--dim-soft); border-radius: 999px; overflow: hidden; }
+  .pbar i { display: block; height: 100%; width: 0%; background: var(--good); border-radius: 999px; transition: width .25s ease; }
+  .pstats { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-soft); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .pstats button { background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--ink-soft);
+    font: inherit; font-size: 12px; padding: 2px 10px; cursor: pointer; }
+  .pstats button:hover, .pstats button:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+
+  /* test cards */
+  .test { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin: 12px 0; overflow: hidden; }
+  .test.checked { border-color: var(--good); }
+  .thead { display: flex; align-items: flex-start; gap: 12px; padding: 13px 16px; cursor: pointer; }
+  .thead input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--good); cursor: pointer; flex-shrink: 0; }
+  .tid { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--accent);
+    font-weight: 700; margin-right: 4px; white-space: nowrap; padding-top: 2px; }
+  .ttitle { font-weight: 650; font-size: 15px; flex: 1; }
+  .ttitle small { display: block; font-weight: 400; color: var(--ink-soft); font-size: 13px; margin-top: 1px; }
+  .kind { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 999px; white-space: nowrap; margin-top: 2px; }
+  .kind.auto { background: var(--auto-soft); color: var(--auto); }
+  .kind.manual { background: var(--accent-soft); color: var(--accent); }
+  .kind.time { background: var(--dim-soft); color: var(--ink-soft); }
+  .tbody { padding: 0 16px 14px 46px; border-top: 1px dashed var(--line); }
+  .tbody h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-soft); margin: 12px 0 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px;
+    overflow-x: auto; line-height: 1.5; margin: 6px 0; font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; background: var(--code-bg);
+    padding: 1px 5px; border-radius: 4px; }
+  pre code { background: none; padding: 0; }
+  .expect { border-left: 3px solid var(--good); background: var(--good-soft); padding: 8px 12px;
+    border-radius: 0 6px 6px 0; font-size: 13.5px; margin: 6px 0; }
+  .expect b { color: var(--good); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; display: block; }
+  .fail { border-left: 3px solid var(--bad); background: var(--bad-soft); padding: 8px 12px;
+    border-radius: 0 6px 6px 0; font-size: 13.5px; margin: 6px 0; }
+  .fail b { color: var(--bad); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; display: block; }
+  .note { font-size: 13px; color: var(--ink-soft); margin: 6px 0; }
+  ul { margin: 6px 0; padding-left: 20px; } li { margin: 3px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 11px 15px;
+    border-radius: 0 8px 8px 0; margin: 16px 0; max-width: 78ch; font-size: 14px; }
+  footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-soft); }
+  @media (prefers-reduced-motion: reduce) { .pbar i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="eyebrow">Central Intelligence · Verification</div>
+  <h1>Per-Rep &amp; Channel-Mix Analytics — Test Suite</h1>
+  <div class="meta">
+    <span>Covers PRs: <code>feat/rep-scope-snapshots</code> · <code>feat/team-analytics-api</code> · <code>feat/insights-team-tab</code></span>
+    <span>2026-07-09</span>
+  </div>
+
+  <div class="progress" id="progress">
+    <div class="pbar"><i id="pfill"></i></div>
+    <div class="pstats"><span id="pcount">0 / 0 checks passed</span><button id="preset" type="button">Reset all</button></div>
+  </div>
+
+  <p>
+    Three tiers: <strong>automated</strong> (one command, already in the repo), <strong>manual</strong>
+    (run locally against the live stack before pushing), and <strong>time-based</strong> (only verifiable
+    after deploy, once per-rep snapshot history accumulates). Checkbox state persists in this browser.
+  </p>
+  <div class="callout">
+    <strong>Ground rules:</strong> all DB checks are read-only <code>SELECT</code>s unless marked otherwise.
+    A2's snapshot capture writes to the shared app DB — it is idempotent per day and is exactly what the
+    nightly beat task does, so running it once manually is safe and doubles as the feature's activation.
+    Expected numbers were sampled live on 2026-07-09 and drift as reps work — treat them as
+    order-of-magnitude anchors, not exact values.
+  </div>
+
+  <!-- ─────────────────────────── A ─────────────────────────── -->
+  <h2><span class="sec">A</span>Automated suite</h2>
+  <p class="secdesc">The pytest suite grew 94 → 131 across the three PRs. One command runs everything; the cases below say what each new module actually proves, so a failure maps straight to a layer.</p>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="A1"><span class="tid">A1</span>
+    <span class="ttitle">Full backend suite passes<small>tests/ — all layers, 131 tests</small></span><span class="kind auto">automated</span></div>
+    <div class="tbody">
+      <pre><code>cd backend &amp;&amp; .venv/bin/python -m pytest tests/ -q</code></pre>
+      <div class="expect"><b>Expect</b><code>131 passed</code> — zero failures, zero errors.</div>
+      <h4>What the per-layer modules prove</h4>
+      <ul>
+        <li><code>test_analytics_registry.py</code> — every metric with <code>rep_sql</code> honors the contract
+          (<code>:since</code> bind, <code>GROUP BY rep_id</code>, <code>rep_id/value/sample_size</code> aliases);
+          <code>sales.channel_response_rate</code> has <em>no</em> rep_sql; global invariants (unique keys, area prefixes) hold for the 2 new metrics.</li>
+        <li><code>test_analytics_snapshots.py</code> — fan-out emits <code>scope='rep:X'</code> upserts; terminated reps filtered; roster loaded once per run; empty rep result sets are a no-op.</li>
+        <li><code>test_trends_evaluate.py</code> — <code>scope</code> param default is behavior-identical to the pre-PR code; <code>rep_scopes_for_metric</code> enumeration.</li>
+        <li><code>test_recommend.py</code> — rep lifecycle open→auto-resolve per scope; rep findings never exceed <code>warn</code>; titles use <code>full_name</code>; evidence records <code>scope</code>.</li>
+        <li><code>test_analytics_team.py</code> — rep resolution (exact id / case-insensitive containment / alias / ambiguity→error / unknown→error), scope validation, rollup math, assembly with a fake session.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="A2"><span class="tid">A2</span>
+    <span class="ttitle">Frontend typecheck + production build<small>Team tab compiles; no regressions in other routes</small></span><span class="kind auto">automated</span></div>
+    <div class="tbody">
+      <pre><code>cd frontend &amp;&amp; npx tsc --noEmit &amp;&amp; npm run build</code></pre>
+      <div class="expect"><b>Expect</b>tsc exits clean; build succeeds; only the 3 pre-existing ESLint warnings (leads, funnels, calls-table) — none from <code>insights/</code>.</div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── B ─────────────────────────── -->
+  <h2><span class="sec">B</span>Engine — snapshot fan-out &amp; recommendations</h2>
+  <p class="secdesc">Backend running locally (<code>uvicorn</code> or docker-compose), against the live app DB.</p>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="B1"><span class="tid">B1</span>
+    <span class="ttitle">First per-rep capture writes scoped rows and skips terminated reps<small>⚠ writes to the shared app DB — idempotent per day; this is the feature's activation</small></span><span class="kind manual">manual</span></div>
+    <div class="tbody">
+      <pre><code>cd backend &amp;&amp; .venv/bin/python -c "
+from app.tasks.db import make_sync_session
+from app.analytics.snapshots import compute_snapshots
+with make_sync_session() as db:
+    print(compute_snapshots(db))"</code></pre>
+      <div class="expect"><b>Expect</b>Summary reports <code>rep_rows_written</code> &gt; 0 (~60+: sales ~50, fulfillment ~11 across 4 windows). No exceptions.</div>
+      <h4>Then verify the rows (read-only)</h4>
+      <pre><code>SELECT scope, COUNT(*) FROM metric_snapshots
+WHERE captured_date = CURRENT_DATE AND scope LIKE 'rep:%'
+GROUP BY scope ORDER BY scope;</code></pre>
+      <div class="expect"><b>Expect</b>6 scopes (Makyla, Nelson, Ioana, Tatjana, Colton, Greg) — and <strong>no</strong> <code>rep:REP_JUAN_DU_PREEZ</code> (terminated).</div>
+      <div class="fail"><b>Fail if</b>Juan's scope appears, or a scope exists with 0-sample rows for metrics where the rep has no data (absent rep should mean absent row).</div>
+    </div>
+  </div>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="B2"><span class="tid">B2</span>
+    <span class="ttitle">Per-rep values match hand-computed SQL<small>the no-fabrication contract, end to end</small></span><span class="kind manual">manual</span></div>
+    <div class="tbody">
+      <p class="note">Pick one rep + metric and compare the snapshot against a direct query (read-only):</p>
+      <pre><code>-- engine's answer
+SELECT value, sample_size FROM metric_snapshots
+WHERE metric_key='sales.outbound_volume' AND scope='rep:REP_MAKYLA_THOMPSON'
+  AND "window"='30d' AND captured_date=CURRENT_DATE;
+
+-- ground truth
+SELECT COUNT(*) FROM sales_activities
+WHERE rep_id='REP_MAKYLA_THOMPSON' AND activity_type LIKE '%_outbound'
+  AND occurred_at &gt;= now() - interval '30 days';</code></pre>
+      <div class="expect"><b>Expect</b>Identical numbers (≈5,100 as of 2026-07-09). Repeat for <code>sales.avg_call_score</code> / Colton (≈4.6, n≈391) if you want a second point.</div>
+    </div>
+  </div>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="B3"><span class="tid">B3</span>
+    <span class="ttitle">Global surfaces unchanged<small>dashboard + insights recommendations stay global-only</small></span><span class="kind manual">manual</span></div>
+    <div class="tbody">
+      <pre><code>TOKEN=&lt;your supabase access token&gt;
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8000/api/v1/dashboard/recommendations | jq .
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8000/api/v1/analytics/recommendations | jq '.[].metric_key'</code></pre>
+      <div class="expect"><b>Expect</b>Same items as before the feature (global scope only) — no rep-titled findings leak in, even after rep-scoped recommendations exist.</div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── C ─────────────────────────── -->
+  <h2><span class="sec">C</span>API — /analytics/team &amp; scope params</h2>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="C1"><span class="tid">C1</span>
+    <span class="ttitle">Team endpoint: auth, roster, shape<small>GET /analytics/team</small></span><span class="kind manual">manual</span></div>
+    <div class="tbody">
+      <pre><code>curl -s -o /dev/null -w "%{http_code}\n" localhost:8000/api/v1/analytics/team          # no token
+curl -s -H "Authorization: Bearer $TOKEN" "localhost:8000/api/v1/analytics/team?window=30d" \
+  | jq '{reps: [.reps[].full_name], rollup}'</code></pre>
+      <div class="expect"><b>Expect</b>401 without a token. With one: exactly 6 reps (no Juan Du Preez), sorted data present, rollup shows <code>total_reps: 6</code>. Before B1 runs, every metric block reads <code>verdict: "insufficient_data", value: null</code> — after B1, <code>sales.outbound_volume</code> values populate (verdicts still insufficient_data until multi-day history exists; that's correct).</div>
+      <div class="fail"><b>Fail if</b>any metric block shows a non-null value that has no corresponding <code>metric_snapshots</code> row — that would mean the endpoint derives values outside the snapshot store.</div>
+    </div>
+  </div>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="C2"><span class="tid">C2</span>
+    <span class="ttitle">Scope param validation on existing endpoints<small>/analytics/trends · /analytics/recommendations</small></span><span class="kind manual">manual</span></div>
+    <div class="tbody">
+      <pre><code>curl -s -H "Authorization: Bearer $TOKEN" "localhost:8000/api/v1/analytics/trends?scope=rep:REP_MAKYLA_THOMPSON" | jq 'length'
+curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
+  "localhost:8000/api/v1/analytics/trends?scope=DROP%20TABLE"</code></pre>
+      <div class="expect"><b>Expect</b>Valid rep scope → 200 with rep-scoped trend list. Garbage scope → 422. Omitting <code>scope</code> → byte-identical response to pre-feature behavior (global).</div>
+    </div>
+  </div>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="C3"><span class="tid">C3</span>
+    <span class="ttitle">CI chat rep resolution<small>get_analytics_verdicts with rep argument</small></span><span class="kind manual">manual</span></div>
+    <div class="tbody">
+      <p class="note">In the CI chat UI ask: <em>“How is Makyla doing?”</em> then <em>“How is Bartholomew doing?”</em></p>
+      <div class="expect"><b>Expect</b>First: the tool fires with <code>rep</code>, the answer names Makyla Thompson, cites only numbers present in the tool JSON (cross-check the payload if logging is on), and says “insufficient data” where verdicts are thin — no invented trends. Second: the reply says the rep is unknown and lists the known roster (from the tool's structured error), rather than guessing.</div>
+      <p class="note">Directors must NOT gain this: ask the Sales Director the same question — it should answer from its own department window tools without the verdicts tool (architecture rule: cross-rep synthesis is CI-only).</p>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── D ─────────────────────────── -->
+  <h2><span class="sec">D</span>UI — Insights Team tab</h2>
+  <p class="secdesc">Next dev server on port 3000 (kill any stale process first), backend running, logged in.</p>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="D1"><span class="tid">D1</span>
+    <span class="ttitle">Tab bar + Overview regression<small>/insights</small></span><span class="kind manual">manual</span></div>
+    <div class="tbody">
+      <ul>
+        <li>Overview / Team tabs render; active tab has the amber underline; Overview is selected by default.</li>
+        <li>Overview content (metrics, trends, recommendations, refresh button) is pixel-unchanged from before.</li>
+        <li>Switching tabs is instant (client state), no full-page reload, no console errors.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="D2"><span class="tid">D2</span>
+    <span class="ttitle">Team tab: leaderboard, launch state, detail row<small>the honest insufficient-data rendering</small></span><span class="kind manual">manual</span></div>
+    <div class="tbody">
+      <ul>
+        <li>Loading shows the table skeleton, then 6 reps sorted by outbound descending (Makyla top).</li>
+        <li>Status pills: amber “probation” ×3, green “active” ×3; no terminated rep visible.</li>
+        <li>Null values render as “—”, never 0 or NaN; call-score cells show <code>(n=X)</code> subtext.</li>
+        <li>Trend column: amber “insufficient data” pills everywhere on day 1 — this is correct, not a bug.</li>
+        <li>KPI row: team outbound &amp; strikes populate after B1; “Team avg call score” shows “—” with “No scored calls yet” only when genuinely empty.</li>
+        <li>Clicking a row expands the detail panel: every metric block with verdict + reason, plus open recommendations in the amber panel style. Clicking again collapses.</li>
+        <li>Window select (7d/30d/90d/all) refetches and the table updates.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="D3"><span class="tid">D3</span>
+    <span class="ttitle">Error path<small>no native dialogs, recoverable</small></span><span class="kind manual">manual</span></div>
+    <div class="tbody">
+      <p class="note">Stop the backend, switch to the Team tab (or change window):</p>
+      <div class="expect"><b>Expect</b>Toast error + inline empty-state with a retry action. No <code>window.alert</code>, no blank screen, no unhandled promise rejection in the console. Restart backend → retry recovers.</div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── E ─────────────────────────── -->
+  <h2><span class="sec">E</span>Time-based — after deploy</h2>
+  <p class="secdesc">Verdicts need history: the trend layer compares snapshots across days and gates on <code>MIN_SAMPLE=30</code>. These checks run on the live droplet over the ~10 days after PR 1 deploys.</p>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="E1"><span class="tid">E1</span>
+    <span class="ttitle">Day 1–2: nightly capture accumulates rep history<small>beat task, no manual trigger</small></span><span class="kind time">time-based</span></div>
+    <div class="tbody">
+      <pre><code>SELECT captured_date, COUNT(*) FROM metric_snapshots
+WHERE scope LIKE 'rep:%' GROUP BY 1 ORDER BY 1 DESC LIMIT 5;</code></pre>
+      <div class="expect"><b>Expect</b>One batch of ~60 rep rows per day with no manual intervention (remember: with servers off at EOD the schedule skips — same expectation as the WGR sync).</div>
+    </div>
+  </div>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="E2"><span class="tid">E2</span>
+    <span class="ttitle">Day ~7–10: real verdicts appear, gated honestly<small>insufficient_data → improving/declining/flat</small></span><span class="kind time">time-based</span></div>
+    <div class="tbody">
+      <div class="expect"><b>Expect</b>Reps with sample_size ≥ 30 (Colton's call scores, Makyla/Nelson outbound) get real verdicts on the Team tab; Ioana's 4-call score stays “insufficient data”. Spot-check one verdict against the raw snapshot series.</div>
+    </div>
+  </div>
+
+  <div class="test"><div class="thead"><input type="checkbox" data-k="E3"><span class="tid">E3</span>
+    <span class="ttitle">Rep recommendations: cap, phrasing, lifecycle<small>first rep-scoped findings</small></span><span class="kind time">time-based</span></div>
+    <div class="tbody">
+      <pre><code>SELECT scope, severity, title, status FROM recommendations
+WHERE scope LIKE 'rep:%' ORDER BY updated_at DESC;</code></pre>
+      <div class="expect"><b>Expect</b>Titles use display names (“Nelson Figueria's …”), severity never exceeds <code>warn</code>, evidence JSON carries scope + the exact numbers, and a finding auto-resolves after the metric recovers (check <code>status</code> transitions over the following week). Global dashboard still shows none of these (B3 re-check).</div>
+      <div class="fail"><b>Fail if</b>a rep finding shows severity <code>critical</code>, or the volume of rep findings is noisy (&gt;~5 open at once) — that's the threshold-tuning trigger flagged in the proposal's risk section.</div>
+    </div>
+  </div>
+
+  <footer>
+    Central Intelligence · verification suite for the per-rep &amp; channel-mix analytics feature ·
+    companion to <code>docs/rep-channel-analytics-proposal.html</code>.
+    Checkbox state is stored in this browser's localStorage only.
+  </footer>
+</div>
+
+<script>
+(function () {
+  var KEY = "ci-rep-analytics-testsuite-v1";
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type="checkbox"][data-k]'));
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { state = {}; }
+
+  function render() {
+    var done = 0;
+    boxes.forEach(function (b) {
+      var on = !!state[b.dataset.k];
+      b.checked = on;
+      b.closest(".test").classList.toggle("checked", on);
+      if (on) done++;
+    });
+    document.getElementById("pfill").style.width = (boxes.length ? (100 * done / boxes.length) : 0) + "%";
+    document.getElementById("pcount").textContent = done + " / " + boxes.length + " checks passed";
+  }
+  boxes.forEach(function (b) {
+    b.addEventListener("change", function () {
+      state[b.dataset.k] = b.checked;
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+      render();
+    });
+    // clicking the header row toggles too (but not links/pre inside body)
+    b.closest(".thead").addEventListener("click", function (ev) {
+      if (ev.target !== b) { b.checked = !b.checked; b.dispatchEvent(new Event("change")); }
+    });
+  });
+  document.getElementById("preset").addEventListener("click", function () {
+    state = {};
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>
