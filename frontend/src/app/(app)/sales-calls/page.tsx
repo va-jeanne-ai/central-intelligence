@@ -582,17 +582,22 @@ export default function SalesCallsPage() {
 
         {/* Analyzed calls */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="px-5 py-4 border-b border-gray-100 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-bold text-gray-900 flex-shrink-0">Analyzed Calls</h2>
-              <div className="relative flex-1 max-w-xs">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-bold text-gray-900">Analyzed Calls</h2>
+            <span className="text-xs text-gray-400">Most recent first</span>
+          </div>
+          {/* Filter strip — search + rep + date range in one wrapping row, matching
+              the Appointments page's filter band. */}
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/50 space-y-2.5">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="relative flex-1 min-w-[220px] max-w-sm">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by lead, rep, or call id…"
-                  className="w-full rounded-lg border border-gray-200 bg-white pl-9 pr-8 py-1.5 text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+                  className="w-full rounded-lg border border-gray-200 bg-white pl-9 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                 />
                 {search && (
                   <button
@@ -605,10 +610,6 @@ export default function SalesCallsPage() {
                   </button>
                 )}
               </div>
-              <span className="text-xs text-gray-400 flex-shrink-0">Most recent first</span>
-            </div>
-            {/* Date range + rep filters — server-side, mirrors Appointments. */}
-            <div className="flex flex-wrap items-center gap-2.5">
               <select
                 value={repFilter}
                 onChange={(e) => setRepFilter(e.target.value)}
