@@ -7,6 +7,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Date picker on the appointments calendar toolbar
+
+The /appointments calendar (all views, most useful in Day) gains a date input next to the
+Today/back/forward controls to jump straight to any date instead of stepping one unit at a
+time. Parses the picked date in the local timezone (avoids the UTC day-shift of
+`new Date("YYYY-MM-DD")`).
+
+
 ### Changed — Sales calls filter layout cleaned up
 
 The search bar no longer sits squeezed between the "Analyzed Calls" title and the
