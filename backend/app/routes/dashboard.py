@@ -653,7 +653,9 @@ async def get_dashboard_recommendations() -> RecommendationsResponse:
 
     async with AsyncSessionLocal() as session:
         try:
-            rows = await fetch_recommendation_rows(session)
+            # scope="global" explicitly: keep the dashboard widget showing only
+            # company-wide findings by default, not per-rep ones.
+            rows = await fetch_recommendation_rows(session, scope="global")
         except Exception:
             logger.exception("Failed to query recommendation engine rows")
             rows = []

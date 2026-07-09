@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Per-Rep &amp; Channel-Mix Analytics — Proposal</title>
+<style>
+  :root {
+    --ground: #FAFAF7;
+    --surface: #FFFFFF;
+    --ink: #24272C;
+    --ink-soft: #5A5F66;
+    --line: #E4E2DC;
+    --accent: #A8770D;         /* CI gold, darkened for text contrast */
+    --accent-soft: #FBF3DF;
+    --good: #0E7C4A;
+    --good-soft: #E3F3EA;
+    --bad: #B3382C;
+    --bad-soft: #F9E9E7;
+    --dim: #8A8F96;
+    --dim-soft: #EFEFEC;
+    --code-bg: #F4F3EF;
+    --sales: #3B82F6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #16181B; --surface: #1E2125; --ink: #E6E4DE; --ink-soft: #A6A9AE;
+      --line: #33373D; --accent: #E3AC2E; --accent-soft: #2E2712;
+      --good: #4CBE8A; --good-soft: #16301F; --bad: #E07A6E; --bad-soft: #3A1F1B;
+      --dim: #7E838A; --dim-soft: #26292E; --code-bg: #24272C;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #FAFAF7; --surface: #FFFFFF; --ink: #24272C; --ink-soft: #5A5F66;
+    --line: #E4E2DC; --accent: #A8770D; --accent-soft: #FBF3DF;
+    --good: #0E7C4A; --good-soft: #E3F3EA; --bad: #B3382C; --bad-soft: #F9E9E7;
+    --dim: #8A8F96; --dim-soft: #EFEFEC; --code-bg: #F4F3EF;
+  }
+  :root[data-theme="dark"] {
+    --ground: #16181B; --surface: #1E2125; --ink: #E6E4DE; --ink-soft: #A6A9AE;
+    --line: #33373D; --accent: #E3AC2E; --accent-soft: #2E2712;
+    --good: #4CBE8A; --good-soft: #16301F; --bad: #E07A6E; --bad-soft: #3A1F1B;
+    --dim: #7E838A; --dim-soft: #26292E; --code-bg: #24272C;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font: 16px/1.65 "Avenir Next", "Helvetica Neue", -apple-system, "Segoe UI", sans-serif;
+  }
+  .page { max-width: 900px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 3px; background: var(--accent); }
+  h1 { font-size: 34px; line-height: 1.15; margin: 14px 0 6px; letter-spacing: -0.015em; text-wrap: balance; }
+  .meta { color: var(--ink-soft); font-size: 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.proposal { background: var(--accent-soft); color: var(--accent); }
+
+  h2 { font-size: 22px; margin: 56px 0 4px; letter-spacing: -0.01em; }
+  h2 .no { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  h3 { font-size: 16.5px; margin: 30px 0 6px; }
+  p { margin: 10px 0; max-width: 72ch; }
+  .lede { font-size: 18px; color: var(--ink-soft); max-width: 68ch; }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 5px 0; max-width: 70ch; }
+  strong { font-weight: 650; }
+
+  .callout {
+    border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0; max-width: 76ch;
+  }
+  .callout.warn { border-left-color: var(--bad); background: var(--bad-soft); }
+  .callout p { margin: 4px 0; }
+
+  table.data { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14.5px; }
+  table.data th { text-align: left; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); padding: 8px 12px 6px; border-bottom: 2px solid var(--line); }
+  table.data td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.data td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  .scroll { overflow-x: auto; }
+
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; line-height: 1.55; margin: 12px 0; }
+  pre code { background: none; padding: 0; }
+  .cm { color: var(--dim); }
+
+  /* pipeline diagram */
+  .pipe { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; margin: 16px 0; }
+  .pipe .stage { flex: 1 1 150px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 150px; }
+  .pipe .stage b { display: block; font-size: 13.5px; }
+  .pipe .stage span { font-size: 12.5px; color: var(--ink-soft); }
+  .pipe .stage .new { color: var(--accent); font-weight: 600; font-size: 12px; }
+
+  /* ── App mockups: the product is light-mode only, so frames stay light in both doc themes ── */
+  .frame { border: 1px solid #D8D6CF; border-radius: 10px; overflow: hidden; margin: 18px 0 6px; background: #F7F8FA; box-shadow: 0 1px 3px rgba(20,20,20,.07); }
+  .frame .bar { display: flex; align-items: center; gap: 6px; background: #ECEDEF; padding: 8px 12px; border-bottom: 1px solid #D8D6CF; }
+  .frame .bar i { width: 10px; height: 10px; border-radius: 50%; background: #C9CBCE; }
+  .frame .bar .url { margin-left: 10px; font: 11.5px ui-monospace, Menlo, monospace; color: #6B7076; }
+  .frame .app { padding: 18px; color: #1F2937; font-size: 13.5px; }
+  .figcap { font-size: 13px; color: var(--ink-soft); margin: 4px 2px 0; }
+  .figcap b { color: var(--ink); }
+
+  .mock-h1 { font-size: 17px; font-weight: 700; color: #111827; margin: 0 0 2px; }
+  .mock-sub { font-size: 12.5px; color: #6B7280; margin-bottom: 12px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid #E5E7EB; margin-bottom: 14px; }
+  .tabs .t { padding: 7px 14px; font-weight: 600; font-size: 13px; color: #6B7280; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .tabs .t.on { color: #B45309; border-bottom-color: #F59E0B; }
+  .filterbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .filterbar .f { background: #fff; border: 1px solid #E5E7EB; border-radius: 6px; padding: 6px 10px; font-size: 12.5px; color: #6B7280; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .kpi { background: #fff; border: 1px solid #E5E7EB; border-top: 3px solid #3B82F6; border-radius: 8px; padding: 10px 12px; }
+  .kpi .l { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #6B7280; }
+  .kpi .v { font-size: 21px; font-weight: 700; color: #111827; font-variant-numeric: tabular-nums; }
+  .kpi .s { font-size: 11.5px; color: #6B7280; }
+  .mock-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; }
+  .mock-card .hd { padding: 10px 14px; border-bottom: 1px solid #E5E7EB; font-weight: 700; font-size: 13px; color: #111827; display: flex; justify-content: space-between; align-items: center; }
+  .mock-card .hd .win { font-weight: 500; font-size: 11.5px; color: #6B7280; }
+  table.mock { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  table.mock th { text-align: left; padding: 8px 12px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: #6B7280; background: #F9FAFB; border-bottom: 1px solid #E5E7EB; }
+  table.mock td { padding: 8px 12px; border-bottom: 1px solid #F3F4F6; color: #1F2937; }
+  table.mock td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  .rep { font-weight: 600; }
+  .role { color: #6B7280; font-size: 11px; }
+  .vpill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .vpill.up { background: #DCFCE7; color: #15803D; }
+  .vpill.down { background: #FEE2E2; color: #B91C1C; }
+  .vpill.flat { background: #F3F4F6; color: #4B5563; }
+  .vpill.thin { background: #FEF9C3; color: #A16207; }
+  .spill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 600; }
+  .spill.probation { background: #FEF3C7; color: #92400E; }
+  .spill.active { background: #DCFCE7; color: #15803D; }
+  .spill.terminated { background: #F3F4F6; color: #6B7280; }
+  .chanrow { display: grid; grid-template-columns: 130px 1fr 90px; gap: 10px; align-items: center; padding: 7px 14px; border-bottom: 1px solid #F3F4F6; font-size: 12.5px; }
+  .chanrow .trk { background: #F3F4F6; border-radius: 4px; height: 14px; position: relative; overflow: hidden; }
+  .chanrow .trk i { position: absolute; inset: 0 auto 0 0; background: #3B82F6; border-radius: 4px; }
+  .chanrow .n { font-variant-numeric: tabular-nums; text-align: right; color: #374151; }
+  .suggest { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 10px 14px; margin-top: 12px; font-size: 12.5px; color: #78350F; }
+  .suggest b { display: block; margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  .suggest .ev { color: #92400E; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+
+  .prs { display: grid; gap: 12px; margin: 16px 0; }
+  .pr { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  .pr b { font-size: 15px; }
+  .pr .tag { font-size: 11.5px; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; text-transform: uppercase; }
+  .pr p { font-size: 14px; color: var(--ink-soft); margin: 6px 0 0; }
+
+  footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-soft); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="eyebrow">Central Intelligence · Engineering Proposal</div>
+  <h1>Per-Rep Scope &amp; Channel-Mix Analytics</h1>
+  <div class="meta">
+    <span class="pill proposal">Proposal — not yet built</span>
+    <span>2026-07-08</span>
+    <span>Extends the statistical recommendation engine (north star §5A/§7)</span>
+  </div>
+  <p class="lede">
+    Turn the engine's question from <em>“how is the company doing?”</em> into
+    <em>“which rep and which channel needs attention?”</em> — using only data that is
+    already in the database, and reusing every layer of the existing pipeline.
+  </p>
+
+  <h2><span class="no">1</span>Why this, why now</h2>
+  <p>
+    The engine currently writes every metric snapshot with <code>scope='global'</code>, even though the
+    <code>metric_snapshots</code> schema (and its unique constraint) was explicitly designed for finer scopes.
+    Meanwhile the single richest dataset in the app — <strong>49,649 sales activities attributed to 7 named reps</strong> —
+    contributes nothing to the engine. Every number below was queried read-only from the live app DB on 2026-07-08.
+  </p>
+
+  <h2><span class="no">2</span>Data foundation (verified live)</h2>
+  <p>Which tables carry per-rep attribution today:</p>
+  <div class="scroll">
+  <table class="data">
+    <tr><th>Table</th><th>Rows</th><th>Rep attribution</th><th>Gives us</th></tr>
+    <tr><td><code>sales_activities</code></td><td class="num">49,649</td><td>✅ <code>rep_id</code> on outbound</td><td>Per-rep outbound volume, channel mix</td></tr>
+    <tr><td><code>sales_call_scores</code></td><td class="num">—</td><td>✅ <code>rep_id</code></td><td>Per-rep average call score</td></tr>
+    <tr><td><code>closed_sales</code></td><td class="num">—</td><td>✅ <code>rep_id</code></td><td>Per-rep closes / revenue</td></tr>
+    <tr><td><code>sales_coaching_strikes</code></td><td class="num">—</td><td>✅ <code>rep_id</code></td><td>Per-rep open strikes</td></tr>
+    <tr><td><code>sales_reps</code></td><td class="num">7</td><td>— (the roster itself)</td><td>Display names, role, status (active / probation / terminated)</td></tr>
+    <tr><td><code>appointments</code></td><td class="num">1,913</td><td>❌ no rep column</td><td>Show rate stays global</td></tr>
+  </table>
+  </div>
+
+  <div class="callout warn">
+    <p><strong>Data-shape finding:</strong> all 9,640 inbound activity rows have <code>rep_id = NULL</code> —
+    inbound is not attributed to reps upstream. So a <em>per-rep</em> response rate is not computable;
+    the response ratio becomes a <strong>global channel metric</strong> (currently 23.3% over 30d),
+    while volume, call score, closes and strikes are rep-scoped.</p>
+  </div>
+
+  <p>The real 30-day scorecard this feature would surface (queried live — this is not sample data):</p>
+  <div class="scroll">
+  <table class="data">
+    <tr><th>Rep</th><th>Status</th><th>Outbound 30d</th><th>Avg call score 30d</th><th>Scored calls</th><th>Closes 30d</th><th>Open strikes</th></tr>
+    <tr><td>Makyla Thompson</td><td>probation</td><td class="num">4,964</td><td class="num">2.8</td><td class="num">20</td><td class="num">0</td><td class="num">9</td></tr>
+    <tr><td>Nelson Figueria</td><td>probation</td><td class="num">3,537</td><td class="num">2.4</td><td class="num">60</td><td class="num">0</td><td class="num">10</td></tr>
+    <tr><td>Ioana Stan</td><td>probation</td><td class="num">1,077</td><td class="num">2.8</td><td class="num">4</td><td class="num">0</td><td class="num">5</td></tr>
+    <tr><td>Tatjana Cristal</td><td>active</td><td class="num">479</td><td class="num">2.6</td><td class="num">40</td><td class="num">0</td><td class="num">0</td></tr>
+    <tr><td>Colton Lindsay</td><td>active</td><td class="num">198</td><td class="num">4.6</td><td class="num">391</td><td class="num">3</td><td class="num">0</td></tr>
+    <tr><td>Greg Wheeler</td><td>active</td><td class="num">68</td><td class="num">—</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+    <tr><td>Juan Du Preez</td><td>terminated</td><td class="num">41</td><td class="num">—</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+  </table>
+  </div>
+  <p>
+    The story is already visible: the manager (Colton) scores 4.6 across 391 scored calls while the three
+    probation reps sit at 2.4–2.8 with 24 open strikes between them. Today nobody sees this unless they
+    hand-query the database. The engine can watch it daily.
+  </p>
+
+  <h2><span class="no">3</span>Architecture — one new dimension, zero new machinery</h2>
+  <p>Every pipeline stage already exists. Per-rep analytics is a <em>fan-out</em> at the snapshot stage; everything downstream operates unchanged on the extra rows.</p>
+  <div class="pipe">
+    <div class="stage"><b>registry.py</b><span>metric catalog</span><br><span class="new">+ optional rep_sql per metric<br>+ 2 channel metrics</span></div>
+    <div class="stage"><b>snapshots.py</b><span>daily capture</span><br><span class="new">+ write scope='rep:&lt;id&gt;' rows</span></div>
+    <div class="stage"><b>trends.py</b><span>evaluate()</span><br><span class="new">+ scope param (pass-through)</span></div>
+    <div class="stage"><b>recommend.py</b><span>threshold + evidence</span><br><span class="new">+ scope column, rep phrasing</span></div>
+    <div class="stage"><b>Surfaces</b><span>Insights UI · CI chat · digest</span><br><span class="new">+ Team tab, rep filter</span></div>
+  </div>
+
+  <h2><span class="no">4</span>Backend changes</h2>
+
+  <h3>4.1 Registry — a second SQL contract for rep fan-out</h3>
+  <p>
+    Add one optional field to the <code>Metric</code> dataclass. Where the global contract returns one
+    <code>(value, sample_size)</code> row, <code>rep_sql</code> returns one row <em>per rep</em> in a single
+    <code>GROUP BY</code> query — no N+1.
+  </p>
+<pre><code>@dataclass(frozen=True)
+class Metric:
+    ...
+    # Optional per-rep fan-out. Contract: SELECT rep_id, value, sample_size
+    # GROUP BY rep_id, honoring the same (:since IS NULL OR ...) window rule.
+    rep_sql: TextClause | None = None</code></pre>
+  <p>Metrics that gain <code>rep_sql</code> (all four have a verified <code>rep_id</code> column):</p>
+  <ul>
+    <li><code>sales.avg_call_score</code> — <code>AVG(score) ... GROUP BY rep_id</code> on <code>sales_call_scores</code></li>
+    <li><code>sales.closed_sales_count</code> / <code>sales.revenue_collected</code> — on <code>closed_sales</code></li>
+    <li><code>fulfillment.open_coaching_strikes</code> — on <code>sales_coaching_strikes</code></li>
+    <li><code>sales.outbound_volume</code> — <em>new</em>, see below</li>
+  </ul>
+  <p>Two new <strong>global channel metrics</strong> (same one-row contract as today):</p>
+<pre><code>Metric(key="sales.outbound_volume", area="sales", unit="count", higher_is_better=True,
+       label="Outbound Activity Volume",
+       sql=...,      <span class="cm">-- COUNT(*) of *_outbound activities in window; rep_sql groups it by rep_id</span>
+)
+Metric(key="sales.channel_response_rate", area="sales", unit="ratio", higher_is_better=True,
+       label="Outbound Response Rate",
+       sql=...,      <span class="cm">-- inbound / NULLIF(outbound, 0) over the window (global only —</span>
+)                    <span class="cm">-- inbound rows carry no rep_id, so this metric has NO rep_sql)</span></code></pre>
+
+  <h3>4.2 Snapshots — fan-out write</h3>
+  <p>
+    After the existing global upsert, run <code>rep_sql</code> once per metric-window and upsert each row with
+    <code>scope='rep:&lt;rep_id&gt;'</code>. The unique constraint <code>(metric_key, "window", scope, captured_date)</code>
+    already accommodates this — no migration needed on <code>metric_snapshots</code>.
+  </p>
+<pre><code>if metric.rep_sql is not None:
+    for row in db.execute(metric.rep_sql, {"since": since}).mappings():
+        db.execute(_UPSERT_SCOPED, {..., "scope": f"rep:{row['rep_id']}",
+                                    "value": row["value"], "sample_size": row["sample_size"]})</code></pre>
+  <p>
+    Volume math: 4 windows × ~7 reps × ~5 rep-scoped metrics ≈ <strong>+140 rows/day</strong> on top of
+    today's 48 — negligible. Reps with <code>status='terminated'</code> are skipped at capture time
+    (history retained, no new rows).
+  </p>
+
+  <h3>4.3 Trends — already scope-ready</h3>
+  <p>
+    <code>evaluate()</code> is pure arithmetic over a series; the series query just gains
+    <code>WHERE scope = :scope</code> (default <code>'global'</code>, today hardcoded). The
+    <code>MIN_SAMPLE = 30</code> significance gate does exactly the right thing per rep: Ioana's 4 scored
+    calls read <code>insufficient_data</code>, never a fake trend — the engine's no-fabrication contract extends
+    to reps for free.
+  </p>
+
+  <h3>4.4 Recommendations — one migration, rep-aware phrasing</h3>
+  <ul>
+    <li>Add <code>scope</code> column to <code>recommendations</code> (default <code>'global'</code>); widen the upsert
+      conflict key from <code>(metric_key, window)</code> to <code>(metric_key, window, scope)</code>. Single small alembic migration.</li>
+    <li>Phrase titles with the display name from <code>sales_reps.full_name</code>:
+      <em>“Nelson Figueria's Avg Call Score is declining …”</em> — the numbers still come only from the
+      evidence JSON, per the hypothesize-not-fabricate rule.</li>
+    <li>Guardrail against noise: rep-scoped findings cap at <code>warn</code> severity initially, and per-rep
+      thresholds only fire when the rep's own <code>sample_size ≥ MIN_SAMPLE</code>.</li>
+  </ul>
+
+  <h3>4.5 API + CI chat</h3>
+  <ul>
+    <li><code>GET /analytics/team</code> — the leaderboard: one row per active rep × rep-scoped metrics, with
+      latest value, verdict, and sample size (assembled from snapshots + <code>evaluate()</code>, same as <code>/analytics/trends</code>).</li>
+    <li><code>scope</code> query param on the existing <code>/analytics/trends</code> and <code>/analytics/recommendations</code>.</li>
+    <li><code>get_analytics_verdicts</code> CI-chat tool gains an optional <code>rep</code> argument
+      (name or rep_id — resolved against <code>sales_reps</code>, including <code>historical_aliases</code>).
+      Stays CI-only; directors remain department-scoped per the architecture rule.</li>
+  </ul>
+
+  <h2><span class="no">5</span>UI — the Team tab on Insights</h2>
+  <p>
+    One new tab on the existing <code>/insights</code> page, built entirely from the atomic component library
+    (<code>KpiCard</code>, <code>Card</code>, <code>FilterBar</code>, <code>StatusBadge</code>, <code>ScoreBar</code>).
+    Rep names and counts below are the real live values; the verdict pills are illustrative until per-rep
+    snapshot history accumulates (~10 days after ship).
+  </p>
+
+  <div class="frame">
+    <div class="bar"><i></i><i></i><i></i><span class="url">app.centralintelligence — /insights · Team</span></div>
+    <div class="app">
+      <div class="mock-h1">Insights</div>
+      <div class="mock-sub">Statistical engine · verdicts computed from metric snapshots, never invented</div>
+      <div class="tabs"><div class="t">Overview</div><div class="t on">Team</div><div class="t">Recommendations</div></div>
+      <div class="filterbar">
+        <div class="f">🔍 Search reps…</div><div class="f">Role: All ▾</div><div class="f">Status: Active + Probation ▾</div><div class="f">Window: 30d ▾</div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Team outbound (30d)</div><div class="v">10,364</div><div class="s">across 6 active reps</div></div>
+        <div class="kpi"><div class="l">Team avg call score</div><div class="v">3.4</div><div class="s">515 scored calls</div></div>
+        <div class="kpi"><div class="l">Open strikes</div><div class="v">24</div><div class="s">3 reps affected</div></div>
+        <div class="kpi"><div class="l">Response rate (global)</div><div class="v">23.3%</div><div class="s">inbound ÷ outbound</div></div>
+      </div>
+      <div class="mock-card">
+        <div class="hd">Rep leaderboard <span class="win">window: 30d · click a row for rep detail</span></div>
+        <div class="scroll">
+        <table class="mock">
+          <tr><th>Rep</th><th>Status</th><th style="text-align:right">Outbound</th><th style="text-align:right">Avg score</th><th style="text-align:right">Closes</th><th style="text-align:right">Strikes</th><th>Trend (score)</th></tr>
+          <tr><td class="rep">Makyla Thompson<br><span class="role">salaried rep</span></td><td><span class="spill probation">probation</span></td><td class="num">4,964</td><td class="num">2.8 <span class="role">(n=20)</span></td><td class="num">0</td><td class="num">9</td><td><span class="vpill thin">insufficient data</span></td></tr>
+          <tr><td class="rep">Nelson Figueria<br><span class="role">salaried rep</span></td><td><span class="spill probation">probation</span></td><td class="num">3,537</td><td class="num">2.4 <span class="role">(n=60)</span></td><td class="num">0</td><td class="num">10</td><td><span class="vpill down">▼ declining</span></td></tr>
+          <tr><td class="rep">Ioana Stan<br><span class="role">commission rep</span></td><td><span class="spill probation">probation</span></td><td class="num">1,077</td><td class="num">2.8 <span class="role">(n=4)</span></td><td class="num">0</td><td class="num">5</td><td><span class="vpill thin">insufficient data</span></td></tr>
+          <tr><td class="rep">Tatjana Cristal<br><span class="role">discovery setter</span></td><td><span class="spill active">active</span></td><td class="num">479</td><td class="num">2.6 <span class="role">(n=40)</span></td><td class="num">0</td><td class="num">0</td><td><span class="vpill flat">flat</span></td></tr>
+          <tr><td class="rep">Colton Lindsay<br><span class="role">manager</span></td><td><span class="spill active">active</span></td><td class="num">198</td><td class="num">4.6 <span class="role">(n=391)</span></td><td class="num">3</td><td class="num">0</td><td><span class="vpill up">▲ improving</span></td></tr>
+          <tr><td class="rep">Greg Wheeler<br><span class="role">admin</span></td><td><span class="spill active">active</span></td><td class="num">68</td><td class="num">—</td><td class="num">0</td><td class="num">0</td><td><span class="vpill thin">insufficient data</span></td></tr>
+        </table>
+        </div>
+      </div>
+      <div class="suggest">
+        <b>Engine recommendation · warn</b>
+        Nelson Figueria's Avg Call Score is declining — evidence:
+        <span class="ev">{metric: sales.avg_call_score, scope: rep:REP_NELSON_FIGUERIA, baseline 3.1 → latest 2.4, window 30d, n=60}</span>
+        <br><span style="color:#A16207">Example phrasing only — real titles are generated from the engine's recorded evidence, never invented.</span>
+      </div>
+    </div>
+  </div>
+  <p class="figcap"><b>Fig 1 — Team tab.</b> Names, outbound counts, scores, strikes and sample sizes are live values from 2026-07-08. Verdict pills and the recommendation are illustrative until per-rep history exists.</p>
+
+  <div class="frame">
+    <div class="bar"><i></i><i></i><i></i><span class="url">app.centralintelligence — /insights · Team · channel mix</span></div>
+    <div class="app">
+      <div class="mock-card">
+        <div class="hd">Channel mix — outbound activity <span class="win">all-time · 49,649 activities</span></div>
+        <div class="chanrow"><span>Social DM out</span><div class="trk"><i style="width:100%"></i></div><span class="n">27,366</span></div>
+        <div class="chanrow"><span>Call out</span><div class="trk"><i style="width:23%"></i></div><span class="n">6,390</span></div>
+        <div class="chanrow"><span>SMS out</span><div class="trk"><i style="width:20%"></i></div><span class="n">5,359</span></div>
+        <div class="chanrow"><span>Email out</span><div class="trk"><i style="width:3.3%"></i></div><span class="n">894</span></div>
+        <div class="chanrow" style="border-top:1px solid #E5E7EB; color:#6B7280"><span>Inbound (all)</span><div class="trk"><i style="width:35%; background:#93C5FD"></i></div><span class="n">9,640</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="figcap"><b>Fig 2 — Channel mix card.</b> Real all-time distribution. The 30d/90d windows come from the new <code>sales.outbound_volume</code> snapshots; per-channel trend pills attach once history accumulates.</p>
+
+  <h2><span class="no">6</span>Rollout — three branches, in order</h2>
+  <div class="prs">
+    <div class="pr"><span class="tag">PR 1 · backend</span><br><b>feat/rep-scope-snapshots</b>
+      <p>Registry <code>rep_sql</code> + 2 channel metrics; snapshot fan-out; recommendations <code>scope</code> migration; rep-aware phrasing; tests (registry invariants extend automatically; add fan-out + lifecycle-per-scope tests). Ships silently — no UI change, snapshots start accumulating immediately.</p></div>
+    <div class="pr"><span class="tag">PR 2 · api + chat</span><br><b>feat/team-analytics-api</b>
+      <p><code>GET /analytics/team</code>, <code>scope</code> params, CI-chat <code>rep</code> argument with alias resolution. Verify with authenticated curl against real snapshots from PR 1.</p></div>
+    <div class="pr"><span class="tag">PR 3 · frontend</span><br><b>feat/insights-team-tab</b>
+      <p>Team tab (leaderboard + KPI row + channel mix card + rep detail drawer), built on the atomic library. By the time this merges, PR 1 has been accumulating per-rep history for days — verdicts render real on day one.</p></div>
+  </div>
+  <p>Estimated effort: PR 1 ≈ half a day, PR 2 ≈ 2–3 h, PR 3 ≈ a day. Ship PR 1 early — history only accumulates from the day it deploys.</p>
+
+  <h2><span class="no">7</span>Risks &amp; open questions</h2>
+  <ul>
+    <li><strong>Recommendation noise:</strong> 7 reps × several metrics can multiply findings. Mitigated by the
+      <code>MIN_SAMPLE</code> gate, the <code>warn</code> severity cap, and the existing auto-resolve lifecycle. Tune after a week of real output.</li>
+    <li><strong>Terminated reps:</strong> skipped at capture; history retained. Confirm this matches how Greg wants departures handled.</li>
+    <li><strong>Visibility:</strong> should every staff login see the full leaderboard (scores + strikes), or managers only?
+      The app has no role-based UI gating today — if this needs restricting, that's a separate (small) feature. <em>Needs Greg's call.</em></li>
+    <li><strong>Inbound attribution:</strong> per-rep response rate stays impossible until the upstream WGR pipeline attributes
+      inbound rows to reps. Worth flagging to the client — it's their data shape, not ours.</li>
+    <li><strong>Probation cohort:</strong> <code>sales_reps</code> carries probation windows (Jun 1 → Aug 10 for 3 reps) — a natural
+      future extension is a probation scorecard against targets, but that needs targets defined first. Out of scope here.</li>
+  </ul>
+
+  <footer>
+    Central Intelligence · proposal generated 2026-07-08 from a read-only survey of the live app database.
+    All table values are actual queried data; UI verdict pills and the sample recommendation are marked illustrative.
+    Companion to the shipped engine work in CHANGELOG (per-rep scope was designed into <code>metric_snapshots</code> from the start).
+  </footer>
+</div>
+</body>
+</html>

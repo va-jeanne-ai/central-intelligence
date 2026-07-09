@@ -7,6 +7,30 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Per-rep scope + channel-mix metrics in the statistical engine (PR 1 of 3)
+
+Per the approved proposal (docs/rep-channel-analytics-proposal.html), the engine now watches
+individual reps, not just company-wide aggregates. Backend only — API and UI land in PRs 2–3.
+
+- **Registry** (`backend/app/analytics/registry.py`): new optional `rep_sql` contract
+  (one `GROUP BY rep_id` query returning rep_id/value/sample_size per rep). Added to
+  `sales.avg_call_score`, `sales.closed_sales_count`, `sales.revenue_collected`,
+  `fulfillment.open_coaching_strikes`. Two new metrics: `sales.outbound_volume`
+  (rep-scoped, windowed on `occurred_at`) and `sales.channel_response_rate`
+  (global-only — inbound activities carry no rep attribution upstream; documented).
+- **Snapshots**: fan-out writes `scope='rep:<rep_id>'` rows alongside global ones;
+  terminated reps skipped at capture (history retained). ~+60 rows/day.
+- **Trends**: `trend_for`/`all_trends` gain a `scope` param (default `'global'`, behavior
+  unchanged); new `rep_scopes_for_metric` helper. `MIN_SAMPLE` gating applies per rep,
+  so thin reps read `insufficient_data`, never a fake trend.
+- **Recommendations**: `scope` column (migration `v3a4b5c6d7e8`, applied), unique key now
+  `(metric_key, window, scope)`; rep-scoped pass phrases titles with `sales_reps.full_name`
+  ("Nelson Figueria's Avg Call Score is declining …") with numbers only from recorded
+  evidence; rep findings capped at `warn` severity; auto-resolve runs per scope. Existing
+  dashboard/insights surfaces keep showing global-only rows (explicit `scope="global"`).
+- **Tests**: 94 → 112 (rep_sql contract, fan-out + terminated-rep filtering, rep
+  recommendation lifecycle, severity cap, scope-default equivalence).
+
 ### Added — Engine expansion: new metrics, CI chat verdict tool, weekly digest, RAG gaps closed
 
 Extends the statistical recommendation engine along the north-star roadmap (§5/§7):
