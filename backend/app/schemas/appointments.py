@@ -32,6 +32,13 @@ class AppointmentRecord(BaseModel):
     appointment_type: str | None = None
     scheduledAt: str | None = None  # noqa: N815 — camelCase for frontend binding
     source: str | None = None
+    # Rep attribution. rep_id is the sales_reps join key (null when
+    # unattributed). rep_name resolves to sales_reps.full_name when rep_id
+    # matches a roster row; otherwise falls back to the raw WGR
+    # appointment_owner display string (covers former reps no longer on the
+    # roster, e.g. "Ryan Verey").
+    rep_id: str | None = None
+    rep_name: str | None = None
 
 
 class AppointmentListResponse(BaseModel):

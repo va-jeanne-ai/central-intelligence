@@ -576,6 +576,12 @@ class Appointment(Base, TimestampMixin, SoftDeleteMixin):
     contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # WGR rep attribution. rep_id keys sales_reps (clean join, may be null for
+    # reps who've left / unattributed rows). appointment_owner is the raw WGR
+    # display-name string (kept as a display fallback for rep_ids that don't —
+    # or no longer — resolve to a sales_reps row, e.g. former reps).
+    rep_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    appointment_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # booked / confirmed / showed / no-show / cancelled / rescheduled
     status: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     appointment_type: Mapped[str | None] = mapped_column(String(128), nullable=True)

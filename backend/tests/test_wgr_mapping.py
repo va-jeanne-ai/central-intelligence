@@ -65,6 +65,15 @@ def test_map_appointment_status() -> None:
     check("appt source=wgr", out["source"] == "wgr")
     check("appt carries wgr lead id", out["_wgr_lead_id"] == "LEAD_abc")
     check("appt type from call_number", out["appointment_type"] == "Discovery")
+    check("appt missing rep_id → None", out["rep_id"] is None)
+    check("appt missing appointment_owner → None", out["appointment_owner"] is None)
+
+    out2 = m.map_appointment({
+        "appointment_id": "APT_2", "outcome": "Cancelled", "lead_id": "LEAD_xyz",
+        "rep_id": "REP_COLTON_LINDSAY", "appointment_owner": " Colton Lindsay ",
+    })
+    check("appt rep_id mapped", out2["rep_id"] == "REP_COLTON_LINDSAY")
+    check("appt appointment_owner trimmed", out2["appointment_owner"] == "Colton Lindsay")
 
 
 def test_map_lead_status() -> None:

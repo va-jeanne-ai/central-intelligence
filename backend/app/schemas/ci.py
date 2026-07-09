@@ -66,8 +66,14 @@ class CallSummary(BaseModel):
     date: datetime | None = None
     call_type: str | None = None
     call_result: str | None = None
-    # The rep/CSR who conducted the call (NOT the prospect).
+    # The rep/CSR who conducted the call (NOT the prospect). Raw WGR display
+    # string — messy variants ('Colton', 'Colton  Lindsay') included verbatim.
     call_owner: str | None = None
+    # call_owner resolved against the sales_reps roster (name + historical_aliases,
+    # case/whitespace-normalized). Null when call_owner doesn't resolve to a
+    # roster rep (e.g. a former rep, a typo, or an email address).
+    rep_id: str | None = None
+    rep_name: str | None = None
     # The lead/prospect on the call (the person they're talking to). Resolved
     # from calls.lead_id → leads; null when the call isn't linked to a lead.
     lead_id: str | None = None

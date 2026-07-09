@@ -207,6 +207,12 @@ def map_appointment(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "appointment_type": _clean(row.get("call_number")) or _clean(row.get("calendar_name")),
         "scheduled_at": row.get("scheduled_date"),
         "notes": _clean(row.get("notes")),
+        # Rep attribution — rep_id is the clean join key into sales_reps;
+        # appointment_owner is WGR's raw display-name string, kept as a
+        # fallback for rows whose rep_id doesn't resolve to a roster row
+        # (e.g. former reps like Ryan Verey who've since left).
+        "rep_id": _clean(row.get("rep_id")),
+        "appointment_owner": _clean(row.get("appointment_owner")),
         # lead linkage resolved at upsert time via the WGR lead_id → CI lead.
         "_wgr_lead_id": _clean(row.get("lead_id")),
     }

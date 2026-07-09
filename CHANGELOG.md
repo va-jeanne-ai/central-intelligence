@@ -7,6 +7,30 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Client feedback: date + rep filters on Appointments & Sales Calls; rep visibility; status colors
+
+Direct response to Greg's feedback ("filter by dates … as well as sales rep; appointment records
+should show the contact name as well as Sales rep; color code the statuses").
+
+- **Appointments now carry rep attribution.** The upstream WGR `appointments` table has
+  `appointment_owner` and `rep_id` that the sync silently dropped — `map_appointment` now maps
+  both (migration `w4b5c6d7e8f9` adds the columns; applied). **Deploy note:** run the standard
+  backfill (`PYTHONPATH=. .venv/bin/python -m scripts.backfill_wgr --yes` from `backend/`)
+  once after deploying so the 1,922 existing rows populate.
+- **`GET /appointments`**: new `start`/`end`/`rep` params; response adds `contact_name`
+  (the local column is empty on all rows — resolved via the lead join, 1,890/1,922 covered),
+  `rep_id`, `rep_name` (roster name, else raw `appointment_owner` for former reps).
+- **`GET /ci/calls`**: new `start`/`end`/`rep` params; `call_owner` variants normalized to the
+  roster via `historical_aliases` ('Colton' / 'Colton  Lindsay' / 'Colton Lindsay' → one rep;
+  verified 94/94 live). Also fixes a pre-existing bug: an inner loop shadowed the pagination
+  `total`, corrupting `pagination.total` on any page containing a call with insights.
+- **New `GET /reps`** — light roster listing for filter dropdowns.
+- **UI**: Appointments and Sales Calls pages gain rep select + date-range filters
+  (server-side filtering); Appointments shows Rep column; statuses color-coded
+  (completed=green, scheduled=blue, cancelled=gray, no_show=red) and the sales-calls
+  result palette aligned to the same convention.
+- Tests 131 → 133.
+
 ### Added — Insights "Team" tab (PR 3 of 3)
 
 The /insights page gains an Overview / Team tab bar (amber active underline). The Team tab:
