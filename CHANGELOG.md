@@ -7,6 +7,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+### Added — Appointments calendar: calendar view on /appointments + overlay on /calendar
+
+- **/appointments** gains a List | Calendar toggle. Calendar mode reuses the shared calendar
+  components (month/week/day/list) with appointments as chips colored by the same status
+  palette as the list pills; the page's status/rep/search filters apply in both modes; a
+  shared detail popover shows contact, rep, status, type, time, and a "View lead" link.
+- **/calendar** now overlays appointments alongside Google Calendar events in every sub-view,
+  with an "Appt" marker and status coloring to distinguish sources, plus toolbar checkboxes
+  ("Google Calendar" / "Appointments", both on by default) to hide either source. Google-event
+  rendering is unchanged when the overlay is off.
+- New shared modules: `lib/appointment-status.ts` (single source of truth for the status
+  palette), `lib/appointments-client.ts` (range fetch for calendar rendering),
+  `lib/appointment-calendar-mapping.ts` (pure appointment→event mapping),
+  `components/calendar/appointment-detail-popover.tsx`.
+- Backend: `AppointmentRecord` now returns `end_at` (column existed, was never serialized);
+  `per_page` cap raised 200 → 1000 (bounded), sized for one-request month-range fetches.
+
 ### Added — Client feedback: date + rep filters on Appointments & Sales Calls; rep visibility; status colors
 
 Direct response to Greg's feedback ("filter by dates … as well as sales rep; appointment records

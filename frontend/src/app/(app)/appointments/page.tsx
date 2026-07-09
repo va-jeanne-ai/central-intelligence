@@ -6,55 +6,25 @@ import { Header } from "@/components/layout/header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Button } from "@/components/ui/button";
+import { AppointmentsCalendarView } from "@/components/appointments/appointments-calendar-view";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagination } from "@/hooks/use-pagination";
 import { Pagination } from "@/components/ui";
 import { showSuccess, showApiError } from "@/lib/toast";
+import {
+  APPOINTMENT_STATUS_CONFIG,
+  resolveAppointmentStatus,
+  type AppointmentStatus,
+} from "@/lib/appointment-status";
+import type { AppointmentRow, AppointmentsListResponse } from "@/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-
-// Real appointment statuses (app DB, verified live): completed, cancelled,
-// scheduled, no_show, plus null/unknown. The older booked/confirmed/showed/
-// no-show/rescheduled vocabulary below is kept in STATUS_CONFIG for any
-// legacy/manual rows that still carry it — resolveStatus falls back to a
-// neutral pill for anything unrecognized either way.
-type AppointmentStatus =
-  | "completed"
-  | "cancelled"
-  | "scheduled"
-  | "no_show"
-  | "booked"
-  | "confirmed"
-  | "showed"
-  | "no-show"
-  | "rescheduled";
-
-interface AppointmentRow {
-  id: string;
-  contact_name: string | null;
-  contact_email: string | null;
-  lead_id: string | null;
-  member_id: string | null;
-  status: string | null;
-  appointment_type: string | null;
-  scheduledAt: string | null;
-  source: string | null;
-  rep_id: string | null;
-  rep_name: string | null;
-}
 
 interface RepOption {
   rep_id: string;
   full_name: string;
   status: string;
-}
-
-interface AppointmentsListResponse {
-  appointments: AppointmentRow[];
-  total: number;
-  page: number;
-  per_page: number;
 }
 
 interface AppointmentsKpis {
@@ -94,31 +64,7 @@ const EMPTY_LIST: AppointmentsListResponse = {
 
 type FilterStatus = "all" | AppointmentStatus;
 type FilterWindow = "all" | "upcoming" | "this_week";
-
-// Color convention (shared with the Sales Calls page): green = completed/
-// showed, blue = scheduled/booked, gray = cancelled, red = no-show, amber =
-// in-between states like rescheduled/confirmed.
-const STATUS_CONFIG: Record<AppointmentStatus, { label: string; dotColor: string; badgeClasses: string }> = {
-  completed: { label: "Completed", dotColor: "#10B981", badgeClasses: "bg-green-50 text-green-700" },
-  scheduled: { label: "Scheduled", dotColor: "#3B82F6", badgeClasses: "bg-blue-50 text-blue-700" },
-  cancelled: { label: "Cancelled", dotColor: "#9CA3AF", badgeClasses: "bg-gray-100 text-gray-500" },
-  no_show: { label: "No-Show", dotColor: "#EF4444", badgeClasses: "bg-red-50 text-red-700" },
-  booked: { label: "Booked", dotColor: "#3B82F6", badgeClasses: "bg-blue-50 text-blue-700" },
-  confirmed: { label: "Confirmed", dotColor: "#F59E0B", badgeClasses: "bg-accent-50 text-accent-700" },
-  showed: { label: "Showed", dotColor: "#10B981", badgeClasses: "bg-green-50 text-green-700" },
-  "no-show": { label: "No-Show", dotColor: "#EF4444", badgeClasses: "bg-red-50 text-red-700" },
-  rescheduled: { label: "Rescheduled", dotColor: "#F59E0B", badgeClasses: "bg-amber-50 text-amber-700" },
-};
-
-function resolveStatus(raw: string | null) {
-  return (
-    STATUS_CONFIG[(raw ?? "") as AppointmentStatus] ?? {
-      label: raw ?? "—",
-      dotColor: "#9CA3AF",
-      badgeClasses: "bg-gray-100 text-gray-600",
-    }
-  );
-}
+type ViewMode = "list" | "calendar";
 
 function formatScheduled(iso: string | null): string {
   if (!iso) return "—";
@@ -277,7 +223,7 @@ function AddAppointmentModal({
 
 function AppointmentTableRow({ appt }: { appt: AppointmentRow }) {
   const router = useRouter();
-  const status = resolveStatus(appt.status);
+  const status = resolveAppointmentStatus(appt.status);
   const clickable = Boolean(appt.lead_id);
 
   return (
@@ -334,6 +280,7 @@ export default function AppointmentsPage() {
   const [reps, setReps] = useState<RepOption[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   // Pagination — page size persisted per surface in localStorage.
   const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
@@ -460,16 +407,37 @@ export default function AppointmentsPage() {
           </div>
         )}
 
-        {/* Table */}
+        {/* Table / Calendar */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h2 className="text-sm font-bold text-gray-900">Appointment Records</h2>
-            <span className="text-xs text-gray-400">
-              Showing {listData.appointments.length} of {listData.total.toLocaleString()}
-            </span>
+            <div className="flex items-center gap-3">
+              {viewMode === "list" && (
+                <span className="text-xs text-gray-400">
+                  Showing {listData.appointments.length} of {listData.total.toLocaleString()}
+                </span>
+              )}
+              <div className="inline-flex rounded-lg bg-gray-100 p-0.5">
+                {(["list", "calendar"] as ViewMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setViewMode(mode)}
+                    className={
+                      "text-[12px] font-medium px-3 py-1 rounded-md transition-colors capitalize " +
+                      (viewMode === mode
+                        ? "bg-white text-blue-600 shadow-sm"
+                        : "text-gray-600 hover:text-gray-900")
+                    }
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Filter bar */}
+          {/* Filter bar — applies to both List and Calendar modes */}
           <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2.5 flex-wrap">
             <input
               type="text"
@@ -484,9 +452,9 @@ export default function AppointmentsPage() {
               className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-600"
             >
               <option value="all">All Statuses</option>
-              {(Object.keys(STATUS_CONFIG) as AppointmentStatus[]).map((k) => (
+              {(Object.keys(APPOINTMENT_STATUS_CONFIG) as AppointmentStatus[]).map((k) => (
                 <option key={k} value={k}>
-                  {STATUS_CONFIG[k].label}
+                  {APPOINTMENT_STATUS_CONFIG[k].label}
                 </option>
               ))}
             </select>
@@ -530,37 +498,49 @@ export default function AppointmentsPage() {
             </div>
           </div>
 
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                {["Contact", "Rep", "Scheduled", "Status", "Type"].map((h) => (
-                  <th key={h} className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {listData.appointments.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center text-sm text-gray-400">
-                    No appointments match your filters.
-                  </td>
-                </tr>
-              ) : (
-                listData.appointments.map((appt) => <AppointmentTableRow key={appt.id} appt={appt} />)
-              )}
-            </tbody>
-          </table>
+          {viewMode === "list" ? (
+            <>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    {["Contact", "Rep", "Scheduled", "Status", "Type"].map((h) => (
+                      <th key={h} className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {listData.appointments.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-12 text-center text-sm text-gray-400">
+                        No appointments match your filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    listData.appointments.map((appt) => <AppointmentTableRow key={appt.id} appt={appt} />)
+                  )}
+                </tbody>
+              </table>
 
-          {!isLoading && listData.total > 0 && (
-            <Pagination
-              page={page}
-              total={listData.total}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-            />
+              {!isLoading && listData.total > 0 && (
+                <Pagination
+                  page={page}
+                  total={listData.total}
+                  pageSize={pageSize}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
+              )}
+            </>
+          ) : (
+            <div className="p-4 bg-gray-50/30">
+              <AppointmentsCalendarView
+                statusFilter={statusFilter}
+                repFilter={repFilter}
+                search={search}
+              />
+            </div>
           )}
         </div>
       </main>

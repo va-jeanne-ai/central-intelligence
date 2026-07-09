@@ -7,11 +7,14 @@ import {
   groupEventsByDay,
   isSameDay,
 } from "@/lib/calendar-helpers";
+import { resolveAppointmentStatus } from "@/lib/appointment-status";
 import type { CalendarEventRow } from "@/types";
 
 interface DayViewProps {
   anchorDate: Date;
   events: CalendarEventRow[];
+  /** Opens the appointment detail popover for an appointment-sourced event. */
+  onAppointmentClick?: (event: CalendarEventRow) => void;
 }
 
 /**
@@ -21,7 +24,7 @@ interface DayViewProps {
  * blocks) — v1 stays chronological-list. Easy upgrade later if Greg
  * wants the "block" calendar-canvas feel.
  */
-export function DayView({ anchorDate, events }: DayViewProps) {
+export function DayView({ anchorDate, events, onAppointmentClick }: DayViewProps) {
   const today = new Date();
   const isToday = isSameDay(anchorDate, today);
   const grouped = groupEventsByDay(events);
@@ -58,6 +61,69 @@ export function DayView({ anchorDate, events }: DayViewProps) {
         ) : (
           dayEvents.map((e) => {
             const attendeeCount = e.attendees.length;
+            const isAppointment = e.source === "appointment";
+            const status = isAppointment ? resolveAppointmentStatus(e.status) : null;
+
+            const rowContent = (
+              <>
+                <span className="text-[12px] font-mono text-gray-500 w-32 flex-shrink-0">
+                  {formatTimeRange(e.start_time, e.end_time, e.is_all_day)}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-medium text-gray-800 truncate flex items-center gap-1.5">
+                    {isAppointment && (
+                      <span
+                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: status?.dotColor }}
+                      />
+                    )}
+                    {e.title || "(untitled event)"}
+                  </div>
+                  <div className="text-[11px] text-gray-500 mt-0.5 truncate">
+                    {isAppointment ? (
+                      <span className="mr-2">📅 Appointment · {status?.label}</span>
+                    ) : (
+                      <>
+                        {e.calendar_name && (
+                          <span className="mr-2">📆 {e.calendar_name}</span>
+                        )}
+                        {e.organizer_email && (
+                          <span className="mr-2">👤 {e.organizer_email}</span>
+                        )}
+                        {attendeeCount > 0 && (
+                          <span className="mr-2">
+                            👥 {attendeeCount} attendee
+                            {attendeeCount === 1 ? "" : "s"}
+                          </span>
+                        )}
+                        {e.location && (
+                          <span className="mr-2">📍 {e.location}</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+                {!isAppointment && e.status === "tentative" && (
+                  <span className="text-[10px] text-amber-600 font-semibold uppercase">
+                    Tentative
+                  </span>
+                )}
+              </>
+            );
+
+            if (isAppointment) {
+              return (
+                <button
+                  key={e.id}
+                  type="button"
+                  onClick={() => onAppointmentClick?.(e)}
+                  className="w-full flex items-baseline gap-4 px-5 py-3 hover:bg-gray-50 transition-colors text-left"
+                >
+                  {rowContent}
+                </button>
+              );
+            }
+
             return (
               <a
                 key={e.id}
@@ -66,36 +132,7 @@ export function DayView({ anchorDate, events }: DayViewProps) {
                 rel="noopener noreferrer"
                 className="flex items-baseline gap-4 px-5 py-3 hover:bg-gray-50 transition-colors"
               >
-                <span className="text-[12px] font-mono text-gray-500 w-32 flex-shrink-0">
-                  {formatTimeRange(e.start_time, e.end_time, e.is_all_day)}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-medium text-gray-800 truncate">
-                    {e.title || "(untitled event)"}
-                  </div>
-                  <div className="text-[11px] text-gray-500 mt-0.5 truncate">
-                    {e.calendar_name && (
-                      <span className="mr-2">📆 {e.calendar_name}</span>
-                    )}
-                    {e.organizer_email && (
-                      <span className="mr-2">👤 {e.organizer_email}</span>
-                    )}
-                    {attendeeCount > 0 && (
-                      <span className="mr-2">
-                        👥 {attendeeCount} attendee
-                        {attendeeCount === 1 ? "" : "s"}
-                      </span>
-                    )}
-                    {e.location && (
-                      <span className="mr-2">📍 {e.location}</span>
-                    )}
-                  </div>
-                </div>
-                {e.status === "tentative" && (
-                  <span className="text-[10px] text-amber-600 font-semibold uppercase">
-                    Tentative
-                  </span>
-                )}
+                {rowContent}
               </a>
             );
           })

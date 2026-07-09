@@ -13,6 +13,8 @@ import type { CalendarEventRow } from "@/types";
 interface WeekViewProps {
   anchorDate: Date;
   events: CalendarEventRow[];
+  /** Opens the appointment detail popover for an appointment-sourced event. */
+  onAppointmentClick?: (event: CalendarEventRow) => void;
 }
 
 /**
@@ -20,7 +22,7 @@ interface WeekViewProps {
  * Each column is a vertical scroll of EventChips (non-compact —
  * title + time fit comfortably at this column width).
  */
-export function WeekView({ anchorDate, events }: WeekViewProps) {
+export function WeekView({ anchorDate, events, onAppointmentClick }: WeekViewProps) {
   const weekStart = startOfWeek(anchorDate);
   const days: Date[] = [];
   for (let i = 0; i < 7; i++) days.push(addDays(weekStart, i));
@@ -74,7 +76,9 @@ export function WeekView({ anchorDate, events }: WeekViewProps) {
               {eventsForDay.length === 0 ? (
                 <p className="text-[11px] text-gray-300 italic">No events</p>
               ) : (
-                eventsForDay.map((e) => <EventChip key={e.id} event={e} />)
+                eventsForDay.map((e) => (
+                  <EventChip key={e.id} event={e} onAppointmentClick={onAppointmentClick} />
+                ))
               )}
             </div>
           );

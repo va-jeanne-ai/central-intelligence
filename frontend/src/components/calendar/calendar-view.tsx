@@ -8,6 +8,7 @@ import type {
   RangePreset,
   SourceFilter,
 } from "@/components/calendar/calendar-toolbar";
+import { AppointmentDetailPopover } from "@/components/calendar/appointment-detail-popover";
 import { DayView } from "@/components/calendar/day-view";
 import { ListView } from "@/components/calendar/list-view";
 import { MonthView } from "@/components/calendar/month-view";
@@ -28,8 +29,10 @@ import {
   startOfYear,
 } from "@/lib/calendar-helpers";
 import { calendarClient } from "@/lib/calendar-client";
+import { appointmentsClient } from "@/lib/appointments-client";
+import { appointmentsToCalendarEvents } from "@/lib/appointment-calendar-mapping";
 import { showError, showSuccess } from "@/lib/toast";
-import type { CalendarEventRow, CalendarSummary } from "@/types";
+import type { AppointmentRow, CalendarEventRow, CalendarSummary } from "@/types";
 
 /**
  * The full calendar surface. Owns:
@@ -60,8 +63,17 @@ export function CalendarView() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [events, setEvents] = useState<CalendarEventRow[]>([]);
+  const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Source visibility — both on by default. Purely a display filter; the
+  // underlying fetches still run so toggling is instant.
+  const [showGoogleEvents, setShowGoogleEvents] = useState(true);
+  const [showAppointments, setShowAppointments] = useState(true);
+
+  // Detail popover — set when an appointment chip is clicked.
+  const [selectedAppointment, setSelectedAppointment] = useState<AppointmentRow | null>(null);
 
   // ─── Active window derivation ───────────────────────────────────────────
   // The window the backend gets is a function of (rangePreset, view,
@@ -155,6 +167,48 @@ export function CalendarView() {
     void loadEvents();
   }, [loadEvents]);
 
+  // ─── Load appointments in the same visible window ───────────────────────
+  // Independent of the Google-events fetch (separate loading flag) so a
+  // slow appointments call never blocks the Google grid from painting, and
+  // vice versa. Errors degrade silently to an empty appointments list —
+  // the Google calendar overlay still works standalone if this fails.
+  const loadAppointments = useCallback(async () => {
+    try {
+      const data = await appointmentsClient.listRange({
+        start: windowStart.toISOString(),
+        end: windowEnd.toISOString(),
+      });
+      setAppointments(data.appointments);
+    } catch {
+      setAppointments([]);
+    }
+  }, [windowStart, windowEnd]);
+
+  useEffect(() => {
+    void loadAppointments();
+  }, [loadAppointments]);
+
+  // ─── Merge sources for rendering ────────────────────────────────────────
+  // Google events keep rendering byte-identical to before when the
+  // appointments toggle is off (`events` array itself is untouched). When
+  // both sources are visible, the merged list is sorted by start_time so
+  // a day/list cell interleaves Google events and appointments
+  // chronologically rather than always showing Google events first.
+  const visibleEvents = useMemo(() => {
+    const google = showGoogleEvents ? events : [];
+    const appts = showAppointments ? appointmentsToCalendarEvents(appointments) : [];
+    if (google.length === 0 || appts.length === 0) return [...google, ...appts];
+    return [...google, ...appts].sort((a, b) => {
+      const at = a.start_time ? new Date(a.start_time).getTime() : 0;
+      const bt = b.start_time ? new Date(b.start_time).getTime() : 0;
+      return at - bt;
+    });
+  }, [events, appointments, showGoogleEvents, showAppointments]);
+
+  const onAppointmentClick = useCallback((event: CalendarEventRow) => {
+    if (event.appointment) setSelectedAppointment(event.appointment);
+  }, []);
+
   // ─── Nav handlers ──────────────────────────────────────────────────────
   // Arrows are view-aware: month/week/day step by their respective
   // periods; list view steps by 14d (matching its natural window).
@@ -228,6 +282,10 @@ export function CalendarView() {
         setSearchTerm={setSearchTerm}
         isSyncing={isSyncing}
         onSync={onSync}
+        showGoogleEvents={showGoogleEvents}
+        setShowGoogleEvents={setShowGoogleEvents}
+        showAppointments={showAppointments}
+        setShowAppointments={setShowAppointments}
       />
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -236,20 +294,26 @@ export function CalendarView() {
         ) : view === "month" ? (
           <MonthView
             anchorDate={anchorDate}
-            events={events}
+            events={visibleEvents}
             onDayClick={(d) => {
               setAnchorDate(d);
               setView("day");
             }}
+            onAppointmentClick={onAppointmentClick}
           />
         ) : view === "week" ? (
-          <WeekView anchorDate={anchorDate} events={events} />
+          <WeekView anchorDate={anchorDate} events={visibleEvents} onAppointmentClick={onAppointmentClick} />
         ) : view === "day" ? (
-          <DayView anchorDate={anchorDate} events={events} />
+          <DayView anchorDate={anchorDate} events={visibleEvents} onAppointmentClick={onAppointmentClick} />
         ) : (
-          <ListView events={events} />
+          <ListView events={visibleEvents} onAppointmentClick={onAppointmentClick} />
         )}
       </div>
+
+      <AppointmentDetailPopover
+        appointment={selectedAppointment}
+        onClose={() => setSelectedAppointment(null)}
+      />
     </div>
   );
 }

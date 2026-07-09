@@ -31,6 +31,7 @@ class AppointmentRecord(BaseModel):
     status: str | None = None
     appointment_type: str | None = None
     scheduledAt: str | None = None  # noqa: N815 — camelCase for frontend binding
+    end_at: str | None = None
     source: str | None = None
     # Rep attribution. rep_id is the sales_reps join key (null when
     # unattributed). rep_name resolves to sales_reps.full_name when rep_id
