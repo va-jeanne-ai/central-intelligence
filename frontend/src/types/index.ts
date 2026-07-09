@@ -467,6 +467,16 @@ export interface CalendarEventRow {
   event_link: string | null;
   location: string | null;
   status: string | null;
+  /**
+   * Which system produced this row. Defaults to "google" when omitted —
+   * every event historically rendered by CalendarView came from Google
+   * Calendar sync, so leaving this undefined keeps that rendering path
+   * byte-identical. "appointment" rows are mapped from AppointmentRow via
+   * appointmentToCalendarEvent() and carry `appointment` below.
+   */
+  source?: "google" | "appointment";
+  /** Present only when source === "appointment". Raw record for the detail popover. */
+  appointment?: AppointmentRow;
 }
 
 export interface CalendarEventsResponse {
@@ -481,6 +491,30 @@ export interface CalendarSummary {
 
 export interface CalendarListResponse {
   calendars: CalendarSummary[];
+}
+
+// ─── Appointments ───────────────────────────────────────────────────────────
+
+export interface AppointmentRow {
+  id: string;
+  contact_name: string | null;
+  contact_email: string | null;
+  lead_id: string | null;
+  member_id: string | null;
+  status: string | null;
+  appointment_type: string | null;
+  scheduledAt: string | null;
+  end_at: string | null;
+  source: string | null;
+  rep_id: string | null;
+  rep_name: string | null;
+}
+
+export interface AppointmentsListResponse {
+  appointments: AppointmentRow[];
+  total: number;
+  page: number;
+  per_page: number;
 }
 
 // ─── Chat history (persisted) ─────────────────────────────────────────────

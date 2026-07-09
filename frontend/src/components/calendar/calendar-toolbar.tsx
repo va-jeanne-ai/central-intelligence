@@ -58,6 +58,14 @@ interface CalendarToolbarProps {
   // Sync button
   isSyncing: boolean;
   onSync: () => void;
+
+  // Source visibility legend — which event sources render on the grid.
+  // Optional: the /appointments Calendar tab doesn't render Google events
+  // at all, so it omits these props and the legend is hidden entirely.
+  showGoogleEvents?: boolean;
+  setShowGoogleEvents?: (v: boolean) => void;
+  showAppointments?: boolean;
+  setShowAppointments?: (v: boolean) => void;
 }
 
 function viewTitle(view: CalendarViewType, anchor: Date): string {
@@ -95,7 +103,12 @@ export function CalendarToolbar({
   setSearchTerm,
   isSyncing,
   onSync,
+  showGoogleEvents,
+  setShowGoogleEvents,
+  showAppointments,
+  setShowAppointments,
 }: CalendarToolbarProps) {
+  const showLegend = setShowGoogleEvents !== undefined && setShowAppointments !== undefined;
   return (
     <div className="bg-white border-b border-gray-200 px-6 py-3 flex-shrink-0">
       {/* Top row — nav + title + sync */}
@@ -166,6 +179,32 @@ export function CalendarToolbar({
 
         {/* Filters row */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Source visibility legend */}
+          {showLegend && (
+            <div className="flex items-center gap-3 pr-2 mr-1 border-r border-gray-200">
+              <label className="flex items-center gap-1.5 text-[12px] text-gray-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showGoogleEvents}
+                  onChange={(e) => setShowGoogleEvents?.(e.target.checked)}
+                  className="rounded border-gray-300 text-accent-500 focus:ring-accent-300"
+                />
+                <span className="w-2 h-2 rounded-full bg-accent-400 flex-shrink-0" />
+                Google Calendar
+              </label>
+              <label className="flex items-center gap-1.5 text-[12px] text-gray-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showAppointments}
+                  onChange={(e) => setShowAppointments?.(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-500 focus:ring-blue-300"
+                />
+                <span className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0" />
+                Appointments
+              </label>
+            </div>
+          )}
+
           {/* Source filter */}
           <select
             value={sourceFilter}

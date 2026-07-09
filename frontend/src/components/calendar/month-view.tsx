@@ -17,6 +17,8 @@ interface MonthViewProps {
   events: CalendarEventRow[];
   /** Optional handler — clicking a cell switches the parent to Day view. */
   onDayClick?: (date: Date) => void;
+  /** Opens the appointment detail popover for an appointment-sourced event. */
+  onAppointmentClick?: (event: CalendarEventRow) => void;
 }
 
 /**
@@ -24,7 +26,7 @@ interface MonthViewProps {
  * cells outside the active month are dimmed. Each cell shows up to
  * MAX_VISIBLE_PER_CELL chips with a "+N more" link when overflow.
  */
-export function MonthView({ anchorDate, events, onDayClick }: MonthViewProps) {
+export function MonthView({ anchorDate, events, onDayClick, onAppointmentClick }: MonthViewProps) {
   const today = new Date();
   const grouped = groupEventsByDay(events);
   const grid = buildMonthGrid(anchorDate);
@@ -81,7 +83,7 @@ export function MonthView({ anchorDate, events, onDayClick }: MonthViewProps) {
 
               <div className="flex flex-col gap-0.5 overflow-hidden">
                 {visible.map((e) => (
-                  <EventChip key={e.id} event={e} compact />
+                  <EventChip key={e.id} event={e} compact onAppointmentClick={onAppointmentClick} />
                 ))}
                 {overflow > 0 && (
                   <button

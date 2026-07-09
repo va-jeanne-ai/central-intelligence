@@ -129,7 +129,10 @@ async def list_appointments(
     end: str | None = Query(default=None, description="scheduled_at <= (ISO date/datetime)"),
     rep: str | None = Query(default=None, description="Filter by rep_id"),
     page: int = Query(default=1, ge=1),
-    per_page: int = Query(default=50, ge=1, le=200),
+    # Capped at 1000 (not the historical 200) so calendar month views can
+    # request a full month of appointments (~<400 typical) in one page
+    # instead of paginating through several requests just to paint a grid.
+    per_page: int = Query(default=50, ge=1, le=1000),
     sort_by: str = Query(default="scheduled_at"),
     sort_dir: Literal["asc", "desc"] = Query(default="desc"),
     session: AsyncSession = Depends(get_session),
@@ -204,7 +207,7 @@ async def list_appointments(
                    COALESCE(a.contact_name, l.name) AS contact_name,
                    a.contact_email,
                    a.lead_id::text AS lead_id, a.member_id::text AS member_id,
-                   a.status, a.appointment_type, a.scheduled_at, a.source,
+                   a.status, a.appointment_type, a.scheduled_at, a.end_at, a.source,
                    a.rep_id, r.full_name AS roster_rep_name, a.appointment_owner
             {from_sql}
             WHERE {where_sql}
@@ -225,6 +228,7 @@ async def list_appointments(
             status=r["status"],
             appointment_type=r["appointment_type"],
             scheduledAt=r["scheduled_at"].isoformat() if r["scheduled_at"] else None,
+            end_at=r["end_at"].isoformat() if r["end_at"] else None,
             source=r["source"],
             rep_id=r["rep_id"],
             # Roster full_name wins when rep_id resolves; otherwise fall back to
