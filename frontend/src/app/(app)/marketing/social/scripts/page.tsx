@@ -115,7 +115,9 @@ export default function SocialScriptsPage() {
           platform: form.platform.toLowerCase(),
           brand_voice: form.brandVoice.toLowerCase(),
         },
-        { silent: true },
+        // Director → specialist agent chains run 30s+; the default 30s
+        // timeout aborts right as the script lands (see analyze drawer).
+        { silent: true, timeout: 120_000 },
       );
 
       // Backend currently echoes the same text into both `analysis` and

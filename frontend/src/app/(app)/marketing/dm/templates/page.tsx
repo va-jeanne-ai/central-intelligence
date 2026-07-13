@@ -175,7 +175,9 @@ export default function DmTemplatesPage() {
           tone: form.tone.toLowerCase(),
           context: form.context,
         },
-        { silent: true },
+        // Director → specialist agent chains run 30s+; the default 30s
+        // timeout aborts right as the script lands (see analyze drawer).
+        { silent: true, timeout: 120_000 },
       );
 
       setResultMeta({

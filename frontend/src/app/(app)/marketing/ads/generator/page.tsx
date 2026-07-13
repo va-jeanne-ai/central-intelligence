@@ -122,7 +122,9 @@ export default function AdCopyGeneratorPage() {
           goal: form.goal,
           context: form.context,
         },
-        { silent: true },
+        // Director → specialist agent chains run 30s+; the default 30s
+        // timeout aborts right as the script lands (see analyze drawer).
+        { silent: true, timeout: 120_000 },
       );
       setResult(response);
       setStatus("content");
