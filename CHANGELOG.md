@@ -6,6 +6,51 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Analyze this view (POST /api/v1/analyze/{surface} + four-surface drawer)
+
+The Appointments, Sales Calls, Leads, and Members pages each gain an "Analyze this view" button
+in the filter bar. Clicking opens a drawer with an LLM-generated narrative grounded in
+server-computed aggregates of the currently filtered dataset. The narrative includes:
+- A filter echo (status, date range, rep, etc. as applicable)
+- Key counts and breakdowns (by status, by rep, by week, by member status, etc.)
+- An optional hypotheses box (amber, speculative phrasing)
+- A "Show the data this is based on" section with tables backing the narrative
+
+Each click runs one real Claude call (`claude-sonnet-4-6`); nothing is saved — analyses are
+ephemeral. Zero-result filters short-circuit without an LLM call and show "No data in this view".
+Backend returns 503 when `ANTHROPIC_API_KEY` is missing or the LLM is unavailable.
+
+- **Backend POST /api/v1/analyze/{surface}** — accepts `Surface` dataclass (status/rep/date-range
+  filters as-applicable per surface) and returns `AnalyzeViewResponse` with `narrative`,
+  `aggregates` dict, and `error_state` flag. Four aggregators (appointments, sales_calls,
+  leads, members) pre-compute tables, counts, and breakdowns for each surface. Shared
+  `view_analysis` registry maps surface name → aggregator class.
+- **Frontend AnalyzeViewDrawer** — responsive drawer (`xl:w-3/5 max-w-3xl`) with header showing
+  item count, loading skeleton during analysis, error state with Retry, and narrative + data
+  sections. Re-run button produces a fresh analysis. Close clears the drawer state (ephemeral).
+- **UI: Filter bar buttons** — one "Analyze this view" button per page's filter bar
+  (Appointments, Sales Calls, Leads, Members). Wired to extract current filters, POST, and
+  render the drawer.
+- **Cost note:** runs at-scale only when `ANTHROPIC_API_KEY` is set; missing key returns 503.
+- Documented in `docs/testing/2026-07-13-analyze-view-test.md` (manual verification steps).
+
+### Changed — Filter-builder extraction refactor (appointments, sales calls, leads, members)
+
+Tasks 1–3 extracted the WHERE-building logic from list endpoints into a shared repository
+module. All four list pages (Appointments, Sales Calls, Leads, Members) now use the same
+filter builder (`backend/app/repositories/list_filters.py`) to construct SQL constraints
+from incoming filter params. List endpoints refactored to call the shared builder; behavior
+verified identical via live parity checks (same record counts, same ordering, identical
+column selections). No user-facing changes — filtering behavior is unchanged.
+
+- **`backend/app/repositories/list_filters.py`** — new shared filter builders:
+  `build_appointment_filters()`, `build_sales_call_filters()`, `build_lead_filters()`,
+  `build_member_filters()` (each returns a list of SQLAlchemy WHERE conditions).
+- **`backend/app/routes/appointments.py`** — `GET /appointments` refactored to use the builder.
+- **`backend/app/routes/ci.py`** — `GET /ci/calls` refactored to use the builder.
+- **`backend/app/routes/leads.py`** — `GET /leads` refactored to use the builder.
+- **`backend/app/routes/members.py`** — `GET /members` refactored to use the builder.
+- Regression checks cover status, date range, rep, and search filters across all four surfaces.
 
 ### Added — Date picker on the appointments calendar toolbar
 
