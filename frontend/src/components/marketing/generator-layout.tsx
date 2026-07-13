@@ -15,6 +15,8 @@ import Link from "next/link";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 
 // ─── Page header ────────────────────────────────────────────────────────────
 
@@ -49,6 +51,10 @@ export function GeneratorHeader({
 }
 
 // ─── Generate button ────────────────────────────────────────────────────────
+// Renders the shared Button `ai` variant (gold gradient + glow) so every
+// marketing generator page reads as an AI-triggering action, per the app's
+// AI-action design convention. Molecule's props/API are unchanged — this is
+// an internal restyle only.
 
 function Spinner() {
   return (
@@ -92,12 +98,7 @@ export function GenerateButton({
   busyLabel = "Generating…",
 }: GenerateButtonProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled || isGenerating}
-      className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-200 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors duration-150 active:scale-95 shadow-sm"
-    >
+    <Button variant="ai" onClick={onClick} disabled={disabled || isGenerating}>
       {isGenerating ? (
         <>
           <Spinner />
@@ -105,11 +106,11 @@ export function GenerateButton({
         </>
       ) : (
         <>
-          <span aria-hidden="true">✨</span>
+          <SparkleIcon />
           {idleLabel}
         </>
       )}
-    </button>
+    </Button>
   );
 }
 

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 
 // ─── Backend response shape ───────────────────────────────────────────────────
 
@@ -447,14 +449,16 @@ function IcpCardsSection() {
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h2 className="text-sm font-bold text-gray-900">Ideal Customer Profiles</h2>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void handleGenerateIcps()}
-              disabled={isGenerating}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150 active:scale-95"
-            >
-              {isGenerating ? "Generating…" : "✨ Generate ICPs"}
-            </button>
+            <Button variant="ai" size="sm" onClick={() => void handleGenerateIcps()} disabled={isGenerating}>
+              {isGenerating ? (
+                "Generating…"
+              ) : (
+                <>
+                  <SparkleIcon />
+                  Generate ICPs
+                </>
+              )}
+            </Button>
             <button
               type="button"
               onClick={() => setShowNewForm(true)}

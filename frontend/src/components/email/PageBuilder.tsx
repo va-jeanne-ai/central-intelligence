@@ -18,6 +18,8 @@
  */
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import {
   BLOCK_DESCRIPTIONS,
   BLOCK_ICONS,
@@ -289,14 +291,23 @@ export default function PageBuilder({
             </button>
           ))}
           {onAiAssist && (
-            <button
-              type="button"
+            <Button
+              variant="ai"
+              size="sm"
+              fullWidth
               onClick={onAiAssist}
               disabled={aiBusy}
-              className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[12px] font-semibold hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-3"
             >
-              {aiBusy ? "Generating…" : "✨ Fill with AI"}
-            </button>
+              {aiBusy ? (
+                "Generating…"
+              ) : (
+                <>
+                  <SparkleIcon />
+                  Fill with AI
+                </>
+              )}
+            </Button>
           )}
         </CardBody>
       </Card>

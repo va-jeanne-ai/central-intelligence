@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { showApiError } from "@/lib/toast";
-import { CopyButton } from "@/components/ui/button";
+import { CopyButton, Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import { GeneratorHeader, GenerateButton, ResultsPanel } from "@/components/marketing/generator-layout";
 import type { AdsAnalyzeResponse } from "@/types";
 
@@ -259,14 +260,10 @@ export default function AdCopyGeneratorPage() {
             emptyDescription="Fill in the form above and click Generate Variants."
             errorDescription="Something went wrong generating ad copy. Try again."
             headerAction={
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={isGenerating}
-                className="text-xs font-medium px-3 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors duration-150"
-              >
+              <Button variant="ai" size="sm" onClick={handleGenerate} disabled={isGenerating}>
+                <SparkleIcon />
                 Regenerate
-              </button>
+              </Button>
             }
           >
             {result && <AnalysisResultCard result={result} />}

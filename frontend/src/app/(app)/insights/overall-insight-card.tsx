@@ -2,6 +2,7 @@
 
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import type { OverallInsight } from "@/types";
 
 // ─── Verdict styling ──────────────────────────────────────────────────────────
@@ -55,8 +56,15 @@ export function OverallInsightCard({
         action={
           <div className="flex items-center gap-3">
             {insight && <VerdictPill verdict={insight.health_verdict} />}
-            <Button variant="ghost" onClick={onGenerate} disabled={generating || loading}>
-              {generating ? "Generating…" : insight ? "↻ Regenerate" : "Generate"}
+            <Button variant="ai" onClick={onGenerate} disabled={generating || loading}>
+              {generating ? (
+                "Generating…"
+              ) : (
+                <>
+                  <SparkleIcon />
+                  {insight ? "Regenerate" : "Generate"}
+                </>
+              )}
             </Button>
           </div>
         }

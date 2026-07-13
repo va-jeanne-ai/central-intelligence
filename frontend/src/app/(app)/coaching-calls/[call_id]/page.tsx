@@ -8,6 +8,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { showError, showWarning } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Breadcrumbs, resolveOrigin } from "@/components/ui/breadcrumbs";
+import { Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -494,14 +496,16 @@ export default function CallDetailPage({ params }: { params: { call_id: string }
             >
               Download transcript
             </button>
-            <button
-              type="button"
-              onClick={() => void handleReanalyze()}
-              disabled={isReanalyzing}
-              className="text-[13px] font-medium px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:bg-orange-200 disabled:cursor-not-allowed text-white transition-colors"
-            >
-              {isReanalyzing ? "Re-analyzing…" : "Re-analyze"}
-            </button>
+            <Button variant="ai" size="sm" onClick={() => void handleReanalyze()} disabled={isReanalyzing}>
+              {isReanalyzing ? (
+                "Re-analyzing…"
+              ) : (
+                <>
+                  <SparkleIcon />
+                  Re-analyze
+                </>
+              )}
+            </Button>
           </div>
         </div>
 

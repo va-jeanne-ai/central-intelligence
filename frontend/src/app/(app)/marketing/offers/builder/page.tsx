@@ -7,6 +7,8 @@ import { apiClient } from "@/lib/api-client";
 import { showApiError, showSuccess } from "@/lib/toast";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import type { OfferGenerateResponse } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -331,12 +333,7 @@ function AiGeneratorPanel({ form }: AiPanelProps) {
         </div>
 
         {/* Generate button */}
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={isGenerating}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-200 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors duration-150 active:scale-95 shadow-sm"
-        >
+        <Button variant="ai" fullWidth onClick={handleGenerate} disabled={isGenerating}>
           {isGenerating ? (
             <>
               <Spinner />
@@ -344,11 +341,11 @@ function AiGeneratorPanel({ form }: AiPanelProps) {
             </>
           ) : (
             <>
-              <SparklesIcon className="w-4 h-4" />
+              <SparkleIcon />
               Generate with AI
             </>
           )}
-        </button>
+        </Button>
 
         {/* Result area */}
         {status === "loading" && (

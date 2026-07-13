@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { showApiError } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import { GeneratorHeader, GenerateButton, ResultsPanel } from "@/components/marketing/generator-layout";
 import type { SocialAnalyzeResponse } from "@/types";
 
@@ -77,13 +79,10 @@ function GeneratedScriptCard({
             >
               Copy Script
             </button>
-            <button
-              type="button"
-              onClick={onRegenerate}
-              className="text-xs font-medium px-3 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors duration-150"
-            >
+            <Button variant="ai" size="sm" onClick={onRegenerate}>
+              <SparkleIcon />
               Regenerate
-            </button>
+            </Button>
           </div>
         </div>
       </div>

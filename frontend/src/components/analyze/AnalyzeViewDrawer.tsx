@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { analyzeView, type AnalyzeViewResponse } from "@/lib/analyze-client";
-import { SparkleIcon } from "@/components/analyze/AnalyzeViewButton";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 
 interface AnalyzeViewDrawerProps {
   surface: string;
@@ -63,7 +63,8 @@ export function AnalyzeViewDrawer({ surface, params, open, onClose }: AnalyzeVie
             AI analysis
           </h2>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setRunKey((k) => k + 1)} disabled={loading}>
+            <Button variant="ai" size="sm" onClick={() => setRunKey((k) => k + 1)} disabled={loading}>
+              <SparkleIcon />
               Re-run
             </Button>
             <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
@@ -90,6 +91,8 @@ export function AnalyzeViewDrawer({ surface, params, open, onClose }: AnalyzeVie
             <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
               <div className="mt-2">
+                {/* Deliberately kept ghost, not ai — this button lives inside a red
+                    error box, and a gold gradient button would clash there. */}
                 <Button variant="ghost" size="sm" onClick={() => setRunKey((k) => k + 1)}>Retry</Button>
               </div>
             </div>
