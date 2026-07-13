@@ -12,6 +12,10 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from fastapi import HTTPException
+from sqlalchemy import func, or_, select
+
+from app.analytics.team import RepRow, call_owner_match_values
+from app.models.operational import Call, Lead
 
 # FROM clause the appointments WHERE parts are written against (aliases a/l/r).
 APPOINTMENTS_FROM_SQL = (
@@ -194,3 +198,67 @@ def build_team_where(
         where.append(f"LOWER({_EFF_STATUS}) = :status")
         params["status"] = status.lower()
     return " AND ".join(where), params
+
+
+# ── Calls ────────────────────────────────────────────────────────────────────
+
+
+def build_call_filters(
+    *,
+    call_type: str | None = None,
+    call_result: str | None = None,
+    call_owner: str | None = None,
+    source: str | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    rep: str | None = None,
+    roster: list[RepRow],
+) -> list:
+    """SQLAlchemy filter clauses for the calls list — apply with .where(*clauses)."""
+    clauses: list = []
+    if call_type:
+        types = [t.strip() for t in call_type.split(",") if t.strip()]
+        if types:
+            clauses.append(Call.call_type.in_(types))
+    if call_result:
+        results = [r.strip() for r in call_result.split(",") if r.strip()]
+        if len(results) == 1:
+            clauses.append(Call.call_result == results[0])
+        elif results:
+            clauses.append(Call.call_result.in_(results))
+    if call_owner:
+        clauses.append(Call.call_owner == call_owner)
+    if source:
+        clauses.append(Call.source == source)
+    if search:
+        like = f"%{search.strip()}%"
+        lead_match = select(Lead.id).where(
+            or_(Lead.name.ilike(like), Lead.email.ilike(like))
+        )
+        clauses.append(or_(
+            Call.id.ilike(like),
+            Call.call_owner.ilike(like),
+            Call.lead_id.in_(lead_match),
+        ))
+    if date_from:
+        clauses.append(Call.date >= datetime.fromisoformat(date_from))
+    if date_to:
+        clauses.append(Call.date <= datetime.fromisoformat(date_to))
+    if start:
+        clauses.append(Call.date >= datetime.fromisoformat(start))
+    if end:
+        end_dt = datetime.fromisoformat(end)
+        if len(end) <= 10:
+            end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+        clauses.append(Call.date <= end_dt)
+    if rep:
+        rep_row = next((r for r in roster if r.rep_id == rep), None)
+        if rep_row is None:
+            clauses.append(Call.id.is_(None))
+        else:
+            match_values = call_owner_match_values(rep_row)
+            clauses.append(func.lower(func.trim(Call.call_owner)).in_(match_values))
+    return clauses

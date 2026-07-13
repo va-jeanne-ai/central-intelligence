@@ -71,6 +71,24 @@ def is_active_rep(rep: RepRow) -> bool:
     return rep.status not in _EXCLUDED_STATUSES
 
 
+def call_owner_match_values(rep: RepRow) -> list[str]:
+    """Every raw ``call_owner`` string variant that should resolve to ``rep``.
+
+    Combines ``full_name`` with each comma-split ``historical_aliases`` entry
+    (title-cased back to a plausible display form, since aliases are stored
+    lowercase) so a SQL ``call_owner IN (...)`` (case-insensitive) filter can
+    match the messy variants WGR actually wrote ('Colton', 'Colton  Lindsay').
+    Pure — no DB access — so it's unit-testable against fixed rep rows.
+    """
+    values = {rep.full_name.strip().lower()}
+    if rep.historical_aliases:
+        for alias in rep.historical_aliases.split(","):
+            a = alias.strip().lower()
+            if a:
+                values.add(a)
+    return sorted(values)
+
+
 def validate_scope(scope: str) -> bool:
     """True if ``scope`` is a well-formed value for the ``scope`` query param —
     either the literal ``"global"`` or ``"rep:<anything non-empty>"``.
