@@ -43,8 +43,9 @@ def all_surfaces() -> list[Surface]:
 
 # Import for side effect: each module registers its Surface at import time.
 # These imports MUST stay at the bottom (they import this module back).
-# TODO(Task 7-8): add leads, team_members
+# TODO(Task 8): add team_members
 from app.analytics.view_analysis import (  # noqa: E402,F401
     appointments,
+    leads,
     sales_calls,
 )
