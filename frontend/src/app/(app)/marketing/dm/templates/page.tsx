@@ -8,6 +8,7 @@ import { showApiError } from "@/lib/toast";
 import { CopyButton, Button } from "@/components/ui/button";
 import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import { GeneratorHeader, GenerateButton, ResultsPanel } from "@/components/marketing/generator-layout";
+import { GeneratedOutput } from "@/components/marketing/generated-output";
 import type { DmAnalyzeResponse } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -83,17 +84,14 @@ function GeneratedTemplateCard({
           </div>
         </div>
 
-        <div className="px-5 py-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
+        <GeneratedOutput
+          markdown={result.analysis || "No sequence generated."}
+          heading={
             <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
               Outreach Plan
             </span>
-            <CopyButton text={result.analysis} label="Copy" />
-          </div>
-          <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
-            {result.analysis || "No sequence generated."}
-          </pre>
-        </div>
+          }
+        />
       </div>
 
       {/* sequence is a real field but currently always [] on the backend —

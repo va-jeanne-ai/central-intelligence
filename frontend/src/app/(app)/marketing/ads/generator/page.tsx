@@ -4,9 +4,10 @@ import { useState } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { showApiError } from "@/lib/toast";
-import { CopyButton, Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import { GeneratorHeader, GenerateButton, ResultsPanel } from "@/components/marketing/generator-layout";
+import { GeneratedOutput } from "@/components/marketing/generated-output";
 import type { AdsAnalyzeResponse } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -42,20 +43,17 @@ function AnalysisResultCard({ result }: { result: AdsAnalyzeResponse }) {
   return (
     <div className="flex flex-col gap-4 p-5">
       <div className="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-emerald-50">
-          <div className="flex items-center gap-2">
-            <span className="text-base" aria-hidden="true">
-              ✨
-            </span>
-            <h3 className="text-sm font-bold text-gray-900">Ad Copy Analysis</h3>
-          </div>
-          <CopyButton text={result.analysis} label="Copy" />
-        </div>
-        <div className="px-5 py-4">
-          <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
-            {result.analysis || "No analysis returned."}
-          </pre>
-        </div>
+        <GeneratedOutput
+          markdown={result.analysis || "No analysis returned."}
+          heading={
+            <div className="flex items-center gap-2">
+              <span className="text-base" aria-hidden="true">
+                ✨
+              </span>
+              <h3 className="text-sm font-bold text-gray-900">Ad Copy Analysis</h3>
+            </div>
+          }
+        />
       </div>
 
       {/* ad_copy is a real field but currently always "" on the backend —
