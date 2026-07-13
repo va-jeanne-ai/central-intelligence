@@ -7,6 +7,8 @@ import { TranscriptUploadWidget } from "@/components/upload/transcript-upload-wi
 import type { TranscriptUploadResult } from "@/components/upload/transcript-upload-widget";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Pagination } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagination } from "@/hooks/use-pagination";
@@ -410,6 +412,8 @@ export default function SalesCallsPage() {
   const [calls, setCalls] = useState<CallSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [analyzeOpen, setAnalyzeOpen] = useState(false);
+  const [analyzeParams, setAnalyzeParams] = useState<URLSearchParams | null>(null);
 
   const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
     usePagination("sales-calls");
@@ -499,6 +503,26 @@ export default function SalesCallsPage() {
       setIsLoading(false);
     }
   }, [selectedResults, resultOptions.length, page, pageSize, debouncedSearch, startDate, endDate, repFilter]);
+
+  // Mirrors the list-fetch params in `load` above, minus pagination/sort —
+  // snapshot for "Analyze this view". `call_type` is always pinned, matching load().
+  const openAnalyze = useCallback(() => {
+    const params = new URLSearchParams();
+    params.set("call_type", "Sales,Discovery,Outbound");
+    if (
+      selectedResults &&
+      selectedResults.size > 0 &&
+      selectedResults.size < resultOptions.length
+    ) {
+      params.set("call_result", Array.from(selectedResults).join(","));
+    }
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (startDate) params.set("start", startDate);
+    if (endDate) params.set("end", endDate);
+    if (repFilter !== "all") params.set("rep", repFilter);
+    setAnalyzeParams(params);
+    setAnalyzeOpen(true);
+  }, [selectedResults, resultOptions.length, debouncedSearch, startDate, endDate, repFilter]);
 
   useEffect(() => {
     if (authLoading || selectedResults === null) return;
@@ -639,6 +663,9 @@ export default function SalesCallsPage() {
                   className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-600"
                 />
               </div>
+              <Button variant="ghost" size="sm" onClick={openAnalyze}>
+                Analyze this view
+              </Button>
             </div>
             {/* Multi-select result filter — all on except "No Show" by default. */}
             {resultOptions.length > 0 && selectedResults && (
@@ -695,6 +722,13 @@ export default function SalesCallsPage() {
           )}
         </div>
       </main>
+
+      <AnalyzeViewDrawer
+        surface="sales_calls"
+        params={analyzeParams}
+        open={analyzeOpen}
+        onClose={() => setAnalyzeOpen(false)}
+      />
     </>
   );
 }

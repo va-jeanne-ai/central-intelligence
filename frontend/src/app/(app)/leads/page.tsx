@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
 import type { Lead, LeadStatus, LeadSource } from "@/types";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
@@ -887,6 +889,7 @@ function FilterBar({
   entryTo,
   onEntryToChange,
   onClear,
+  onAnalyze,
 }: {
   search: string;
   onSearchChange: (v: string) => void;
@@ -899,6 +902,7 @@ function FilterBar({
   entryTo: string;
   onEntryToChange: (v: string) => void;
   onClear: () => void;
+  onAnalyze: () => void;
 }) {
   const hasFilters =
     search !== "" ||
@@ -997,6 +1001,10 @@ function FilterBar({
           Clear filters
         </button>
       )}
+
+      <Button variant="ghost" size="sm" onClick={onAnalyze}>
+        Analyze this view
+      </Button>
     </div>
   );
 }
@@ -1123,6 +1131,8 @@ export default function LeadsPage() {
   // Column sort. Defaults match the API default (entry-date, newest first).
   const [sortBy, setSortBy] = useState<SortColumn>("entry_date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [analyzeOpen, setAnalyzeOpen] = useState(false);
+  const [analyzeParams, setAnalyzeParams] = useState<URLSearchParams | null>(null);
 
   // Pagination — page size persisted per surface in localStorage.
   const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
@@ -1236,6 +1246,19 @@ export default function LeadsPage() {
 
     return doFetch();
   }, [authLoading, statusFilter, sourceFilter, search, entryFrom, entryTo, sortBy, sortDir, page, pageSize]);
+
+  // Mirrors the list-fetch params in fetchLeads above, minus sort/pagination —
+  // snapshot for "Analyze this view".
+  const openAnalyze = () => {
+    const params = new URLSearchParams();
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (sourceFilter !== "all") params.set("source", sourceFilter);
+    if (search) params.set("search", search);
+    if (entryFrom) params.set("entry_from", entryFrom);
+    if (entryTo) params.set("entry_to", entryTo);
+    setAnalyzeParams(params);
+    setAnalyzeOpen(true);
+  };
 
   // When a filter/search/sort narrows the set, jump back to page 1 so the user
   // isn't stranded on a page that no longer exists.
@@ -1414,6 +1437,7 @@ export default function LeadsPage() {
                 entryTo={entryTo}
                 onEntryToChange={setEntryTo}
                 onClear={handleClearFilters}
+                onAnalyze={openAnalyze}
               />
             </div>
 
@@ -1497,6 +1521,13 @@ export default function LeadsPage() {
           </div>
         )}
       </main>
+
+      <AnalyzeViewDrawer
+        surface="leads"
+        params={analyzeParams}
+        open={analyzeOpen}
+        onClose={() => setAnalyzeOpen(false)}
+      />
     </>
   );
 }

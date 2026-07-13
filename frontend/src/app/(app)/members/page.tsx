@@ -6,6 +6,7 @@ import { Header } from "@/components/layout/header";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -160,6 +161,8 @@ export default function MembersPage() {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [analyzeOpen, setAnalyzeOpen] = useState(false);
+  const [analyzeParams, setAnalyzeParams] = useState<URLSearchParams | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 300);
@@ -197,6 +200,16 @@ export default function MembersPage() {
       setIsLoading(false);
     }
   }, [debounced, statusFilter]);
+
+  // Mirrors the list-fetch params in loadMembers above — snapshot for
+  // "Analyze this view". This page has no pagination/sort to strip.
+  const openAnalyze = () => {
+    const params = new URLSearchParams();
+    if (debounced) params.set("search", debounced);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    setAnalyzeParams(params);
+    setAnalyzeOpen(true);
+  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -240,6 +253,9 @@ export default function MembersPage() {
                 </option>
               ))}
             </select>
+            <Button variant="ghost" size="sm" onClick={openAnalyze}>
+              Analyze this view
+            </Button>
             <Button variant="primary" href="/fulfillment-director">
               + Ask Director
             </Button>
@@ -309,6 +325,13 @@ export default function MembersPage() {
           )}
         </div>
       </main>
+
+      <AnalyzeViewDrawer
+        surface="team"
+        params={analyzeParams}
+        open={analyzeOpen}
+        onClose={() => setAnalyzeOpen(false)}
+      />
     </>
   );
 }

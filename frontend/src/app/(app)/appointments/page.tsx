@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Button } from "@/components/ui/button";
 import { AppointmentsCalendarView } from "@/components/appointments/appointments-calendar-view";
+import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagination } from "@/hooks/use-pagination";
@@ -281,6 +282,8 @@ export default function AppointmentsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [analyzeOpen, setAnalyzeOpen] = useState(false);
+  const [analyzeParams, setAnalyzeParams] = useState<URLSearchParams | null>(null);
 
   // Pagination — page size persisted per surface in localStorage.
   const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
@@ -358,6 +361,19 @@ export default function AppointmentsPage() {
     }
     return doFetch();
   }, [authLoading, statusFilter, windowFilter, search, startDate, endDate, repFilter, refreshKey, page, pageSize]);
+
+  // Mirrors the list-fetch params above, minus pagination — snapshot for "Analyze this view".
+  const openAnalyze = () => {
+    const params = new URLSearchParams();
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (windowFilter !== "all") params.set("window", windowFilter);
+    if (search) params.set("search", search);
+    if (startDate) params.set("start", startDate);
+    if (endDate) params.set("end", endDate);
+    if (repFilter !== "all") params.set("rep", repFilter);
+    setAnalyzeParams(params);
+    setAnalyzeOpen(true);
+  };
 
   // When a filter/search narrows the set, jump back to page 1 so the user
   // isn't stranded on a page that no longer exists.
@@ -496,6 +512,9 @@ export default function AppointmentsPage() {
                 className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-600"
               />
             </div>
+            <Button variant="ghost" size="sm" onClick={openAnalyze}>
+              Analyze this view
+            </Button>
           </div>
 
           {viewMode === "list" ? (
@@ -549,6 +568,13 @@ export default function AppointmentsPage() {
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
         onCreated={() => setRefreshKey((k) => k + 1)}
+      />
+
+      <AnalyzeViewDrawer
+        surface="appointments"
+        params={analyzeParams}
+        open={analyzeOpen}
+        onClose={() => setAnalyzeOpen(false)}
       />
     </>
   );
