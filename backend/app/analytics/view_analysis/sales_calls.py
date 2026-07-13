@@ -112,7 +112,7 @@ async def _aggregate(session: AsyncSession, f: dict) -> dict:
         },
         "series": series,
         "extras": {
-            "avg_duration_minutes": round(float(avg_duration), 1) if avg_duration else None,
+            "avg_duration_minutes": round(float(avg_duration), 1) if avg_duration is not None else None,
         },
     }
 

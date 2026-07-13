@@ -20,14 +20,15 @@ Each click runs one real Claude call (`claude-sonnet-4-6`); nothing is saved —
 ephemeral. Zero-result filters short-circuit without an LLM call and show "No data in this view".
 Backend returns 503 when `ANTHROPIC_API_KEY` is missing or the LLM is unavailable.
 
-- **Backend POST /api/v1/analyze/{surface}** — accepts `Surface` dataclass (status/rep/date-range
-  filters as-applicable per surface) and returns `AnalyzeViewResponse` with `narrative`,
-  `aggregates` dict, and `error_state` flag. Four aggregators (appointments, sales_calls,
-  leads, members) pre-compute tables, counts, and breakdowns for each surface. Shared
-  `view_analysis` registry maps surface name → aggregator class.
-- **Frontend AnalyzeViewDrawer** — responsive drawer (`xl:w-3/5 max-w-3xl`) with header showing
-  item count, loading skeleton during analysis, error state with Retry, and narrative + data
-  sections. Re-run button produces a fresh analysis. Close clears the drawer state (ephemeral).
+- **Backend POST /api/v1/analyze/{surface}** — accepts the same filter query params as that
+  surface's list endpoint (pagination/sort params are ignored) and returns `AnalyzeViewResponse`
+  with `surface`, `label`, `filters_echo`, `row_count`, `empty`, `stats`, `narrative`,
+  `highlights`, `hypotheses`, `generated_at`, and `model`. Four aggregators (appointments,
+  sales_calls, leads, members) pre-compute tables, counts, and breakdowns for each surface.
+  Shared `view_analysis` registry maps surface name → aggregator class.
+- **Frontend AnalyzeViewDrawer** — right-side drawer with header showing item count, loading
+  skeleton during analysis, error state with Retry, and narrative + data sections. Re-run
+  button produces a fresh analysis. Close clears the drawer state (ephemeral).
 - **UI: Filter bar buttons** — one "Analyze this view" button per page's filter bar
   (Appointments, Sales Calls, Leads, Members). Wired to extract current filters, POST, and
   render the drawer.
