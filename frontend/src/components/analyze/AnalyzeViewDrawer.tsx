@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { analyzeView, type AnalyzeViewResponse } from "@/lib/analyze-client";
+import { SparkleIcon } from "@/components/analyze/AnalyzeViewButton";
 
 interface AnalyzeViewDrawerProps {
   surface: string;
@@ -57,7 +58,10 @@ export function AnalyzeViewDrawer({ surface, params, open, onClose }: AnalyzeVie
         aria-label="View analysis"
       >
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-          <h2 className="text-sm font-semibold text-gray-900">Analyze this view</h2>
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+            <SparkleIcon className="h-3.5 w-3.5 text-accent-500" />
+            AI analysis
+          </h2>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => setRunKey((k) => k + 1)} disabled={loading}>
               Re-run

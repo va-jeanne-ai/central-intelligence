@@ -8,7 +8,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added — Analyze this view (POST /api/v1/analyze/{surface} + four-surface drawer)
 
-The Appointments, Sales Calls, Leads, and Members pages each gain an "Analyze this view" button
+The Appointments, Sales Calls, Leads, and Members pages each gain a gold-gradient "Analyze with AI" button (sparkle icon, `ai` Button variant)
 in the filter bar. Clicking opens a drawer with an LLM-generated narrative grounded in
 server-computed aggregates of the currently filtered dataset. The narrative includes:
 - A filter echo (status, date range, rep, etc. as applicable)
@@ -29,7 +29,7 @@ Backend returns 503 when `ANTHROPIC_API_KEY` is missing or the LLM is unavailabl
 - **Frontend AnalyzeViewDrawer** — right-side drawer with header showing item count, loading
   skeleton during analysis, error state with Retry, and narrative + data sections. Re-run
   button produces a fresh analysis. Close clears the drawer state (ephemeral).
-- **UI: Filter bar buttons** — one "Analyze this view" button per page's filter bar
+- **UI: Filter bar buttons** — one shared `AnalyzeViewButton` ("Analyze with AI") per page's filter bar
   (Appointments, Sales Calls, Leads, Members). Wired to extract current filters, POST, and
   render the drawer.
 - **Cost note:** runs at-scale only when `ANTHROPIC_API_KEY` is set; missing key returns 503.

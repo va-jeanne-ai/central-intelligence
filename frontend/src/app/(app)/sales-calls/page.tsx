@@ -8,6 +8,7 @@ import type { TranscriptUploadResult } from "@/components/upload/transcript-uplo
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Pagination } from "@/components/ui";
 import { Button } from "@/components/ui/button";
+import { AnalyzeViewButton } from "@/components/analyze/AnalyzeViewButton";
 import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
@@ -663,9 +664,7 @@ export default function SalesCallsPage() {
                   className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-600"
                 />
               </div>
-              <Button variant="ghost" size="sm" onClick={openAnalyze}>
-                Analyze this view
-              </Button>
+              <AnalyzeViewButton onClick={openAnalyze} />
             </div>
             {/* Multi-select result filter — all on except "No Show" by default. */}
             {resultOptions.length > 0 && selectedResults && (

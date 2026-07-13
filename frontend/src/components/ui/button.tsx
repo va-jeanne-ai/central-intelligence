@@ -7,7 +7,7 @@
 
 import Link from "next/link";
 
-type ButtonVariant = "primary" | "ghost" | "danger";
+type ButtonVariant = "primary" | "ghost" | "danger" | "ai";
 
 interface ButtonBaseProps {
   variant?: ButtonVariant;
@@ -31,6 +31,12 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary: "bg-accent-500 hover:bg-accent-600 text-white border-transparent",
   ghost: "bg-transparent hover:bg-gray-100 text-gray-700 border-gray-200",
   danger: "bg-red-500 hover:bg-red-600 text-white border-transparent",
+  // AI actions — accent gradient + soft glow so AI-powered controls read as a
+  // distinct class of action. Rides the accent CSS vars, so re-theming keeps
+  // the association intact.
+  ai:
+    "bg-gradient-to-r from-accent-500 to-accent-400 hover:from-accent-600 hover:to-accent-500 " +
+    "text-white border-transparent shadow-[0_1px_10px_-2px_var(--accent-400)]",
 };
 
 const SIZE_CLASSES: Record<string, string> = {

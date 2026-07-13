@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { AnalyzeViewButton } from "@/components/analyze/AnalyzeViewButton";
 import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
 import type { Lead, LeadStatus, LeadSource } from "@/types";
 import { apiClient } from "@/lib/api-client";
@@ -1002,9 +1003,7 @@ function FilterBar({
         </button>
       )}
 
-      <Button variant="ghost" size="sm" onClick={onAnalyze}>
-        Analyze this view
-      </Button>
+      <AnalyzeViewButton onClick={onAnalyze} />
     </div>
   );
 }

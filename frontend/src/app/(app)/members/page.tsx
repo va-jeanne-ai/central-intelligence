@@ -6,6 +6,7 @@ import { Header } from "@/components/layout/header";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { AnalyzeViewButton } from "@/components/analyze/AnalyzeViewButton";
 import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
@@ -253,9 +254,7 @@ export default function MembersPage() {
                 </option>
               ))}
             </select>
-            <Button variant="ghost" size="sm" onClick={openAnalyze}>
-              Analyze this view
-            </Button>
+            <AnalyzeViewButton onClick={openAnalyze} />
             <Button variant="primary" href="/fulfillment-director">
               + Ask Director
             </Button>

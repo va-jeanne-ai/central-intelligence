@@ -1,7 +1,7 @@
 # Test Doc — "Analyze this view" (2026-07-13)
 
 > **Feature:** On Appointments, Sales Calls, Leads, and Members, an
-> "Analyze this view" button opens a drawer with an LLM narrative grounded in
+> gold "Analyze with AI" button (sparkle icon) opens an "AI analysis" drawer with an LLM narrative grounded in
 > server-computed aggregates of the currently filtered dataset. Ephemeral —
 > nothing is saved; one real LLM call per click.
 >
@@ -13,7 +13,7 @@
 
 ## T1 — Appointments
 - **Status:** ⬜ pending
-- **How to locate:** `/appointments` → "Analyze this view" button at the right end of the filter bar.
+- **How to locate:** `/appointments` → gold "Analyze with AI" button (sparkle icon) at the right end of the filter bar.
 - **Steps to test:**
   - [ ] Set a date range + a rep filter. Note the list's total count.
   - [ ] Click Analyze. Drawer header shows "Analyzing N appointments" — N equals the list total.
@@ -28,7 +28,7 @@
 
 ## T2 — Sales Calls
 - **Status:** ⬜ pending
-- **How to locate:** `/sales-calls` → "Analyze this view" in the filter bar.
+- **How to locate:** `/sales-calls` → gold "Analyze with AI" button in the filter bar.
 - **Steps to test:**
   - [ ] Pick a call-result subset + date range. List total = drawer N.
   - [ ] Narrative numbers all verifiable in the data section (incl. avg duration in Extras).
@@ -37,7 +37,7 @@
 
 ## T3 — Leads
 - **Status:** ⬜ pending
-- **How to locate:** `/leads` → "Analyze this view" in the filter bar.
+- **How to locate:** `/leads` → gold "Analyze with AI" button in the filter bar.
 - **Steps to test:**
   - [ ] Filter status = Applications + this week's entry dates. List total = drawer N.
   - [ ] Status breakdown uses DB vocabulary (qualified / appointment-set) — expected, noted in describe.
@@ -46,7 +46,7 @@
 
 ## T4 — Members (team)
 - **Status:** ⬜ pending
-- **How to locate:** `/members` → "Analyze this view" in the filter bar.
+- **How to locate:** `/members` → gold "Analyze with AI" button in the filter bar.
 - **Steps to test:**
   - [ ] Filter status = active. Drawer N = number of rows in the directory.
   - [ ] Extras shows total_calls and top 5 reps by calls — spot-check one rep's
