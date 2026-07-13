@@ -40,12 +40,11 @@ Tasks 1–3 extracted the WHERE-building logic from list endpoints into a shared
 module. All four list pages (Appointments, Sales Calls, Leads, Members) now use the same
 filter builder (`backend/app/repositories/list_filters.py`) to construct SQL constraints
 from incoming filter params. List endpoints refactored to call the shared builder; behavior
-verified identical via live parity checks (same record counts, same ordering, identical
-column selections). No user-facing changes — filtering behavior is unchanged.
+verified identical via live parity checks against the running stack (list totals compared
+before/after for each surface). No user-facing changes — filtering behavior is unchanged.
 
 - **`backend/app/repositories/list_filters.py`** — new shared filter builders:
-  `build_appointment_filters()`, `build_sales_call_filters()`, `build_lead_filters()`,
-  `build_member_filters()` (each returns a list of SQLAlchemy WHERE conditions).
+  `build_appointment_where`, `build_lead_where`, `build_team_where`, `build_call_filters`.
 - **`backend/app/routes/appointments.py`** — `GET /appointments` refactored to use the builder.
 - **`backend/app/routes/ci.py`** — `GET /ci/calls` refactored to use the builder.
 - **`backend/app/routes/leads.py`** — `GET /leads` refactored to use the builder.
