@@ -17,6 +17,7 @@ On any filtered list page, the user clicks **"Analyze this view"** and gets a na
 | UX shape | Inline drawer/panel on the page; no chat hand-off |
 | Persistence | Ephemeral — generated on demand, gone when closed; LLM is called only on explicit user click |
 | Verification | No seeded-data unit tests, no mock-mode test runs. Feature ships with a manual test document (FEATURE-VERIFICATION.md style); the user verifies personally against real data |
+| Mock mode | Ignored entirely in the new code — every analyze call is a real LLM call; missing API key → clear error, never a canned response (2026-07-13) |
 
 ## Architecture
 
@@ -63,7 +64,7 @@ Where per-surface stats code already exists (`compute_appointment_stats`, `sales
 
 ### Narrative step (shared)
 
-One function modeled directly on `analytics/overall_insight.py`: same sync Anthropic client pattern, same `extract_json_object` parsing, `settings.anthropic_model_default`. The existing `mock_mode` config is honored the same way `overall_insight` honors it (runtime safety against accidental paid calls in dev) — but it is not part of the testing strategy.
+One function modeled directly on `analytics/overall_insight.py`: same sync Anthropic client pattern, same `extract_json_object` parsing, `settings.anthropic_model_default`. Unlike `overall_insight`, this feature **ignores `mock_mode` entirely** — the project is past the UI-building stage and works with real data, so every analyze call is a real LLM call. If no Anthropic key is configured, the endpoint returns a clear error rather than a canned response.
 
 Prompt receives: surface name, human-readable echo of the active filters (e.g. "Sales calls, Mar 1–31, rep: Marco"), `row_count`, `describe()` text, and the aggregates JSON. Grounding rules in the system prompt:
 
