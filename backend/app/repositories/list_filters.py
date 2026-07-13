@@ -9,7 +9,7 @@ dataset the list shows — by construction, not by parallel maintenance.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import HTTPException
 
@@ -92,3 +92,105 @@ def build_appointment_where(
         params["rep_id"] = rep
 
     return " AND ".join(where_parts), params
+
+
+# ── Leads ────────────────────────────────────────────────────────────────────
+
+API_TO_DB_STATUSES: dict[str, list[str]] = {
+    # ← moved verbatim from app/routes/leads.py::_API_TO_DB_STATUSES,
+    #    including the "applications" composite entry and its comment
+    "appointment_set": ["appointment-set"],
+    "closed_won": ["sale"],
+    "closed_lost": ["lost"],
+    "new": ["new"],
+    "contacted": ["contacted"],
+    "qualified": ["qualified"],
+    "stale": ["stale"],
+    # Composite filter for the funnel's "Applications" stage — matches the
+    # funnel definition in sales_stats.py (qualified + appointment-set). The
+    # list endpoint already handles multi-value via an IN clause.
+    "applications": ["qualified", "appointment-set"],
+}
+
+
+def parse_plain_date(value: str | None) -> date | None:
+    """Parse a YYYY-MM-DD string to a date; return None for empty/invalid input.
+
+    Invalid dates are swallowed (not raised) so a half-typed date-range filter
+    degrades to "no filter" rather than 422-ing the whole list request.
+    """
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def build_lead_where(
+    *,
+    status: str | None = None,
+    source: str | None = None,
+    search: str | None = None,
+    entry_from: str | None = None,
+    entry_to: str | None = None,
+) -> tuple[str, dict]:
+    """(where_sql, params) for the leads list — FROM leads, unqualified columns."""
+    where_parts: list[str] = ["deleted_at IS NULL"]
+    params: dict[str, object] = {}
+
+    if status:
+        db_statuses = API_TO_DB_STATUSES.get(status.lower())
+        if db_statuses:
+            if len(db_statuses) == 1:
+                where_parts.append("LOWER(status) = :status_filter")
+                params["status_filter"] = db_statuses[0]
+            else:
+                placeholders = ", ".join(f":status_{i}" for i in range(len(db_statuses)))
+                where_parts.append(f"LOWER(status) IN ({placeholders})")
+                for i, s in enumerate(db_statuses):
+                    params[f"status_{i}"] = s
+        else:
+            where_parts.append("1 = 0")
+    if source:
+        where_parts.append("LOWER(source) = :source_filter")
+        params["source_filter"] = source.lower()
+    if search:
+        where_parts.append(
+            "(LOWER(name) LIKE :search_pattern OR LOWER(email) LIKE :search_pattern)"
+        )
+        params["search_pattern"] = f"%{search.lower()}%"
+    entry_lo = parse_plain_date(entry_from)
+    if entry_lo is not None:
+        where_parts.append("entry_date >= :entry_from")
+        params["entry_from"] = entry_lo
+    entry_hi = parse_plain_date(entry_to)
+    if entry_hi is not None:
+        where_parts.append("entry_date <= :entry_to")
+        params["entry_to"] = entry_hi
+
+    return " AND ".join(where_parts), params
+
+
+# ── Team directory (the /members page) ──────────────────────────────────────
+
+TEAM_FROM_SQL = "FROM sales_reps sr LEFT JOIN rep_overrides ro ON ro.rep_id = sr.rep_id"
+
+_EFF_NAME = "COALESCE(ro.full_name, sr.full_name)"
+_EFF_EMAIL = "COALESCE(ro.email, sr.email)"
+_EFF_STATUS = "COALESCE(ro.status, sr.status)"
+
+
+def build_team_where(
+    *, search: str | None = None, status: str | None = None
+) -> tuple[str, dict]:
+    """(where_sql, params) for the team directory — see TEAM_FROM_SQL."""
+    where = ["1 = 1"]
+    params: dict[str, object] = {}
+    if search:
+        where.append(f"({_EFF_NAME} ILIKE :q OR {_EFF_EMAIL} ILIKE :q)")
+        params["q"] = f"%{search.strip()}%"
+    if status and status != "all":
+        where.append(f"LOWER({_EFF_STATUS}) = :status")
+        params["status"] = status.lower()
+    return " AND ".join(where), params

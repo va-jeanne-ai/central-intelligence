@@ -27,6 +27,7 @@ from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.models.sales import RepOverride, SalesRep
 from app.repositories.fulfillment_stats import compute_member_stats
+from app.repositories.list_filters import TEAM_FROM_SQL, build_team_where
 from app.schemas.team import (
     CallHistoryRow,
     PerformanceBar,
@@ -279,36 +280,20 @@ async def team_directory(
     CI overrides (rep_overrides) win over the synced sales_reps values, so edits
     survive the WGR sync. Filters/search match the effective (coalesced) values.
     """
-    # Effective expressions: override → synced fallback.
-    eff_name = "COALESCE(ro.full_name, sr.full_name)"
-    eff_email = "COALESCE(ro.email, sr.email)"
-    eff_status = "COALESCE(ro.status, sr.status)"
-
-    where = ["1 = 1"]
-    params: dict[str, object] = {}
-    if search:
-        where.append(f"({eff_name} ILIKE :q OR {eff_email} ILIKE :q)")
-        params["q"] = f"%{search.strip()}%"
-    if status and status != "all":
-        where.append(f"LOWER({eff_status}) = :status")
-        params["status"] = status.lower()
-
-    # calls_count joins on the rep's full_name; the synced name is the canonical
-    # link to calls.call_owner, so use sr.full_name (not the override) here.
+    where_sql, params = build_team_where(search=search, status=status)
     rows = (await session.execute(text(
         f"""
         SELECT
             sr.rep_id,
-            {eff_name}  AS name,
-            {eff_email} AS email,
-            COALESCE(ro.role, sr.role)     AS role,
-            {eff_status} AS status,
+            COALESCE(ro.full_name, sr.full_name) AS name,
+            COALESCE(ro.email, sr.email)         AS email,
+            COALESCE(ro.role, sr.role)           AS role,
+            COALESCE(ro.status, sr.status)       AS status,
             sr.hired_at, sr.capabilities,
             (SELECT COUNT(*) FROM calls c
              WHERE c.deleted_at IS NULL AND c.call_owner = sr.full_name) AS calls_count
-        FROM sales_reps sr
-        LEFT JOIN rep_overrides ro ON ro.rep_id = sr.rep_id
-        WHERE {" AND ".join(where)}
+        {TEAM_FROM_SQL}
+        WHERE {where_sql}
         ORDER BY calls_count DESC, name ASC
         """
     ), params)).mappings().all()
