@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { AnalyzeViewButton } from "@/components/analyze/AnalyzeViewButton";
 import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
 import type { Lead, LeadStatus, LeadSource } from "@/types";
