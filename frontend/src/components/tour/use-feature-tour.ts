@@ -6,7 +6,7 @@
 // nothing to the main bundle until a tour actually runs.
 
 import { useCallback } from "react";
-import { showInfo } from "@/lib/toast";
+import { showInfo, showError } from "@/lib/toast";
 import { filterSteps } from "@/lib/tour-logic";
 import type { TourDef } from "@/lib/tours";
 
@@ -23,18 +23,24 @@ export function useFeatureTour() {
       );
       return;
     }
-    const { driver } = await import("driver.js");
-    driver({
-      showProgress: steps.length > 1,
-      popoverClass: "ci-tour-popover",
-      nextBtnText: "Next",
-      prevBtnText: "Back",
-      doneBtnText: "Done",
-      steps: steps.map((s) => ({
-        element: `[data-tour="${s.anchor}"]`,
-        popover: { title: s.title, description: s.body },
-      })),
-    }).drive();
+    try {
+      const { driver } = await import("driver.js");
+      driver({
+        showProgress: steps.length > 1,
+        popoverClass: "ci-tour-popover",
+        nextBtnText: "Next",
+        prevBtnText: "Back",
+        doneBtnText: "Done",
+        steps: steps.map((s) => ({
+          element: `[data-tour="${s.anchor}"]`,
+          popover: { title: s.title, description: s.body },
+        })),
+      }).drive();
+    } catch {
+      showError(
+        "Couldn't start the tour — please refresh the page and try again.",
+      );
+    }
   }, []);
 
   return { runTour };
