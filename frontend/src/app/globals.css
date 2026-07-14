@@ -1,3 +1,5 @@
+@import "driver.js/dist/driver.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -118,4 +120,35 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* ── What's-new tour popover (driver.js skin) ────────────────────────────── */
+.ci-tour-popover.driver-popover {
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  padding: 16px 18px;
+}
+.ci-tour-popover .driver-popover-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937; /* gray-800 */
+}
+.ci-tour-popover .driver-popover-description {
+  font-size: 13px;
+  color: #4b5563; /* gray-600 */
+}
+.ci-tour-popover .driver-popover-next-btn,
+.ci-tour-popover .driver-popover-prev-btn {
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: none;
+}
+.ci-tour-popover .driver-popover-next-btn {
+  background: #f59e0b; /* accent gold — AI/new-feature mark */
+  color: #ffffff;
+  border: none;
+}
+.ci-tour-popover .driver-popover-next-btn:hover {
+  background: #d97706;
 }
