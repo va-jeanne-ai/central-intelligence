@@ -49,10 +49,10 @@ export function GeneratedOutput({ markdown, heading }: GeneratedOutputProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div>
+    <div data-tour="generated-output">
       <div className="flex items-center justify-between gap-2 px-5 py-3 border-b border-gray-100 bg-gray-50/60">
         <div className="min-w-0">{heading}</div>
-        <div className="flex gap-1.5 flex-shrink-0">
+        <div className="flex gap-1.5 flex-shrink-0" data-tour="copy-actions">
           <CopyActionButton
             label="Copy text"
             getText={() => contentRef.current?.innerText ?? markdown}

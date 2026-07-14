@@ -6,6 +6,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — In-app "What's new" tour
+
+A "What's new in Central Intelligence" hub dialog auto-opens once per release
+(localStorage seen-key `ci.whatsnew.seen.2026-07`, gated on `TOURS_VERSION`)
+and lists the current batch of features, each with a "Show me" button.
+"Show me" navigates to the feature's page and runs a short driver.js
+spotlight tour: Analyze with AI (Leads/Appointments/Sales Calls/Members),
+marketing copy actions (formatted output + copy buttons), the calendar
+jump-to-date picker, and data freshness/sync-now on Integrations. Tours are
+relaunchable anytime from a sparkle button in the sidebar footer (next to
+Sign out). Steps anchor on `data-tour` attributes and skip gracefully — with
+an info toast — when their target UI isn't visible on the current page.
+
+Test doc: `docs/testing/2026-07-15-whats-new-tour-test.md`.
+
 ### Fixed — Insights page 500s disguised as CORS errors (Supabase pooler exhaustion)
 
 `/api/v1/analytics/metrics/*/history-asof` (and potentially any endpoint)

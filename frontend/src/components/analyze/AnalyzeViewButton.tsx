@@ -18,7 +18,13 @@ interface AnalyzeViewButtonProps {
 
 export function AnalyzeViewButton({ onClick }: AnalyzeViewButtonProps) {
   return (
-    <Button variant="ai" size="sm" onClick={onClick} title="AI analysis of the currently filtered list">
+    <Button
+      variant="ai"
+      size="sm"
+      onClick={onClick}
+      data-tour="analyze-button"
+      title="AI analysis of the currently filtered list"
+    >
       <SparkleIcon />
       Analyze with AI
     </Button>
