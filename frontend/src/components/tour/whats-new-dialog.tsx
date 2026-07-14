@@ -1,24 +1,23 @@
 "use client";
 
-// "What's new" hub: lists the current release's features; "Show me"
-// navigates to the feature's page and hands the tour id to TourProvider via
-// sessionStorage (no cross-page tour choreography). Custom modal per the
-// project's no-native-dialogs rule; ESC and backdrop-click close it.
+// "What's new" hub: lists the current release's features; "Show me" hands
+// the tour id to TourProvider via onShowMe, which closes this dialog and
+// either starts the tour directly (already on its page) or navigates and
+// hands off via sessionStorage. Custom modal per the project's
+// no-native-dialogs rule; ESC and backdrop-click close it.
 
 import { useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SparkleIcon } from "@/components/ui/sparkle-icon";
-import { PENDING_TOUR_KEY } from "@/lib/tour-logic";
-import { TOURS, type TourDef } from "@/lib/tours";
+import { TOURS } from "@/lib/tours";
 
 interface WhatsNewDialogProps {
   open: boolean;
   onClose: () => void;
+  onShowMe: (id: string) => void;
 }
 
-export function WhatsNewDialog({ open, onClose }: WhatsNewDialogProps) {
-  const router = useRouter();
+export function WhatsNewDialog({ open, onClose, onShowMe }: WhatsNewDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // Focus trap + ESC key handler
@@ -81,12 +80,6 @@ export function WhatsNewDialog({ open, onClose }: WhatsNewDialogProps) {
 
   if (!open) return null;
 
-  const startTour = (tour: TourDef) => {
-    sessionStorage.setItem(PENDING_TOUR_KEY, tour.id);
-    router.push(tour.route);
-    onClose();
-  };
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -123,7 +116,11 @@ export function WhatsNewDialog({ open, onClose }: WhatsNewDialogProps) {
                   {tour.blurb}
                 </div>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => startTour(tour)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onShowMe(tour.id)}
+              >
                 Show me
               </Button>
             </li>
