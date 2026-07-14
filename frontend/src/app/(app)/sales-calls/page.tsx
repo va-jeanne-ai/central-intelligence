@@ -7,7 +7,6 @@ import { TranscriptUploadWidget } from "@/components/upload/transcript-upload-wi
 import type { TranscriptUploadResult } from "@/components/upload/transcript-upload-widget";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Pagination } from "@/components/ui";
-import { Button } from "@/components/ui/button";
 import { AnalyzeViewButton } from "@/components/analyze/AnalyzeViewButton";
 import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
 import { apiClient } from "@/lib/api-client";
