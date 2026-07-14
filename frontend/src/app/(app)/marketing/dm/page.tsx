@@ -10,6 +10,7 @@ import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { PlatformTag } from "@/components/ui/platform-tag";
 import { CopyButton, Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import { FormField, FormInput, FormSelect } from "@/components/ui/form-field";
 import { HistoryItem, HistoryList } from "@/components/ui/history-item";
 import type { DmData } from "@/types";
@@ -259,7 +260,8 @@ function AiTemplateGeneratorCard() {
           </FormSelect>
         </FormField>
 
-        <Button variant="primary" fullWidth onClick={handleGenerate} className="mt-1">
+        <Button variant="ai" fullWidth onClick={handleGenerate} className="mt-1">
+          <SparkleIcon />
           Generate Template with AI
         </Button>
 
@@ -274,7 +276,8 @@ function AiTemplateGeneratorCard() {
               <Button variant="primary" fullWidth className="text-xs py-1.5">
                 Save as Template
               </Button>
-              <Button variant="ghost" fullWidth onClick={handleGenerate} className="text-xs py-1.5">
+              <Button variant="ai" fullWidth onClick={handleGenerate} className="text-xs py-1.5">
+                <SparkleIcon />
                 Regenerate
               </Button>
             </div>

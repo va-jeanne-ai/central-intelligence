@@ -16,8 +16,8 @@ suite's existing convention (tests/test_wgr_mapping.py, tests/test_analytics_tea
 
 from __future__ import annotations
 
-from app.analytics.team import RepRow
-from app.routes.ci import call_owner_match_values, resolve_call_owner
+from app.analytics.team import RepRow, call_owner_match_values
+from app.routes.ci import resolve_call_owner
 
 _failures: list[str] = []
 

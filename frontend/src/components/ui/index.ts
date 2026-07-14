@@ -11,6 +11,7 @@ export { StatusBadge } from "./status-badge";
 export { PlatformTag } from "./platform-tag";
 export { ScoreBar } from "./score-bar";
 export { Button, CopyButton } from "./button";
+export { SparkleIcon } from "./sparkle-icon";
 export { FormField, FormInput, FormSelect, FormTextarea } from "./form-field";
 
 // ─── Molecules ───────────────────────────────────────────────────────────────

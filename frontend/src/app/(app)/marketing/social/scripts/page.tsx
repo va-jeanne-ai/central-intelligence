@@ -4,7 +4,10 @@ import { useState } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { showApiError } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import { GeneratorHeader, GenerateButton, ResultsPanel } from "@/components/marketing/generator-layout";
+import { GeneratedOutput } from "@/components/marketing/generated-output";
 import type { SocialAnalyzeResponse } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -60,31 +63,21 @@ function GeneratedScriptCard({
             </span>
           </div>
         </div>
-        <div className="px-5 py-4">
-          {meta.topic !== "" && (
-            <p className="text-xs text-gray-400 mb-3">
-              Topic: <span className="font-medium text-gray-600">{meta.topic}</span>
-            </p>
-          )}
-          <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
-            {meta.script}
-          </pre>
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={() => void navigator.clipboard.writeText(meta.script)}
-              className="text-xs font-medium px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors duration-150"
-            >
-              Copy Script
-            </button>
-            <button
-              type="button"
-              onClick={onRegenerate}
-              className="text-xs font-medium px-3 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors duration-150"
-            >
-              Regenerate
-            </button>
-          </div>
+        <GeneratedOutput
+          markdown={meta.script}
+          heading={
+            meta.topic !== "" ? (
+              <p className="text-xs text-gray-400 truncate">
+                Topic: <span className="font-medium text-gray-600">{meta.topic}</span>
+              </p>
+            ) : undefined
+          }
+        />
+        <div className="px-5 pb-4">
+          <Button variant="ai" size="sm" onClick={onRegenerate}>
+            <SparkleIcon />
+            Regenerate
+          </Button>
         </div>
       </div>
     </div>
@@ -116,7 +109,9 @@ export default function SocialScriptsPage() {
           platform: form.platform.toLowerCase(),
           brand_voice: form.brandVoice.toLowerCase(),
         },
-        { silent: true },
+        // Director → specialist agent chains run 30s+; the default 30s
+        // timeout aborts right as the script lands (see analyze drawer).
+        { silent: true, timeout: 120_000 },
       );
 
       // Backend currently echoes the same text into both `analysis` and

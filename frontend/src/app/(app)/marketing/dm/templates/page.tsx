@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { showApiError } from "@/lib/toast";
-import { CopyButton } from "@/components/ui/button";
+import { CopyButton, Button } from "@/components/ui/button";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import { GeneratorHeader, GenerateButton, ResultsPanel } from "@/components/marketing/generator-layout";
+import { GeneratedOutput } from "@/components/marketing/generated-output";
 import type { DmAnalyzeResponse } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -82,17 +84,14 @@ function GeneratedTemplateCard({
           </div>
         </div>
 
-        <div className="px-5 py-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
+        <GeneratedOutput
+          markdown={result.analysis || "No sequence generated."}
+          heading={
             <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
               Outreach Plan
             </span>
-            <CopyButton text={result.analysis} label="Copy" />
-          </div>
-          <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
-            {result.analysis || "No sequence generated."}
-          </pre>
-        </div>
+          }
+        />
       </div>
 
       {/* sequence is a real field but currently always [] on the backend —
@@ -136,13 +135,10 @@ function GeneratedTemplateCard({
       )}
 
       <div className="pt-1">
-        <button
-          type="button"
-          onClick={onRegenerate}
-          className="text-xs font-medium px-3 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors duration-150"
-        >
+        <Button variant="ai" size="sm" onClick={onRegenerate}>
+          <SparkleIcon />
           Regenerate
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -177,7 +173,9 @@ export default function DmTemplatesPage() {
           tone: form.tone.toLowerCase(),
           context: form.context,
         },
-        { silent: true },
+        // Director → specialist agent chains run 30s+; the default 30s
+        // timeout aborts right as the script lands (see analyze drawer).
+        { silent: true, timeout: 120_000 },
       );
 
       setResultMeta({

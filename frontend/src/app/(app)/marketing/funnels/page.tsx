@@ -7,7 +7,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard, KpiRow } from "@/components/ui/kpi-card";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 
 // ─── API response types ──────────────────────────────────────────────────────
 
@@ -81,39 +80,6 @@ const STAGE_COLORS = [
   { bgClass: "bg-emerald-300", textClass: "text-emerald-900" },
   { bgClass: "bg-emerald-500", textClass: "text-white" },
   { bgClass: "bg-emerald-700", textClass: "text-white" },
-];
-
-// ─── AI suggestion data ───────────────────────────────────────────────────────
-
-interface AiSuggestion {
-  dotClass: string;
-  title: string;
-  description: string;
-  estimatedImpact: string;
-}
-
-const AI_SUGGESTIONS: AiSuggestion[] = [
-  {
-    dotClass: "bg-accent-400",
-    title: "Optimize Consideration Stage",
-    description:
-      "High drop-off detected at the Consideration stage. Review messaging clarity and add social proof to reduce friction.",
-    estimatedImpact: "—",
-  },
-  {
-    dotClass: "bg-blue-400",
-    title: "Improve Interest Conversion",
-    description:
-      "Leads stalling at Interest may benefit from targeted nurture sequences and clearer value proposition content.",
-    estimatedImpact: "—",
-  },
-  {
-    dotClass: "bg-emerald-500",
-    title: "Strengthen Awareness Reach",
-    description:
-      "Broadening top-of-funnel reach through paid channels could increase total lead volume entering the funnel.",
-    estimatedImpact: "—",
-  },
 ];
 
 // ─── Stale data indicator ─────────────────────────────────────────────────────
@@ -320,48 +286,6 @@ function FunnelPerformanceCard({ stages }: { stages: FunnelStageStats[] }) {
   );
 }
 
-// ─── AI optimization suggestions card ────────────────────────────────────────
-
-function AiOptimizationCard() {
-  return (
-    <Card>
-      <CardHeader
-        title="AI Optimization Suggestions"
-        action={<span className="text-xs text-gray-400">3 recommendations</span>}
-      />
-      <CardBody noPadding>
-        <div className="divide-y divide-gray-100">
-          {AI_SUGGESTIONS.map((suggestion) => (
-            <div key={suggestion.title} className="px-5 py-4 flex items-start gap-3">
-              <span
-                className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${suggestion.dotClass}`}
-                aria-hidden="true"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900">
-                  {suggestion.title}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                  {suggestion.description}
-                </p>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mt-1.5">
-                  Est. Impact:{" "}
-                  <span className="tabular-nums">{suggestion.estimatedImpact}</span>
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="px-5 py-4 border-t border-gray-100 bg-emerald-50">
-          <Button variant="primary" href="#">
-            Generate Analysis
-          </Button>
-        </div>
-      </CardBody>
-    </Card>
-  );
-}
-
 // ─── Loading skeleton ─────────────────────────────────────────────────────────
 
 function FunnelsPageSkeleton() {
@@ -386,36 +310,16 @@ function FunnelsPageSkeleton() {
         ))}
       </div>
 
-      {/* Funnel visualization + AI suggestions skeleton */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-3 w-32" />
-          </div>
-          <div className="px-5 py-6 flex flex-col items-center gap-2">
-            {[100, 80, 60, 40, 20].map((w) => (
-              <Skeleton key={w} className="h-9 rounded-lg" style={{ width: `${w}%` }} />
-            ))}
-          </div>
+      {/* Funnel visualization skeleton */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-3 w-32" />
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <Skeleton className="h-4 w-44" />
-            <Skeleton className="h-3 w-28" />
-          </div>
-          <div className="divide-y divide-gray-100">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="px-5 py-4 flex items-start gap-3">
-                <Skeleton className="w-2 h-2 rounded-full mt-1.5" />
-                <div className="flex-1 space-y-1.5">
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="h-3 w-full" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="px-5 py-6 flex flex-col items-center gap-2">
+          {[100, 80, 60, 40, 20].map((w) => (
+            <Skeleton key={w} className="h-9 rounded-lg" style={{ width: `${w}%` }} />
+          ))}
         </div>
       </div>
 
@@ -501,8 +405,7 @@ export default function FunnelsPage() {
           <div>
             <h1 className="text-xl font-bold text-gray-900">Funnels</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Funnel stage metrics, conversion rates, and AI-driven optimization
-              recommendations.
+              Funnel stage metrics, conversion rates, and stage-by-stage drop-off.
             </p>
           </div>
           <div className="flex items-center gap-4 flex-shrink-0 mt-1">
@@ -534,10 +437,7 @@ export default function FunnelsPage() {
         </section>
 
         {/* Row 2: Funnel visualization + AI suggestions */}
-        <div className="grid grid-cols-2 gap-4">
-          <FunnelVisualizationCard stages={activeStages} />
-          <AiOptimizationCard />
-        </div>
+        <FunnelVisualizationCard stages={activeStages} />
 
         {/* Row 3: Funnel performance table */}
         <FunnelPerformanceCard stages={activeStages} />

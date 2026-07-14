@@ -110,6 +110,7 @@ def create_app() -> FastAPI:
     from app.routes.webhooks import router as webhooks_router
     from app.routes.chat_sessions import router as chat_sessions_router
     from app.routes.calendar import router as calendar_router
+    from app.routes.analyze import router as analyze_router
 
     # Health check under /api/v1 (prefix applied here).
     app.include_router(health_router, prefix="/api/v1")
@@ -131,6 +132,10 @@ def create_app() -> FastAPI:
     # Resolves to:  GET /api/v1/sales/summary
     app.include_router(sales_router, prefix="/api/v1")
     app.include_router(analytics_router, prefix="/api/v1")
+
+    # Analyze endpoints under /api/v1 (prefix applied here).
+    # Resolves to:  POST /api/v1/analyze/{surface_key}
+    app.include_router(analyze_router, prefix="/api/v1")
 
     # Fulfillment endpoints under /api/v1 (prefix applied here).
     # Resolves to:  GET /api/v1/fulfillment/summary  and  /api/v1/members/*

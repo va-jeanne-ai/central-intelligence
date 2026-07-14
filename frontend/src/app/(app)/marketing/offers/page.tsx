@@ -71,7 +71,8 @@ function OfferCard({ offer }: { offer: OfferItem }) {
             <StatusBadge status={status} />
           </div>
           <span className={`text-lg font-bold tabular-nums flex-shrink-0 ${priceColor}`}>
-            ${offer.price.toLocaleString()}
+            {/* price is null for custom-priced offers (e.g. "… - Custom" synced from WGR) */}
+            {offer.price != null ? `$${offer.price.toLocaleString()}` : "Custom"}
           </span>
         </div>
 
@@ -309,7 +310,7 @@ export default function OffersPage() {
               <CardBody className="flex flex-col gap-4">
                 {filteredOffers.length > 0 ? (
                   filteredOffers.map((offer) => (
-                    <OfferCard key={offer.id} offer={offer} />
+                    <OfferCard key={offer.offer_id} offer={offer} />
                   ))
                 ) : (
                   <p className="text-sm text-gray-400 text-center py-8">

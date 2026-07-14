@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
+from app.repositories.list_filters import API_TO_DB_STATUSES, build_lead_where
 from app.repositories.sales_stats import compute_lead_stats
 from app.schemas.appointments import AppointmentRecord, LeadAppointmentsResponse
 from app.schemas.leads import (
@@ -140,19 +141,6 @@ def _float(value: object) -> float:
         return 0.0
 
 
-def _parse_date(value: str | None) -> date | None:
-    """Parse a YYYY-MM-DD string to a date; return None for empty/invalid input.
-
-    Invalid dates are swallowed (not raised) so a half-typed date-range filter
-    degrades to "no filter" rather than 422-ing the whole list request."""
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value.strip())
-    except (TypeError, ValueError):
-        return None
-
-
 def _map_status(db_status: str | None) -> str | None:
     """Convert a raw DB status to the API vocabulary."""
     if db_status is None:
@@ -175,27 +163,6 @@ def _week_label(weeks_ago: int) -> str:
     if weeks_ago == 0:
         return "Now"
     return f"Wk {8 - weeks_ago}"
-
-
-# ---------------------------------------------------------------------------
-# DB-status filter helpers
-# ---------------------------------------------------------------------------
-# When the caller supplies a frontend-vocabulary status filter we must
-# translate it back to all possible DB values before building the SQL.
-
-_API_TO_DB_STATUSES: dict[str, list[str]] = {
-    "appointment_set": ["appointment-set"],
-    "closed_won": ["sale"],
-    "closed_lost": ["lost"],
-    "new": ["new"],
-    "contacted": ["contacted"],
-    "qualified": ["qualified"],
-    "stale": ["stale"],
-    # Composite filter for the funnel's "Applications" stage — matches the
-    # funnel definition in sales_stats.py (qualified + appointment-set). The
-    # list endpoint already handles multi-value via an IN clause.
-    "applications": ["qualified", "appointment-set"],
-}
 
 
 # ---------------------------------------------------------------------------
@@ -239,48 +206,10 @@ async def list_leads(
         sort_dir = "desc"
 
     # ---- Build WHERE clauses ------------------------------------------------
-    where_parts: list[str] = ["deleted_at IS NULL"]
-    params: dict[str, object] = {}
-
-    if status:
-        db_statuses = _API_TO_DB_STATUSES.get(status.lower())
-        if db_statuses:
-            if len(db_statuses) == 1:
-                where_parts.append("LOWER(status) = :status_filter")
-                params["status_filter"] = db_statuses[0]
-            else:
-                placeholders = ", ".join(
-                    f":status_{i}" for i in range(len(db_statuses))
-                )
-                where_parts.append(f"LOWER(status) IN ({placeholders})")
-                for i, s in enumerate(db_statuses):
-                    params[f"status_{i}"] = s
-        else:
-            # Unknown status — return empty result set.
-            where_parts.append("1 = 0")
-
-    if source:
-        where_parts.append("LOWER(source) = :source_filter")
-        params["source_filter"] = source.lower()
-
-    if search:
-        where_parts.append(
-            "(LOWER(name) LIKE :search_pattern OR LOWER(email) LIKE :search_pattern)"
-        )
-        params["search_pattern"] = f"%{search.lower()}%"
-
-    # Date-range filter on the upstream funnel-entry date. Invalid dates are
-    # ignored rather than erroring, so a half-typed range never breaks the list.
-    entry_lo = _parse_date(entry_from)
-    if entry_lo is not None:
-        where_parts.append("entry_date >= :entry_from")
-        params["entry_from"] = entry_lo
-    entry_hi = _parse_date(entry_to)
-    if entry_hi is not None:
-        where_parts.append("entry_date <= :entry_to")
-        params["entry_to"] = entry_hi
-
-    where_sql = " AND ".join(where_parts)
+    where_sql, params = build_lead_where(
+        status=status, source=source, search=search,
+        entry_from=entry_from, entry_to=entry_to,
+    )
 
     # ---- COUNT total matching rows ------------------------------------------
     count_sql = text(f"SELECT COUNT(*) FROM leads WHERE {where_sql}")  # noqa: S608
@@ -1249,7 +1178,7 @@ async def update_lead(
     Uses ``model_dump(exclude_unset=True)`` so absent fields stay
     untouched. Status arrives in API vocabulary ("appointment_set") and
     is translated to the DB form ("appointment-set") via
-    ``_API_TO_DB_STATUSES``. None of the current API statuses map to
+    ``API_TO_DB_STATUSES``. None of the current API statuses map to
     multiple DB values, but we assert that defensively.
 
     Emits one ``lead.<field>_changed`` audit event per field that actually
@@ -1267,7 +1196,7 @@ async def update_lead(
     api_status_after: str | None = None
     if "status" in updates:
         api_status_after = (updates.pop("status") or "").lower()
-        db_statuses = _API_TO_DB_STATUSES.get(api_status_after)
+        db_statuses = API_TO_DB_STATUSES.get(api_status_after)
         if not db_statuses:
             raise HTTPException(
                 status_code=400,

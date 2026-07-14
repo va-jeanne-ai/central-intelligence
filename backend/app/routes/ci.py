@@ -17,7 +17,7 @@ from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.analytics.team import RepRow, resolve_rep
+from app.analytics.team import RepRow, call_owner_match_values, resolve_rep
 from app.database import get_session
 from app.models.intelligence import (
     InsightTag,
@@ -43,6 +43,7 @@ from app.repositories.intelligence import (
     OfferRepository,
     TagDictionaryRepository,
 )
+from app.repositories.list_filters import build_call_filters
 from app.repositories.operational import (
     CallRepository,
     ContentIdeaRepository,
@@ -281,24 +282,6 @@ def _excerpt(transcript: str | None) -> str | None:
     return text_[:_EXCERPT_LEN] + ("…" if len(text_) > _EXCERPT_LEN else "")
 
 
-def call_owner_match_values(rep: RepRow) -> list[str]:
-    """Every raw ``call_owner`` string variant that should resolve to ``rep``.
-
-    Combines ``full_name`` with each comma-split ``historical_aliases`` entry
-    (title-cased back to a plausible display form, since aliases are stored
-    lowercase) so a SQL ``call_owner IN (...)`` (case-insensitive) filter can
-    match the messy variants WGR actually wrote ('Colton', 'Colton  Lindsay').
-    Pure — no DB access — so it's unit-testable against fixed rep rows.
-    """
-    values = {rep.full_name.strip().lower()}
-    if rep.historical_aliases:
-        for alias in rep.historical_aliases.split(","):
-            a = alias.strip().lower()
-            if a:
-                values.add(a)
-    return sorted(values)
-
-
 def resolve_call_owner(call_owner: str | None, roster: list[RepRow]) -> RepRow | None:
     """Resolve a raw ``calls.call_owner`` display string against the roster.
 
@@ -449,14 +432,6 @@ async def list_calls(
     session: AsyncSession = Depends(get_session),
 ):
     """List processed calls with filters + sort (CI-MKT-01)."""
-    stmt = select(Call)
-    count_stmt = select(func.count()).select_from(Call)
-
-    def _both(clause):
-        nonlocal stmt, count_stmt
-        stmt = stmt.where(clause)
-        count_stmt = count_stmt.where(clause)
-
     # Full roster fetched once — used both for the optional `rep` filter and to
     # resolve each returned row's call_owner → rep_id/rep_name (avoids N+1).
     roster_rows = (await session.execute(
@@ -468,59 +443,13 @@ async def list_calls(
         for r in roster_rows
     ]
 
-    if call_type:
-        types = [t.strip() for t in call_type.split(",") if t.strip()]
-        if types:
-            _both(Call.call_type.in_(types))
-    if call_result:
-        # Accept a single value or a comma-separated list (multi-select on the
-        # Sales Calls page) — matches any of the given results.
-        results = [r.strip() for r in call_result.split(",") if r.strip()]
-        if len(results) == 1:
-            _both(Call.call_result == results[0])
-        elif results:
-            _both(Call.call_result.in_(results))
-    if call_owner:
-        _both(Call.call_owner == call_owner)
-    if source:
-        _both(Call.source == source)
-    if search:
-        like = f"%{search.strip()}%"
-        # Match the call id, the rep (call_owner), OR the linked lead (the
-        # prospect) by name/email — the card leads with the prospect, so people
-        # search by who they talked to. Lead match via a subquery on lead ids.
-        lead_match = select(Lead.id).where(
-            or_(Lead.name.ilike(like), Lead.email.ilike(like))
-        )
-        _both(or_(
-            Call.id.ilike(like),
-            Call.call_owner.ilike(like),
-            Call.lead_id.in_(lead_match),
-        ))
-    if date_from:
-        _both(Call.date >= datetime.fromisoformat(date_from))
-    if date_to:
-        _both(Call.date <= datetime.fromisoformat(date_to))
-    if start:
-        _both(Call.date >= datetime.fromisoformat(start))
-    if end:
-        # Bare 'YYYY-MM-DD' (native <input type="date">) needs its end boundary
-        # pushed to the end of that day, else "end=2026-06-30" excludes every
-        # call that happened during the 30th (midnight-only comparison).
-        end_dt = datetime.fromisoformat(end)
-        if len(end) <= 10:
-            end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-        _both(Call.date <= end_dt)
-    if rep:
-        rep_row = next((r for r in roster if r.rep_id == rep), None)
-        if rep_row is None:
-            # Unknown rep_id — no calls can match; short-circuit to an empty
-            # page rather than erroring (mirrors the appointments rep filter,
-            # which is similarly permissive of an unresolvable rep_id).
-            _both(Call.id.is_(None))
-        else:
-            match_values = call_owner_match_values(rep_row)
-            _both(func.lower(func.trim(Call.call_owner)).in_(match_values))
+    clauses = build_call_filters(
+        call_type=call_type, call_result=call_result, call_owner=call_owner,
+        source=source, search=search, date_from=date_from, date_to=date_to,
+        start=start, end=end, rep=rep, roster=roster,
+    )
+    stmt = select(Call).where(*clauses)
+    count_stmt = select(func.count()).select_from(Call).where(*clauses)
 
     total = (await session.execute(count_stmt)).scalar_one()
 
