@@ -6,6 +6,32 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — WGR sync no longer aborts on duplicate-email leads (ix_leads_email)
+
+The client's WGR database has no unique constraint on lead email, so the same
+person can appear as two rows with different `lead_id`s (live examples:
+morrisshort@mac.com, mwolfenow@aol.com, gwheeler10@gmail.com). CI's
+`leads.email` is globally unique, so when the second row entered an incremental
+window the sync's INSERT hit `UniqueViolationError` on `ix_leads_email` —
+aborting the entire run at step 1 (leads sync first), freezing calls,
+appointments, and sales too, and re-failing every hour on the same window.
+
+`sync_leads` now plans writes through a pure `plan_lead_writes` helper
+(`backend/app/services/wgr_sync/upsert.py`) that mirrors the GHL upsert's
+email-fallback dedup:
+- A WGR row whose email already exists in CI (any source, case-insensitive,
+  soft-deleted included — the unique index spans them all) UPDATEs that lead's
+  data columns instead of inserting; `source`/`external_id`/`email` stay
+  untouched so the CI row doesn't flip-flop between the two upstream ids.
+- In-batch duplicates on email collapse to one row — freshest `entry_date`
+  wins, batch order breaks ties.
+
+Unit tests: `backend/tests/test_wgr_lead_email_merge.py` (8 cases).
+Test doc: `docs/testing/2026-07-15-wgr-lead-email-merge-test.md`.
+Known limitation: calls/appointments referencing the *suppressed* upstream
+`lead_id` won't link to the merged lead (their FK resolution stays nullable) —
+acceptable until upstream dedups its side.
+
 ### Added — Analyze this view (POST /api/v1/analyze/{surface} + four-surface drawer)
 
 The Appointments, Sales Calls, Leads, and Members pages each gain a gold-gradient "Analyze with AI" button (sparkle icon, `ai` Button variant)
