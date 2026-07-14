@@ -109,7 +109,13 @@ export function TourProvider({ children }: { children: ReactNode }) {
     const id = sessionStorage.getItem(PENDING_TOUR_KEY);
     if (!id) return;
     const tour = getTour(id);
-    if (!tour || tour.route !== pathname) return;
+    if (!tour || tour.route !== pathname) {
+      // A pending tour is one-shot intent: if the first page we land on
+      // isn't its route, the user went elsewhere — drop it rather than
+      // ambushing them with a tour on some later visit.
+      sessionStorage.removeItem(PENDING_TOUR_KEY);
+      return;
+    }
 
     startTourWhenReady(tour);
     return clearTimers;
