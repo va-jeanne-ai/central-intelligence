@@ -126,7 +126,13 @@ function SourceRow({
           )}
         </div>
         {onSync && (
-          <Button variant="ghost" size="sm" onClick={onSync} disabled={isSyncing}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onSync}
+            disabled={isSyncing}
+            data-tour="wgr-sync-now"
+          >
             {isSyncing ? (
               <>
                 <Spinner className="text-gray-500" /> Syncing…
@@ -253,7 +259,13 @@ export function FreshnessPanel() {
       <CardHeader
         title="Data freshness"
         action={
-          <Button variant="primary" size="sm" onClick={() => void check()} disabled={isChecking}>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => void check()}
+            disabled={isChecking}
+            data-tour="freshness-check"
+          >
             {isChecking ? "Checking…" : data ? "Re-check" : "Check now"}
           </Button>
         }

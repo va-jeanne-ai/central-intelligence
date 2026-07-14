@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { APP_CONFIG } from "@/lib/config";
 import { useAuth } from "@/hooks/use-auth";
+import { SparkleIcon } from "@/components/ui/sparkle-icon";
+import { useWhatsNew } from "@/components/tour/tour-provider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -366,6 +368,7 @@ function getInitials(nameOrEmail: string): string {
 
 function UserFooter() {
   const { user, signOut } = useAuth();
+  const { openWhatsNew } = useWhatsNew();
 
   const displayName =
     user && "name" in user && user.name
@@ -391,6 +394,15 @@ function UserFooter() {
         </span>
         <span className="text-xs text-sidebar-heading capitalize">{displayRole}</span>
       </div>
+      <button
+        type="button"
+        onClick={openWhatsNew}
+        aria-label="What's new"
+        className="flex-shrink-0 text-sidebar-heading hover:text-sidebar-text-hover transition-colors"
+        title="What's new"
+      >
+        <SparkleIcon />
+      </button>
       <button
         type="button"
         onClick={() => void signOut()}

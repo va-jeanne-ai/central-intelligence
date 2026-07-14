@@ -170,6 +170,7 @@ export function AppointmentsCalendarView({ statusFilter, repFilter, search }: Ap
             onChange={(e) => onPickDate(e.target.value)}
             aria-label="Jump to date"
             title="Jump to date"
+            data-tour="calendar-jump-date"
             className="px-2 py-1 text-[12px] border border-gray-200 rounded-lg bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
           <div className="text-[15px] font-semibold text-gray-800 ml-2">
