@@ -79,7 +79,10 @@ export function TourProvider({ children }: { children: ReactNode }) {
         // measures element positions. On timeout runTour still fires — it
         // filters absent anchors and falls back to a toast.
         const settleTimer = window.setTimeout(
-          () => void runTour(tour),
+          () => {
+            sessionStorage.removeItem(PENDING_TOUR_KEY);
+            void runTour(tour);
+          },
           SETTLE_MS
         );
         timersRef.current.push(settleTimer);
@@ -98,12 +101,15 @@ export function TourProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // 2. Pending tour handoff after navigation.
+  // StrictMode double-mount: the effect runs twice (with cleanup in-between).
+  // First run: reads the key and arms timers. Cleanup: clears those timers.
+  // Second run must still see the key to re-arm, so we defer key removal until
+  // the tour actually fires (in the settle callback below).
   useEffect(() => {
     const id = sessionStorage.getItem(PENDING_TOUR_KEY);
     if (!id) return;
     const tour = getTour(id);
     if (!tour || tour.route !== pathname) return;
-    sessionStorage.removeItem(PENDING_TOUR_KEY);
 
     startTourWhenReady(tour);
     return clearTimers;
