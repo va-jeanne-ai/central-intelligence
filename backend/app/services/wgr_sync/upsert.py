@@ -25,7 +25,9 @@ import logging
 import uuid
 from typing import Any, Callable, Iterable, Optional
 
-from sqlalchemy import insert, inspect, select, update
+from datetime import date
+
+from sqlalchemy import func, insert, inspect, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -148,6 +150,75 @@ async def _sync_native_pk(
 # Leads — merge on (source='wgr', external_id); CI generates UUID PK.
 # ---------------------------------------------------------------------------
 
+# Keys that identify a lead rather than describe it. When a WGR row merges
+# into an existing CI lead *by email*, these stay untouched: WGR can hold two
+# lead_ids for one person, and overwriting external_id would make the CI row
+# flip-flop between them on every sync.
+_LEAD_IDENTITY_KEYS = ("source", "external_id", "email")
+
+
+def _norm_email(m: dict[str, Any]) -> str:
+    return (m.get("email") or "").strip().lower()
+
+
+def _entry_key(m: dict[str, Any]) -> date:
+    return m.get("entry_date") or date.min
+
+
+def plan_lead_writes(
+    maps: list[dict[str, Any]],
+    by_ext: dict[str, Any],
+    id_by_email: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[tuple[Any, dict[str, Any]]]]:
+    """Decide INSERT vs UPDATE for a batch of mapped WGR leads. Pure — no I/O.
+
+    WGR has no unique constraint on email; CI does (``ix_leads_email``). Any
+    plan that emits two rows with one email — or an INSERT for an email CI
+    already holds — aborts the whole sync with UniqueViolationError, so:
+
+      1. De-dup in-batch on external_id (last wins).
+      2. De-dup in-batch on email — freshest ``entry_date`` wins, batch order
+         breaks ties. Rows without email never collapse.
+      3. external_id already in CI → UPDATE with every mapped column.
+      4. email already in CI (any source, case-insensitive) → UPDATE data
+         columns only; identity keys stay as they are.
+      5. Otherwise → INSERT.
+
+    ``by_ext`` maps external_id → CI lead id; ``id_by_email`` maps lowercased
+    email → CI lead id. Returns ``(insert_rows, [(lead_id, values), ...])``.
+    """
+    maps = list({m["external_id"]: m for m in maps}.values())
+
+    kept_pos: dict[str, int] = {}
+    deduped: list[dict[str, Any]] = []
+    for m in maps:
+        email = _norm_email(m)
+        if not email:
+            deduped.append(m)
+            continue
+        pos = kept_pos.get(email)
+        if pos is None:
+            kept_pos[email] = len(deduped)
+            deduped.append(m)
+        elif _entry_key(m) >= _entry_key(deduped[pos]):
+            deduped[pos] = m
+
+    inserts: list[dict[str, Any]] = []
+    updates: list[tuple[Any, dict[str, Any]]] = []
+    for m in deduped:
+        email = _norm_email(m)
+        if m["external_id"] in by_ext:
+            updates.append((by_ext[m["external_id"]], dict(m)))
+        elif email and email in id_by_email:
+            updates.append((
+                id_by_email[email],
+                {k: v for k, v in m.items() if k not in _LEAD_IDENTITY_KEYS},
+            ))
+        else:
+            inserts.append(m)
+    return inserts, updates
+
+
 async def sync_leads(session: AsyncSession, *, since: Optional[str] = None) -> int:
     total = 0
     batch_maps: list[dict[str, Any]] = []
@@ -155,30 +226,39 @@ async def sync_leads(session: AsyncSession, *, since: Optional[str] = None) -> i
     async def flush(maps: list[dict[str, Any]]) -> int:
         if not maps:
             return 0
-        # De-dup within the batch on external_id (last wins) so a single bulk
-        # insert can't violate the unique index.
-        maps = list({m["external_id"]: m for m in maps}.values())
-        ext_ids = [m["external_id"] for m in maps]
+        ext_ids = list({m["external_id"] for m in maps})
         existing = (await session.execute(
             select(Lead.id, Lead.external_id).where(
                 Lead.source == mapping.WGR_SOURCE, Lead.external_id.in_(ext_ids),
             )
         )).all()
         by_ext = {ext: lid for lid, ext in existing}
-        # Bulk-insert the new rows in one statement; per-row update only the
-        # (usually rare) already-present ones.
-        new_rows = [
-            {"id": uuid.uuid4(), **m} for m in maps if m["external_id"] not in by_ext
-        ]
+        # Emails of rows that didn't match on external_id: the fallback dedup
+        # key. Looked up across ALL leads (any source, soft-deleted included)
+        # because ix_leads_email spans them all.
+        emails = list({
+            _norm_email(m) for m in maps
+            if _norm_email(m) and m["external_id"] not in by_ext
+        })
+        id_by_email: dict[str, Any] = {}
+        if emails:
+            rows = (await session.execute(
+                select(Lead.id, func.lower(Lead.email)).where(
+                    func.lower(Lead.email).in_(emails)
+                )
+            )).all()
+            id_by_email = {em: lid for lid, em in rows}
+
+        new_maps, updates = plan_lead_writes(maps, by_ext, id_by_email)
+        new_rows = [{"id": uuid.uuid4(), **m} for m in new_maps]
         if new_rows:
             await session.execute(insert(Lead), new_rows)
-        for m in maps:
-            if m["external_id"] in by_ext:
-                await session.execute(
-                    update(Lead).where(Lead.id == by_ext[m["external_id"]]).values(**m)
-                )
+        for lead_id, values in updates:
+            await session.execute(
+                update(Lead).where(Lead.id == lead_id).values(**values)
+            )
         await session.commit()
-        return len(maps)
+        return len(new_rows) + len(updates)
 
     for raw in reader.read_table("leads", since=since):
         mapped = mapping.map_lead(raw)
