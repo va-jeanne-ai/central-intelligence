@@ -27,7 +27,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.middleware import AuthMiddleware
+from app.middleware import AuthMiddleware, ErrorEnvelopeMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +63,15 @@ def create_app() -> FastAPI:
 
     # -----------------------------------------------------------------------
     # Middleware — Starlette uses LIFO order: the LAST add_middleware call
-    # becomes the OUTERMOST layer.  We need CORS to wrap Auth so that even
-    # 401 responses carry Access-Control-Allow-* headers.
+    # becomes the OUTERMOST layer.  We need CORS to wrap everything so that
+    # even 401s and unhandled 500s carry Access-Control-Allow-* headers —
+    # Starlette's own ServerErrorMiddleware sits outside CORS, so without
+    # ErrorEnvelopeMiddleware a crash surfaces in browsers as a CORS error.
     #
-    # Execution order:  Request → CORS → Auth → Route
+    # Execution order:  Request → CORS → ErrorEnvelope → Auth → Route
     # -----------------------------------------------------------------------
     app.add_middleware(AuthMiddleware)
+    app.add_middleware(ErrorEnvelopeMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
