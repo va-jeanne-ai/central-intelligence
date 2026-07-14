@@ -6,6 +6,28 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Insights page 500s disguised as CORS errors (Supabase pooler exhaustion)
+
+`/api/v1/analytics/metrics/*/history-asof` (and potentially any endpoint)
+intermittently returned bare 500s that browsers reported as CORS failures.
+Root cause: `backend/app/database.py` used SQLAlchemy `NullPool`, opening one
+brand-new Supabase session-pooler connection per request. The pooler admits at
+most 15 clients (`EMAXCONNSESSION`), so a page-load burst of parallel metric
+fetches exhausted the slots and the losers crashed. The crash response came
+from Starlette's ServerErrorMiddleware, which sits outside CORSMiddleware —
+hence no `Access-Control-Allow-Origin` header and misleading CORS errors.
+
+- `backend/app/database.py`: bounded client-side pool (`pool_size=5`,
+  `max_overflow=2`, `pool_timeout=30`, `pool_pre_ping`, `pool_recycle=1800`).
+  Bursts now queue for a pooled connection instead of dying at the pooler.
+  Slot budget: API 7 + worker 5 (tasks/db.py) = 12 of 15.
+- `backend/app/middleware/error_envelope.py` (new): unhandled exceptions now
+  return the standard JSON error envelope with a logged `requestId`, inside
+  the CORS layer — real 500s now surface as 500s, never as CORS noise.
+
+Unit tests: `backend/tests/test_error_envelope.py` (2 cases).
+Test doc: `docs/testing/2026-07-15-db-pool-exhaustion-fix-test.md`.
+
 ### Fixed — WGR sync no longer aborts on duplicate-email leads (ix_leads_email)
 
 The client's WGR database has no unique constraint on lead email, so the same
