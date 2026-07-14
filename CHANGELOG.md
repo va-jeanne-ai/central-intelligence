@@ -24,10 +24,10 @@ instance) without ever regressing the current client's deployment:
   candidate build against the frozen baseline on a staging clone. Connects
   read-only via the Supabase transaction pooler (port 6543) so it never
   competes with production for the 15 session-pooler slots.
-- **Staging parity runbook** — `docs/staging-parity-runbook.md`: how to clone
+- **Staging parity runbook** — `docs/staging-parity-runbook.html`: how to clone
   production data safely (fresh Fernet key so restored integration creds are
   unreadable, sync disabled, MOCK_MODE on) and the per-phase release gate.
-- **New-client discovery checklist** — `docs/company2-discovery-checklist.md`:
+- **New-client discovery checklist** — `docs/company2-discovery-checklist.html`:
   everything to collect from a prospective company (read-only DB access,
   business semantics, departments/modules, KPIs, integrations, branding)
   before their instance can be built.

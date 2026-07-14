@@ -9,7 +9,7 @@ Read-only. Records two things from the app database:
 ``capture`` freezes the fixture; ``--check`` recomputes and diffs against it.
 A check is only meaningful against the SAME data snapshot the fixture was
 captured from (a staging clone / dump restore) — live data drifts by design.
-See docs/staging-parity-runbook.md.
+See docs/staging-parity-runbook.html.
 
 Connection: DATABASE_URL points at the Supabase *session* pooler (15-client
 cap, mostly held by the production droplet), so this script connects through
