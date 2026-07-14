@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { AuthGuard } from "@/components/layout/auth-guard";
+import { TourProvider } from "@/components/tour/tour-provider";
 
 // ─── Authenticated App Layout ────────────────────────────────────────────────
 // Wraps all authenticated pages with sidebar + main content area.
@@ -11,17 +12,19 @@ export default function AppLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <div className="grid grid-cols-[228px_1fr] h-screen overflow-hidden">
-      {/* Redirects to /login if the session goes invalid mid-page. */}
-      <AuthGuard />
+    <TourProvider>
+      <div className="grid grid-cols-[228px_1fr] h-screen overflow-hidden">
+        {/* Redirects to /login if the session goes invalid mid-page. */}
+        <AuthGuard />
 
-      {/* Left — Sidebar */}
-      <Sidebar />
+        {/* Left — Sidebar */}
+        <Sidebar />
 
-      {/* Right — Header + Page Content */}
-      <div className="flex flex-col min-w-0 bg-gray-50 overflow-hidden">
-        {children}
+        {/* Right — Header + Page Content */}
+        <div className="flex flex-col min-w-0 bg-gray-50 overflow-hidden">
+          {children}
+        </div>
       </div>
-    </div>
+    </TourProvider>
   );
 }
