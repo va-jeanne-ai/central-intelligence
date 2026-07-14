@@ -23,7 +23,8 @@ import { useFeatureTour } from "./use-feature-tour";
 import { WhatsNewDialog } from "./whats-new-dialog";
 
 const ANCHOR_POLL_MS = 250;
-const ANCHOR_TIMEOUT_MS = 5000;
+const ANCHOR_TIMEOUT_MS = 10_000;
+const SETTLE_MS = 400;
 
 const WhatsNewContext = createContext<{ openWhatsNew: () => void }>({
   openWhatsNew: () => {},
@@ -54,18 +55,28 @@ export function TourProvider({ children }: { children: ReactNode }) {
     if (!tour || tour.route !== pathname) return;
     sessionStorage.removeItem(PENDING_TOUR_KEY);
 
-    const firstAnchor = tour.steps[0].anchor;
+    const firstAnchor = tour.steps[0]?.anchor;
     const startedAt = Date.now();
+    let settleTimer: number | undefined;
     const timer = window.setInterval(() => {
-      const found = document.querySelector(`[data-tour="${firstAnchor}"]`);
+      const anchorReady = firstAnchor
+        ? document.querySelector(`[data-tour="${firstAnchor}"]`) !== null
+        : true;
+      // Don't start the spotlight while the page still shows loading
+      // skeletons — the layout shifts under the popover as data lands.
+      const stillLoading = document.querySelector(".animate-pulse") !== null;
       const timedOut = Date.now() - startedAt > ANCHOR_TIMEOUT_MS;
-      if (!found && !timedOut) return;
+      if ((!anchorReady || stillLoading) && !timedOut) return;
       window.clearInterval(timer);
-      // Timed out → runTour still fires; it filters absent anchors and
-      // falls back to an informative toast when nothing is visible.
-      void runTour(tour);
+      // Short settle so the final data render paints before the overlay
+      // measures element positions. On timeout runTour still fires — it
+      // filters absent anchors and falls back to a toast.
+      settleTimer = window.setTimeout(() => void runTour(tour), SETTLE_MS);
     }, ANCHOR_POLL_MS);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      if (settleTimer) window.clearTimeout(settleTimer);
+    };
   }, [pathname, runTour]);
 
   const openWhatsNew = useCallback(() => setDialogOpen(true), []);
