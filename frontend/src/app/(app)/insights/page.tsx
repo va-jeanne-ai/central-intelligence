@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { showSuccess, showError } from "@/lib/toast";
+import { formatCurrency } from "@/lib/format";
 import {
   // MetricHistoryChart, // hidden for now — restore with the Historical trend card below
   MultiMetricTrend,
@@ -58,7 +59,7 @@ const WINDOWS = ["7d", "30d", "90d", "all"];
 function formatValue(v: number | null, unit: string): string {
   if (v === null) return "—";
   if (unit === "ratio") return `${(v * 100).toFixed(1)}%`;
-  if (unit === "currency") return `$${Math.round(v).toLocaleString()}`;
+  if (unit === "currency") return formatCurrency(v);
   if (unit === "score") return v.toFixed(2);
   return Math.round(v).toLocaleString();
 }

@@ -38,6 +38,15 @@ every prompt with its own business context.
 - New test `tests/test_prompt_context.py`: no leftover `{{tokens}}` in any
   rendered constant; rendering with a different profile swaps
   vertical/app-name/expertise; partial profile rows keep defaults for NULLs.
+- **Frontend white-labeling** — `useBranding()` hook (public branding fetch,
+  5-min stale time, static `APP_CONFIG` fallback so the UI degrades to today's
+  branding if the API is down); sidebar logo/name/tagline and the login page
+  render from branding (custom logo image when set, 🧠 fallback);
+  `lib/format.ts` `formatCurrency()` replaces the three hardcoded `$` literals
+  in Insights (byte-identical output while the symbol is `$`); new
+  **Settings → Business** page (`/settings/business`, nav entry beside
+  Integrations) edits the instance profile — changed-fields-only PUT,
+  admin-403 surfaced as a toast.
 
 ### Added — Productization Phase 0: parity safety net + client discovery kit
 
