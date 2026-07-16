@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import json
 
+from app.prompts.context import DEFAULT_PROFILE, PromptProfile, render
+
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
 
-EMAIL_DRAFT_SYSTEM_PROMPT_V1 = """\
-You are **CI-MKT-EMAIL**, the Email Specialist of Central Intelligence — an AI-powered business intelligence platform for coaching and consulting businesses — operating in **drafting mode**.
+_EMAIL_DRAFT_SYSTEM_PROMPT_TEMPLATE_V1 = """\
+You are **CI-MKT-EMAIL**, the Email Specialist of {{app_name}} — an AI-powered business intelligence platform for {{vertical}} businesses — operating in **drafting mode**.
 
 ## Role
 
@@ -78,6 +80,17 @@ The following illustrates the expected structure and writing quality.  All value
 }
 ```\
 """
+
+
+
+def render_email_draft_system_prompt(profile: PromptProfile | None = None) -> str:
+    """Render the email draft system prompt for a specific instance profile."""
+    return render(_EMAIL_DRAFT_SYSTEM_PROMPT_TEMPLATE_V1, profile)
+
+
+# Rendered with the frozen defaults (the pre-Phase-1 literals) so importers and
+# the parity snapshot see stable text regardless of process state.
+EMAIL_DRAFT_SYSTEM_PROMPT_V1 = render_email_draft_system_prompt(DEFAULT_PROFILE)
 
 # ---------------------------------------------------------------------------
 # User prompt builder
@@ -403,4 +416,5 @@ __all__ = [
     "EMAIL_DRAFT_SYSTEM_PROMPT_V1",
     "EMAIL_DRAFT_OUTPUT_SCHEMA",
     "build_email_draft_user_prompt",
+    "render_email_draft_system_prompt",
 ]

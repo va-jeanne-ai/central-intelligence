@@ -6,6 +6,39 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Productization Phase 1 (backend): instance profile + prompt de-hardcoding
+
+The AI layer no longer hardcodes the original client's vertical. Behavior on
+this instance is unchanged (parity-verified); a new company's instance renders
+every prompt with its own business context.
+
+- **`instance_profile` table** (migration `x5c6d7e8f9a0`) — CI-owned singleton:
+  vertical, business description, terminology/benchmarks JSONB, white-label
+  branding (app_name/tagline/logo/colors), currency/timezone/locale. Distinct
+  from the synced `business_profile`, which client sync overwrites.
+- **Prompt templating** — `backend/app/prompts/context.py` defines
+  `PromptProfile` (defaults = the pre-Phase-1 literals) and a brace-safe
+  `render()`. All 19 prompt modules now keep a private `_*_TEMPLATE_*` with
+  `{{vertical}}`/`{{app_name}}`/`{{icp_expertise}}` slots plus a
+  `render_*_system_prompt(profile)` function; the public constants render the
+  frozen defaults, so the parity snapshot proves byte-identical output.
+- **Live consumers wired** — the orchestrator agent renders with the primed
+  process profile (FastAPI startup primes the cache; PUT profile re-primes);
+  the ICP Celery task re-reads the profile per run via its sync session.
+- **Config API** — `GET /api/v1/config/branding` (public — login page needs it
+  pre-auth; exposes only the branding subset), `GET/PUT /api/v1/config/profile`
+  (PUT is admin-only).
+- **Name scrub** — literal "Greg"/"Makyla" examples removed from prompts and
+  the analytics tool description; prompt fixture regenerated in this change
+  (diff = exactly those 3 constants).
+- **Seeding** — `scripts/seed_instance_profile.py --defaults | --json FILE`.
+- `capture_parity_baseline --check` now reports tables added by later
+  migrations as notes instead of failures (additive schema changes are
+  expected between phases).
+- New test `tests/test_prompt_context.py`: no leftover `{{tokens}}` in any
+  rendered constant; rendering with a different profile swaps
+  vertical/app-name/expertise; partial profile rows keep defaults for NULLs.
+
 ### Added — Productization Phase 0: parity safety net + client discovery kit
 
 Groundwork for shipping CI to additional companies (each on its own isolated

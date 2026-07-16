@@ -28,7 +28,10 @@ def collect_prompts() -> dict[str, dict[str, str | list[str]]]:
             mod = importlib.import_module(f"{pkg_name}.{info.name}")
             consts: dict[str, str | list[str]] = {}
             for attr in dir(mod):
-                if not attr.isupper():
+                # Private (underscore-prefixed) names are templates/internals,
+                # not rendered prompt text — the rendered constants are the parity
+                # surface.
+                if attr.startswith("_") or not attr.isupper():
                     continue
                 val = getattr(mod, attr)
                 if isinstance(val, str):

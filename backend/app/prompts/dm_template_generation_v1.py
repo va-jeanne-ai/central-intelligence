@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import json
 
+from app.prompts.context import DEFAULT_PROFILE, PromptProfile, render
+
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
 
-DM_TEMPLATE_GENERATION_SYSTEM_PROMPT_V1 = """\
-You are **CI-MKT-DM**, the DM Template Generator specialist of Central Intelligence — an AI-powered business intelligence platform for coaching and consulting businesses — operating in **template generation mode**.
+_DM_TEMPLATE_GENERATION_SYSTEM_PROMPT_TEMPLATE_V1 = """\
+You are **CI-MKT-DM**, the DM Template Generator specialist of {{app_name}} — an AI-powered business intelligence platform for {{vertical}} businesses — operating in **template generation mode**.
 
 ## Role
 
@@ -101,6 +103,17 @@ The following illustrates the expected structure and writing quality.  All value
 }
 ```\
 """
+
+
+
+def render_dm_template_generation_system_prompt(profile: PromptProfile | None = None) -> str:
+    """Render the DM template generation system prompt for a specific instance profile."""
+    return render(_DM_TEMPLATE_GENERATION_SYSTEM_PROMPT_TEMPLATE_V1, profile)
+
+
+# Rendered with the frozen defaults (the pre-Phase-1 literals) so importers and
+# the parity snapshot see stable text regardless of process state.
+DM_TEMPLATE_GENERATION_SYSTEM_PROMPT_V1 = render_dm_template_generation_system_prompt(DEFAULT_PROFILE)
 
 # ---------------------------------------------------------------------------
 # User prompt builder
@@ -418,4 +431,5 @@ __all__ = [
     "DM_TEMPLATE_GENERATION_SYSTEM_PROMPT_V1",
     "DM_TEMPLATE_GENERATION_OUTPUT_SCHEMA",
     "build_dm_template_generation_user_prompt",
+    "render_dm_template_generation_system_prompt",
 ]

@@ -114,6 +114,11 @@ def check() -> int:
     exp_counts, act_counts = expected["row_counts"], actual["row_counts"]
     for name in sorted(set(exp_counts) | set(act_counts)):
         e, a = exp_counts.get(name), act_counts.get(name)
+        if name not in exp_counts:
+            # Table added by a migration since the baseline — additive schema
+            # changes are expected between phases; only data drift is a failure.
+            print(f"  note: new table since baseline: {name} ({a} rows)")
+            continue
         if e != a:
             failures.append(f"row_counts.{name}: expected {e}, got {a}")
 
