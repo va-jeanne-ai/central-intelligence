@@ -1,12 +1,13 @@
 """WGR (client) Postgres client — STRICTLY READ-ONLY.
 
-Wraps a direct Postgres connection to the client's Supabase project
-(``mntsbmuxbdnnlnheuwqk``) via ``WGR_DATABASE_URL`` / ``settings.wgr_database_url``.
+Wraps a direct Postgres connection to the client's Supabase project via
+``CLIENT_DATABASE_URL`` / ``settings.client_database_url`` (the legacy env name
+``WGR_DATABASE_URL`` is still accepted — see ``app/config.py``).
 This connection gives full-schema visibility and reliable bulk reads that the
 anon PostgREST key cannot — see ``docs/client-supabase-connection.md``.
 
 ────────────────────────────────────────────────────────────────────────────
-SAFETY — the credential behind ``WGR_DATABASE_URL`` is the ``postgres`` role and
+SAFETY — the credential behind ``CLIENT_DATABASE_URL`` is the ``postgres`` role and
 is WRITE-CAPABLE on the client's production database. This is the client's data;
 we never modify it (project safety rule). To make writes structurally impossible
 on our side, every connection opened here:
@@ -42,14 +43,14 @@ _DEFAULT_PAGE_SIZE = 1000
 
 
 class WgrAccessError(RuntimeError):
-    """Raised when ``WGR_DATABASE_URL`` is not configured."""
+    """Raised when ``CLIENT_DATABASE_URL`` is not configured."""
 
 
 def _dsn() -> str:
-    dsn = settings.wgr_database_url
+    dsn = settings.client_database_url
     if not dsn:
         raise WgrAccessError(
-            "WGR_DATABASE_URL is not set — client Postgres access is unavailable. "
+            "CLIENT_DATABASE_URL is not set — client Postgres access is unavailable. "
             "Set it in backend/.env (see docs/client-supabase-connection.md)."
         )
     return dsn

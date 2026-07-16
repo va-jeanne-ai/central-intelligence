@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,7 +61,13 @@ class Settings(BaseSettings):
     # cannot. SAFETY: this credential is the `postgres` role and CAN WRITE —
     # all access MUST be opened READ ONLY. Prefer a dedicated read-only role
     # once the client provides one. Empty in environments without DB access.
-    wgr_database_url: str = ""
+    # Env var: CLIENT_DATABASE_URL. The legacy name WGR_DATABASE_URL (the
+    # original client's initials) is still accepted so existing deployments
+    # keep working; prefer the generic name in all new .env files.
+    client_database_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("CLIENT_DATABASE_URL", "WGR_DATABASE_URL"),
+    )
 
     # ------------------------------------------------------------------
     # Mailchimp — F28 connector for email stats. When mailchimp_api_key is
