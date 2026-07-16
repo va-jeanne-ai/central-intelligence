@@ -6,6 +6,38 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Productization Phase 2: instance provisioning + fresh-instance safety
+
+A new company's CI instance can now be stood up from scratch with one script,
+and a data-less instance runs clean (no crashes, no unearned LLM spend):
+
+- **`scripts/provision_instance.sh`** — run on a fresh Ubuntu droplet: installs
+  Docker, clones the repo at a release tag, interactively generates
+  `backend/.env` (fresh Fernet key auto-generated, mode 600, never overwrites),
+  and brings up the compose stack. Client sync starts disabled.
+- **`backend/scripts/seed_instance.py`** — seeds the instance profile
+  (`--profile-json` / `--defaults`) and grants the first admin
+  (`--admin-email`, updating Supabase auth metadata + the users mirror; fails
+  loudly if the auth account doesn't exist yet).
+- **`docs/new-client-runbook.html`** — the full walkthrough: prerequisites,
+  provisioning, DNS/HTTPS, seeding, Vercel frontend, go-live verification
+  checklist, upgrade procedure, and known fresh-instance caveats.
+- **Fresh-instance cost guard** — `overall_insight` now has a
+  `has_evidence()` gate (mirroring `weekly_digest`): on an instance with zero
+  metric samples, no trends, and no recommendations it skips the daily paid
+  Claude call and writes nothing, instead of publishing a junk assessment of
+  empty data. Manual refresh returns 409 with a clear message. Verified
+  against live data that instances WITH data are unaffected.
+- **`scripts/dev.sh`** worker now runs `--concurrency=2` (matching prod
+  compose) — an unbounded local worker forks per CPU core and exhausts the
+  Supabase session pooler's 15-client cap alongside production
+  (EMAXCONNSESSION, 2026-07-17).
+- Beat-schedule audit (fresh instance): every scheduled task no-ops cleanly
+  with no client config. Remaining caveat documented in the runbook: the four
+  demo-seed writers (social/ads/email stats, comments collector) populate
+  marketing dashboards with fixture rows; making them opt-in is a Phase 4
+  decision.
+
 ### Added — Productization Phase 1 (backend): instance profile + prompt de-hardcoding
 
 The AI layer no longer hardcodes the original client's vertical. Behavior on
