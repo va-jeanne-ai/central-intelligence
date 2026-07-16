@@ -92,15 +92,21 @@ async def run_async_migrations() -> None:
     import ssl as _ssl
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    ssl_ctx = _ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = _ssl.CERT_NONE
-
     url = config.get_main_option("sqlalchemy.url")
+
+    # Mirror app/database.py: hosted Supabase needs TLS; a local stack
+    # (supabase start / plain Postgres on localhost) rejects SSL upgrades.
+    connect_args: dict = {}
+    if "supabase" in url:
+        ssl_ctx = _ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = _ssl.CERT_NONE
+        connect_args["ssl"] = ssl_ctx
+
     connectable = create_async_engine(
         url,
         poolclass=pool.NullPool,
-        connect_args={"ssl": ssl_ctx},
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

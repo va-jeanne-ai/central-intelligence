@@ -111,8 +111,23 @@ chmod +x provision_instance.sh
   <p>The script installs Docker, clones the repo at the tag, prompts for this
   client's values (Supabase URL/keys, DB URL, Anthropic/Voyage keys, domains),
   auto-generates a fresh <code>INTEGRATIONS_ENCRYPTION_KEY</code>, writes
-  <code>backend/.env</code> (mode 600), and starts the compose stack — migrations
-  run automatically via the one-shot <code>migrate</code> service.</p>
+  <code>backend/.env</code> (mode 600), applies the <strong>base schema</strong>
+  (<code>scripts/apply_base_schema.py</code> — the alembic chain builds on the
+  SQL in <code>supabase/migrations/</code>, so a brand-new database needs those
+  first; idempotent), and starts the compose stack — alembic migrations then run
+  automatically via the one-shot <code>migrate</code> service.</p>
+  <div class="callout good">
+    <p><strong>No hosted Supabase? Run the whole thing locally, free.</strong>
+    <code>brew install supabase/tap/supabase</code>, then from
+    <code>local-supabase/</code>: <code>supabase start</code>. It runs Postgres
+    (with pgvector), auth, and a Studio UI in Docker and prints the URL/keys.
+    Bootstrap: enable the <code>vector</code> extension, run
+    <code>apply_base_schema</code> + <code>alembic upgrade head</code> against
+    <code>127.0.0.1:54322</code>, create the admin via the local auth admin API,
+    seed with <code>seed_instance</code>. A ready
+    <code>backend/.env.local-supabase</code> template documents the values.
+    Perfect for the demo/testbed instance — zero hosting cost.</p>
+  </div>
   <ul>
     <li><code>CLIENT_SYNC_ENABLED</code> starts <strong>false</strong> — their data
       source connects later, during onboarding (Phase 4 mapping).</li>

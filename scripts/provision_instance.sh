@@ -109,6 +109,11 @@ fi
 say "4/5 Starting the stack (migrations run automatically via the migrate service)"
 # ---------------------------------------------------------------------------
 cd "$INSTALL_DIR"
+docker compose build api
+# Fresh DB bootstrap: the alembic chain builds on the base schema in
+# supabase/migrations/*.sql (users, teams, audit_log, ...), so a brand-new
+# database needs those applied first. Idempotent — skips when already present.
+docker compose run --rm --no-deps api python -m scripts.apply_base_schema
 docker compose up -d --build
 docker compose ps
 
