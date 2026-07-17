@@ -120,7 +120,15 @@ class Settings(BaseSettings):
     embed_worker_batch_size: int = 32
     embed_worker_max_tokens_per_chunk: int = 1024
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    # extra="ignore": .env legitimately carries keys Settings doesn't model —
+    # API_DOMAIN consumed by Caddy via compose env_file, and vars introduced by
+    # a newer branch than the one currently checked out (e.g. this rename while
+    # other branches still expect the old name). Unknown keys must not be fatal.
+    # Safe direction: a typo'd security var falls back to its fail-closed
+    # default (e.g. mock_mode=False keeps auth ON).
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
 
 settings = Settings()
