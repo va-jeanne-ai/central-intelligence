@@ -106,6 +106,16 @@ instance) without ever regressing the current client's deployment:
   business semantics, departments/modules, KPIs, integrations, branding)
   before their instance can be built.
 
+### Changed — Client source DB env var renamed to CLIENT_DATABASE_URL
+
+`WGR_DATABASE_URL` (named after the original client) is now
+`CLIENT_DATABASE_URL` in code, `.env.example`, and local `.env` files —
+groundwork for running CI for more than one company. Backward compatible:
+the settings field accepts both env names (`CLIENT_DATABASE_URL` wins when
+both are set), so existing deployments whose `.env` still says
+`WGR_DATABASE_URL` keep syncing without any change. Rename the var in each
+deployment's `.env` at the next convenient deploy.
+
 ### Added — In-app "What's new" tour
 
 A "What's new in Central Intelligence" hub dialog auto-opens once per release
