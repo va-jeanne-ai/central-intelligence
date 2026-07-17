@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Client Instance Runbook — Central Intelligence</title>
+<style>
+  :root {
+    --ground: #FAFAF7; --surface: #FFFFFF; --ink: #24272C; --ink-soft: #5A5F66;
+    --line: #E4E2DC; --accent: #A8770D; --accent-soft: #FBF3DF;
+    --good: #0E7C4A; --good-soft: #E3F3EA; --bad: #B3382C; --bad-soft: #F9E9E7;
+    --dim: #8A8F96; --dim-soft: #EFEFEC; --code-bg: #F4F3EF;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #16181B; --surface: #1E2125; --ink: #E6E4DE; --ink-soft: #A6A9AE;
+      --line: #33373D; --accent: #E3AC2E; --accent-soft: #2E2712;
+      --good: #4CBE8A; --good-soft: #16301F; --bad: #E07A6E; --bad-soft: #3A1F1B;
+      --dim: #7E838A; --dim-soft: #26292E; --code-bg: #24272C;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #FAFAF7; --surface: #FFFFFF; --ink: #24272C; --ink-soft: #5A5F66;
+    --line: #E4E2DC; --accent: #A8770D; --accent-soft: #FBF3DF;
+    --good: #0E7C4A; --good-soft: #E3F3EA; --bad: #B3382C; --bad-soft: #F9E9E7;
+    --dim: #8A8F96; --dim-soft: #EFEFEC; --code-bg: #F4F3EF;
+  }
+  :root[data-theme="dark"] {
+    --ground: #16181B; --surface: #1E2125; --ink: #E6E4DE; --ink-soft: #A6A9AE;
+    --line: #33373D; --accent: #E3AC2E; --accent-soft: #2E2712;
+    --good: #4CBE8A; --good-soft: #16301F; --bad: #E07A6E; --bad-soft: #3A1F1B;
+    --dim: #7E838A; --dim-soft: #26292E; --code-bg: #24272C;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+    font: 16px/1.65 "Avenir Next", "Helvetica Neue", -apple-system, "Segoe UI", sans-serif; }
+  .page { max-width: 900px; margin: 0 auto; padding: 56px 28px 96px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .eyebrow::before { content: ""; width: 22px; height: 3px; background: var(--accent); }
+  h1 { font-size: 34px; line-height: 1.15; margin: 14px 0 6px; letter-spacing: -0.015em; text-wrap: balance; }
+  .meta { color: var(--ink-soft); font-size: 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: var(--accent-soft); color: var(--accent); }
+  h2 { font-size: 22px; margin: 52px 0 4px; letter-spacing: -0.01em; }
+  h2 .no { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  h3 { font-size: 16.5px; margin: 26px 0 6px; }
+  p { margin: 10px 0; max-width: 74ch; }
+  .lede { font-size: 18px; color: var(--ink-soft); max-width: 70ch; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 6px 0; max-width: 72ch; }
+  strong { font-weight: 650; }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; line-height: 1.55; margin: 12px 0; }
+  pre code { background: none; padding: 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--bad); background: var(--bad-soft); }
+  .callout.good { border-left-color: var(--good); background: var(--good-soft); }
+  .callout p { margin: 4px 0; }
+  table.data { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14.5px; }
+  table.data th { text-align: left; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-soft); padding: 8px 12px 6px; border-bottom: 2px solid var(--line); }
+  table.data td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="eyebrow">Central Intelligence · Productization</div>
+  <h1>New Client Instance Runbook</h1>
+  <div class="meta"><span class="pill">Ops</span><span>One deployment per company — nothing shared, ever</span></div>
+  <p class="lede">How to stand up a complete Central Intelligence instance for a new
+  company: their own droplet, database, auth project, frontend, and keys. Rehearse
+  this once on a demo instance before doing it for a paying client.</p>
+
+  <div class="callout warn">
+    <p><strong>Isolation is the product promise.</strong> Never reuse anything from
+    another instance: no API keys, no Supabase project, no Fernet encryption key, no
+    droplet, no Vercel project, no <code>.env</code> values. If a value came from
+    another client's instance, it does not belong here.</p>
+  </div>
+
+  <h2><span class="no">1</span>Prerequisites (create these first)</h2>
+  <div class="scroll">
+  <table class="data">
+    <tr><th>Resource</th><th>Where</th><th>Notes</th></tr>
+    <tr><td><strong>Supabase project</strong></td><td>supabase.com → New project</td>
+      <td>Serves BOTH auth and the app DB. Enable the <code>vector</code> extension
+      (Database → Extensions → pgvector). Note the project URL, anon key, JWT secret,
+      and the session-pooler connection string.</td></tr>
+    <tr><td><strong>DigitalOcean droplet</strong></td><td>DO → Create → Droplet</td>
+      <td>Ubuntu 22.04+, basic tier ($6/mo is proven adequate). Note the IP.</td></tr>
+    <tr><td><strong>API domain</strong></td><td>Client's DNS or yours</td>
+      <td>e.g. <code>api.client.com</code> — you'll point an A record at the droplet.</td></tr>
+    <tr><td><strong>Anthropic + Voyage keys</strong></td><td>console.anthropic.com / voyageai.com</td>
+      <td>Fresh keys per client so spend is attributable. Set budget expectations first.</td></tr>
+    <tr><td><strong>Vercel project</strong></td><td>vercel.com</td><td>Created in step 5.</td></tr>
+    <tr><td><strong>Release tag</strong></td><td>this repo</td>
+      <td>Instances deploy from tags, never from a moving branch.</td></tr>
+  </table>
+  </div>
+
+  <h2><span class="no">2</span>Provision the backend</h2>
+  <p>SSH into the fresh droplet as root and run:</p>
+  <pre><code>curl -fsSLO https://raw.githubusercontent.com/&lt;org&gt;/&lt;repo&gt;/&lt;tag&gt;/scripts/provision_instance.sh
+chmod +x provision_instance.sh
+./provision_instance.sh https://github.com/&lt;org&gt;/&lt;repo&gt;.git &lt;tag&gt;</code></pre>
+  <p>The script installs Docker, clones the repo at the tag, prompts for this
+  client's values (Supabase URL/keys, DB URL, Anthropic/Voyage keys, domains),
+  auto-generates a fresh <code>INTEGRATIONS_ENCRYPTION_KEY</code>, writes
+  <code>backend/.env</code> (mode 600), applies the <strong>base schema</strong>
+  (<code>scripts/apply_base_schema.py</code> — the alembic chain builds on the
+  SQL in <code>supabase/migrations/</code>, so a brand-new database needs those
+  first; idempotent), and starts the compose stack — alembic migrations then run
+  automatically via the one-shot <code>migrate</code> service.</p>
+  <div class="callout good">
+    <p><strong>No hosted Supabase? Run the whole thing locally, free.</strong>
+    <code>brew install supabase/tap/supabase</code>, then from
+    <code>local-supabase/</code>: <code>supabase start</code>. It runs Postgres
+    (with pgvector), auth, and a Studio UI in Docker and prints the URL/keys.
+    Bootstrap: enable the <code>vector</code> extension, run
+    <code>apply_base_schema</code> + <code>alembic upgrade head</code> against
+    <code>127.0.0.1:54322</code>, create the admin via the local auth admin API,
+    seed with <code>seed_instance</code>. A ready
+    <code>backend/.env.local-supabase</code> template documents the values.
+    Perfect for the demo/testbed instance — zero hosting cost.</p>
+  </div>
+  <ul>
+    <li><code>CLIENT_SYNC_ENABLED</code> starts <strong>false</strong> — their data
+      source connects later, during onboarding (Phase 4 mapping).</li>
+    <li>Re-running the script is safe: it re-checks out the tag and restarts, and
+      never overwrites an existing <code>.env</code>.</li>
+  </ul>
+
+  <h2><span class="no">3</span>DNS + HTTPS</h2>
+  <ol>
+    <li>Add an <strong>A record</strong>: <code>api.client.com → &lt;droplet IP&gt;</code>.</li>
+    <li>Caddy provisions the Let's Encrypt certificate automatically on first request
+      once DNS resolves (no config needed — the domain comes from
+      <code>API_DOMAIN</code> in <code>.env</code>).</li>
+    <li>Verify: <code>curl https://api.client.com/api/v1/health</code> → 200.</li>
+  </ol>
+
+  <h2><span class="no">4</span>Seed the instance</h2>
+  <ol>
+    <li>Create the first admin account in Supabase: Authentication → Users → Add user
+      (email + password for the client's owner/admin).</li>
+    <li>Write a <code>profile.json</code> from the discovery answers
+      (<a href="company2-discovery-checklist.html">discovery checklist</a>):
+<pre><code>{
+  "business_name": "Acme Ltd",
+  "vertical": "logistics and freight",
+  "business_description": "…",
+  "app_name": "Acme Intelligence",
+  "tagline": "Operations Command Center",
+  "currency_code": "GBP", "currency_symbol": "£",
+  "timezone": "Europe/London", "locale": "en-GB"
+}</code></pre></li>
+    <li>On the droplet:
+<pre><code>cd /opt/central-intelligence
+docker compose cp profile.json api:/tmp/profile.json
+docker compose exec api python -m scripts.seed_instance \
+    --profile-json /tmp/profile.json --admin-email owner@client.com</code></pre></li>
+  </ol>
+
+  <h2><span class="no">5</span>Frontend (Vercel)</h2>
+  <ol>
+    <li>New Vercel project from the repo's <code>frontend/</code> directory, pinned to
+      the same release tag.</li>
+    <li>Environment variables: <code>NEXT_PUBLIC_API_URL=https://api.client.com/api/v1</code>,
+      <code>NEXT_PUBLIC_WS_URL=wss://api.client.com</code>,
+      <code>NEXT_PUBLIC_SUPABASE_URL</code>, <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+      (this client's project).</li>
+    <li><strong>Run <code>npm run build</code> locally before deploying</strong> —
+      Vercel fails silently on lint. After deploying, confirm the deployment shows
+      <strong>Ready</strong>, not just "queued".</li>
+    <li>Point <code>app.client.com</code> at Vercel; add it to
+      <code>CORS_ORIGINS</code> in the droplet's <code>backend/.env</code> if it
+      wasn't the value given at provisioning (then <code>docker compose up -d</code>).</li>
+  </ol>
+
+  <h2><span class="no">6</span>Go-live verification</h2>
+  <ul>
+    <li>☐ <code>/api/v1/health</code> 200 over HTTPS</li>
+    <li>☐ Login works with the seeded admin; sidebar shows the client's app name/logo
+      (branding served by <code>GET /api/v1/config/branding</code>)</li>
+    <li>☐ Settings → Business shows the seeded profile; saving a change works (admin)</li>
+    <li>☐ <code>docker compose logs beat worker --since 30m</code> — scheduled tasks
+      no-op cleanly (skipped / zero-count messages, no tracebacks)</li>
+    <li>☐ No paid LLM spend in the Anthropic console beyond your own smoke tests
+      (the daily overall-insight synthesis skips itself until real data exists)</li>
+  </ul>
+
+  <div class="callout">
+    <p><strong>Known fresh-instance caveat — demo seed rows.</strong> Four scheduled
+    tasks (<code>social_stats</code> linkedin/tiktok, <code>ads_stats</code>,
+    <code>email_stats</code>, <code>comments_collector</code>) upsert hardcoded demo
+    rows so marketing dashboards aren't blank. On a real client instance these will
+    appear as fake campaigns/comments until real integrations connect. Making these
+    seed writers opt-in is a Phase 4 decision — until then, mention it to the client
+    or clear the rows after their integrations go live.</p>
+  </div>
+
+  <h2><span class="no">7</span>What happens next</h2>
+  <p>The instance is live but empty. Data onboarding (Phase 4 of the
+  <a href="productization-roadmap.html">roadmap</a>) connects their database:
+  read-only credentials → schema introspection → approved mapping → historical
+  backfill → hourly sync (<code>CLIENT_DATABASE_URL</code> +
+  <code>CLIENT_SYNC_ENABLED=true</code>). Directors, metrics, and integrations get
+  configured from the discovery answers as part of that phase.</p>
+
+  <h2><span class="no">8</span>Upgrades</h2>
+  <pre><code>cd /opt/central-intelligence
+git fetch --tags origin && git checkout &lt;new-tag&gt;
+docker compose up -d --build     <span class="cm"># migrate service applies any new migrations</span></code></pre>
+  <p>Only deploy tags that passed the
+  <a href="staging-parity-runbook.html">staging parity gate</a>.</p>
+</div>
+</body>
+</html>

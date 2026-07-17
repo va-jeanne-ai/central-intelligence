@@ -11,6 +11,9 @@ from app.models.base import Base, SoftDeleteMixin, TimestampMixin  # noqa: F401
 # meta — no internal FK dependencies
 from app.models.meta import Team, User  # noqa: F401
 
+# instance — CI-owned per-deployment company profile (no FK dependencies)
+from app.models.instance import InstanceProfile  # noqa: F401
+
 # intelligence — TagDictionary & InsightTag must exist before Insight.tags resolves
 from app.models.intelligence import (  # noqa: F401
     BusinessProfile,
@@ -171,4 +174,6 @@ __all__ = [
     # chat
     "ChatSession",
     "ChatMessage",
+    # instance config
+    "InstanceProfile",
 ]

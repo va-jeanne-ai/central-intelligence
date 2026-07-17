@@ -277,13 +277,33 @@ _UPSERT = text(
 )
 
 
+def has_evidence(evidence: dict) -> bool:
+    """True if there's anything at all for the LLM to assess.
+
+    Mirrors ``weekly_digest.has_evidence``: a freshly provisioned instance (empty
+    domain tables — snapshots exist but are all zero-sample) must no-op rather
+    than spend a daily paid call assessing nothing and publishing a junk row.
+    """
+    if any(m["sample_size"] for m in evidence["metrics_30d"] + evidence["metrics_all"]):
+        return True
+    if any(t["verdict"] != "insufficient_data" for t in evidence["trends_30d"] + evidence["trends_90d"]):
+        return True
+    if evidence["recommendations"]:
+        return True
+    return False
+
+
 def generate_overall_insight(db: Session, *, force_genesis: bool = False) -> dict:
     """Generate (or regenerate) today's overall insight and upsert it.
 
     ``force_genesis`` ignores any prior assessment and synthesizes from scratch.
     Returns a dict of the persisted row. One paid LLM call unless mock_mode is on.
+    No-ops (no LLM call, nothing written) when the instance has no data at all.
     """
     evidence = _gather_evidence(db)
+    if not has_evidence(evidence):
+        logger.info("overall_insight: no evidence yet (fresh instance) — skipping synthesis")
+        return {"status": "skipped_no_evidence"}
     previous = None if force_genesis else _fetch_previous(db)
 
     parsed, model_used = _synthesize(evidence, previous)

@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
-import { APP_CONFIG } from "@/lib/config";
 import { useAuth } from "@/hooks/use-auth";
+import { useBranding } from "@/hooks/use-branding";
 import { SparkleIcon } from "@/components/ui/sparkle-icon";
 import { useWhatsNew } from "@/components/tour/tour-provider";
 
@@ -128,6 +128,7 @@ const NAV_SECTIONS: NavSection[] = [
     collapsible: false,
     entries: [
       { label: "Integrations", icon: "🔌", href: "/integrations", department: "admin" },
+      { label: "Business Settings", icon: "🏢", href: "/settings/business", department: "admin" },
     ],
   },
 ];
@@ -420,6 +421,7 @@ function UserFooter() {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { branding } = useBranding();
 
   // Open-state for every collapsible node lives here (lifted out of the nodes)
   // so the Expand-all / Collapse-all control can drive them together. Seeded
@@ -461,16 +463,27 @@ export function Sidebar() {
       {/* Logo Area */}
       <div className="flex flex-col px-5 pt-6 pb-5 border-b border-sidebar-border">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 text-lg">
-            🧠
-          </span>
+          {branding.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- external, instance-configured URL; not known at build time for next/image optimization
+            <img
+              src={branding.logo_url}
+              alt={branding.app_name}
+              className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-lg object-cover"
+            />
+          ) : (
+            <span className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 text-lg">
+              🧠
+            </span>
+          )}
           <div className="flex flex-col">
             <span className="text-sm font-bold text-white leading-tight">
-              {APP_CONFIG.name}
+              {branding.app_name}
             </span>
-            <span className="text-[10px] text-accent-300 font-medium tracking-wide uppercase">
-              {APP_CONFIG.subtitle}
-            </span>
+            {branding.tagline && (
+              <span className="text-[10px] text-accent-300 font-medium tracking-wide uppercase">
+                {branding.tagline}
+              </span>
+            )}
           </div>
         </div>
       </div>

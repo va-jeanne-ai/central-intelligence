@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import json
 
+from app.prompts.context import DEFAULT_PROFILE, PromptProfile, render
+
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
 
-AD_COPY_GENERATION_SYSTEM_PROMPT_V1 = """\
-You are **CI-MKT-ADS**, the Ads Copy Generator specialist of Central Intelligence — an AI-powered business intelligence platform for coaching and consulting businesses — operating in **copy generation mode**.
+_AD_COPY_GENERATION_SYSTEM_PROMPT_TEMPLATE_V1 = """\
+You are **CI-MKT-ADS**, the Ads Copy Generator specialist of {{app_name}} — an AI-powered business intelligence platform for {{vertical}} businesses — operating in **copy generation mode**.
 
 ## Role
 
@@ -113,6 +115,17 @@ The following illustrates the expected structure and writing quality.  All value
 }
 ```\
 """
+
+
+
+def render_ad_copy_generation_system_prompt(profile: PromptProfile | None = None) -> str:
+    """Render the ad copy generation system prompt for a specific instance profile."""
+    return render(_AD_COPY_GENERATION_SYSTEM_PROMPT_TEMPLATE_V1, profile)
+
+
+# Rendered with the frozen defaults (the pre-Phase-1 literals) so importers and
+# the parity snapshot see stable text regardless of process state.
+AD_COPY_GENERATION_SYSTEM_PROMPT_V1 = render_ad_copy_generation_system_prompt(DEFAULT_PROFILE)
 
 # ---------------------------------------------------------------------------
 # User prompt builder
@@ -477,4 +490,5 @@ __all__ = [
     "AD_COPY_GENERATION_SYSTEM_PROMPT_V1",
     "AD_COPY_GENERATION_OUTPUT_SCHEMA",
     "build_ad_copy_generation_user_prompt",
+    "render_ad_copy_generation_system_prompt",
 ]

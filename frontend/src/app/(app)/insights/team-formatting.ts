@@ -3,6 +3,8 @@
 // No client-side derivation of business values beyond formatting and the
 // weighted team average — every other number comes verbatim from the API.
 
+import { formatCurrency } from "@/lib/format";
+
 export interface RepMetricBlock {
   metric_key: string;
   label: string;
@@ -64,7 +66,7 @@ export const STRIKES_KEY = "fulfillment.open_coaching_strikes";
 export function formatValue(v: number | null, unit: string): string {
   if (v === null) return "—";
   if (unit === "ratio") return `${(v * 100).toFixed(1)}%`;
-  if (unit === "currency") return `$${Math.round(v).toLocaleString()}`;
+  if (unit === "currency") return formatCurrency(v);
   if (unit === "score") return v.toFixed(2);
   return Math.round(v).toLocaleString();
 }

@@ -33,9 +33,10 @@ from app.models.operational import (
     PainPoint,
     Win,
 )
+from app.prompts.context import load_profile_sync
 from app.prompts.icp_generator_v1 import (
-    ICP_GENERATOR_SYSTEM_PROMPT_V1,
     build_icp_user_prompt,
+    render_icp_generator_system_prompt,
 )
 from app.tasks.celery_app import celery_app
 
@@ -194,7 +195,7 @@ def _aggregate_intelligence(db: Session, date_range_days: int = 90) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _call_claude(user_prompt: str) -> list[dict]:
+def _call_claude(user_prompt: str, system_prompt: str) -> list[dict]:
     """Call Claude with the ICP generator system prompt and return parsed segments.
 
     Falls back to mock output when ``ANTHROPIC_API_KEY`` is not configured or
@@ -215,7 +216,7 @@ def _call_claude(user_prompt: str) -> list[dict]:
     message = client.messages.create(
         model=settings.anthropic_model_default,
         max_tokens=4096,
-        system=ICP_GENERATOR_SYSTEM_PROMPT_V1,
+        system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )
 
@@ -353,9 +354,11 @@ def generate_icp(self, date_range_days: int = 90) -> dict:
             len(intel_data["pain_points"]),
         )
 
-        # 2. Build prompt and call Claude
+        # 2. Build prompt and call Claude — system prompt rendered with this
+        # instance's profile (defaults when no instance_profile row exists)
         user_prompt = build_icp_user_prompt(intel_data)
-        segments = _call_claude(user_prompt)
+        system_prompt = render_icp_generator_system_prompt(load_profile_sync(db))
+        segments = _call_claude(user_prompt, system_prompt)
         logger.info("Claude returned %d ICP segment(s)", len(segments))
 
         # 3. Persist to icp table

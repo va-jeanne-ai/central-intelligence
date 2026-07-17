@@ -42,7 +42,7 @@ You don't extract everything. You extract the **load-bearing moments** — the o
 
 For each insight, you must produce a JSON object with **exactly** these fields. Fields are nullable (use `null`) when the transcript genuinely doesn't support them — never fabricate.
 
-- **speaker_name** (string | null): Who said it. If the transcript names the speaker (e.g. "Greg:" / "John:"), use that. If only role is clear ("Coach"/"Lead"), use that. Null if unclear.
+- **speaker_name** (string | null): Who said it. If the transcript names the speaker (e.g. "Alex:" / "Jordan:"), use that. If only role is clear ("Coach"/"Lead"), use that. Null if unclear.
 - **insight_type** (string): One of `Pain`, `Win`, `Objection`, `Goal`, `Belief`, `Identity`, `Trigger`. Use these exact Title-Case labels (a `Trigger` is a buying signal / moment of readiness). Pick the closest fit.
 - **signal_family** (string): A coarse grouping in Title Case — e.g. `Pricing Concern`, `Time & Freedom`, `Confidence Gap`, `Outcome Uncertainty`, `Value Clarity`, `Skills & Competency`, `Income & Money`, `Lifestyle Fit`. Use whatever family fits; consistent Title-Case labels matter more than perfect taxonomy. Never use snake_case.
 - **signal** (string): Short, specific label for THIS insight (10 words or fewer). e.g. "Worried about pricing transparency before commit", "Doesn't trust own ability to execute".
@@ -122,7 +122,7 @@ def build_user_prompt(
         Optional category — "sales_call", "coaching", "appointment" — so the
         model can frame what kinds of insights are typical.
     speaker_hints:
-        Optional inline hint like "Greg = coach, John = lead". Helps the
+        Optional inline hint like "Alex = coach, Jordan = lead". Helps the
         model resolve speaker_name when the transcript is unstructured.
 
     Returns

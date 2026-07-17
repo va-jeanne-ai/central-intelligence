@@ -561,3 +561,41 @@ export interface DocumentRow {
 export interface DocumentsResponse {
   files: DocumentRow[];
 }
+
+// ─── Instance branding / white-label config ────────────────────────────────
+
+/** Public, unauthenticated branding config — GET /config/branding. */
+export interface BrandingConfig {
+  app_name: string;
+  tagline: string | null;
+  logo_url: string | null;
+  colors: Record<string, string> | null;
+  currency_code: string;
+  currency_symbol: string;
+  locale: string;
+}
+
+/** Full instance profile — GET/PUT /config/profile (auth required; PUT is admin-only). */
+export interface InstanceProfile {
+  business_name: string | null;
+  vertical: string | null;
+  business_description: string | null;
+  target_audience: string | null;
+  brand_voice: string | null;
+  terminology: Record<string, string> | null;
+  benchmarks: Record<string, unknown> | null;
+  app_name: string;
+  tagline: string | null;
+  logo_url: string | null;
+  colors: Record<string, string> | null;
+  currency_code: string;
+  currency_symbol: string;
+  timezone: string;
+  locale: string;
+  exists: boolean;
+}
+
+/** Partial update payload for PUT /config/profile — send only changed fields. */
+export type InstanceProfileUpdate = Partial<
+  Omit<InstanceProfile, "exists">
+>;

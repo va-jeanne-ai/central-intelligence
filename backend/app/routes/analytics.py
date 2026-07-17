@@ -539,6 +539,12 @@ async def refresh_overall_insight(
         result = generate_overall_insight(db, force_genesis=genesis)
     finally:
         db.close()
+    if result.get("status") == "skipped_no_evidence":
+        raise HTTPException(
+            status_code=409,
+            detail="No data to assess yet — this instance has no metric samples, "
+            "trends, or recommendations. Sync some data first.",
+        )
     return OverallInsightResponse(**result)
 
 

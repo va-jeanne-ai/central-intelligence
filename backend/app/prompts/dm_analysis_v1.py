@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import json
 
+from app.prompts.context import DEFAULT_PROFILE, PromptProfile, render
+
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
 
-DM_ANALYSIS_SYSTEM_PROMPT_V1 = """\
-You are **CI-MKT-DM**, the Direct Message Analyst specialist of Central Intelligence — an AI-powered business intelligence platform for coaching and consulting businesses — operating in **analysis mode**.
+_DM_ANALYSIS_SYSTEM_PROMPT_TEMPLATE_V1 = """\
+You are **CI-MKT-DM**, the Direct Message Analyst specialist of {{app_name}} — an AI-powered business intelligence platform for {{vertical}} businesses — operating in **analysis mode**.
 
 ## Role
 
@@ -48,7 +50,7 @@ You must use ALL of these inputs together.  An analysis that only reads dm_stats
 ## Analysis Mandate
 
 - **Never return raw data verbatim.**  Interpret, synthesise, and draw conclusions.
-- **Response rate is the primary signal** for opener quality.  Industry benchmarks for cold outreach in coaching and consulting: LinkedIn response rate > 20% is strong; 10-20% is moderate; < 10% is weak.  Instagram and Facebook cold DM response rates are typically lower due to lower perceived legitimacy — adjust benchmarks accordingly.
+- **Response rate is the primary signal** for opener quality.  Industry benchmarks for cold outreach in {{vertical}}: LinkedIn response rate > 20% is strong; 10-20% is moderate; < 10% is weak.  Instagram and Facebook cold DM response rates are typically lower due to lower perceived legitimacy — adjust benchmarks accordingly.
 - **Positive response rate is the quality filter.**  A 40% response rate with 5% positive response rate means most replies are deflections or polite rejections — the opener is generating activity without generating interest.  Name this pattern explicitly when you see it.
 - **Conversion rate reveals sequence depth.**  A high positive response rate with low conversion rate means the sequence warms people up but does not move them to a decision.  This is a mid-sequence or closing failure, not an opener failure — diagnose it at the correct layer.
 - **Sequence type comparison is mandatory.**  Which sequence type converts best overall?  Is cold outreach or re-engagement generating better ROI per message sent?  Name the efficiency leader and explain why.
@@ -109,6 +111,17 @@ The following illustrates the expected structure and writing quality.  All value
 }
 ```\
 """
+
+
+
+def render_dm_analysis_system_prompt(profile: PromptProfile | None = None) -> str:
+    """Render the DM analysis system prompt for a specific instance profile."""
+    return render(_DM_ANALYSIS_SYSTEM_PROMPT_TEMPLATE_V1, profile)
+
+
+# Rendered with the frozen defaults (the pre-Phase-1 literals) so importers and
+# the parity snapshot see stable text regardless of process state.
+DM_ANALYSIS_SYSTEM_PROMPT_V1 = render_dm_analysis_system_prompt(DEFAULT_PROFILE)
 
 # ---------------------------------------------------------------------------
 # User prompt builder
@@ -506,4 +519,5 @@ __all__ = [
     "DM_ANALYSIS_SYSTEM_PROMPT_V1",
     "DM_ANALYSIS_OUTPUT_SCHEMA",
     "build_dm_analysis_user_prompt",
+    "render_dm_analysis_system_prompt",
 ]

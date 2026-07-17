@@ -273,6 +273,20 @@ def create_app() -> FastAPI:
     # Mount at root so the prefix defined in the router is used verbatim.
     app.include_router(auth_router)
 
+    from app.routes.config import router as config_router
+    app.include_router(config_router, prefix="/api/v1")
+
+    @app.on_event("startup")
+    async def _prime_prompt_profile() -> None:
+        # Cache this instance's prompt profile so agents constructed in sync
+        # contexts (e.g. director __init__) render with the right business
+        # context. Failure-safe: defaults apply if the read fails.
+        from app.database import AsyncSessionLocal
+        from app.prompts.context import prime_profile_cache
+
+        async with AsyncSessionLocal() as session:
+            await prime_profile_cache(session)
+
     logger.info(
         "Central Intelligence API ready — debug=%s cors_origins=%s",
         settings.debug,

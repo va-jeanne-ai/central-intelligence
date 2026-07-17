@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staging Parity Runbook — Central Intelligence</title>
+<style>
+  :root {
+    --ground: #FAFAF7; --surface: #FFFFFF; --ink: #24272C; --ink-soft: #5A5F66;
+    --line: #E4E2DC; --accent: #A8770D; --accent-soft: #FBF3DF;
+    --good: #0E7C4A; --good-soft: #E3F3EA; --bad: #B3382C; --bad-soft: #F9E9E7;
+    --dim: #8A8F96; --dim-soft: #EFEFEC; --code-bg: #F4F3EF;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #16181B; --surface: #1E2125; --ink: #E6E4DE; --ink-soft: #A6A9AE;
+      --line: #33373D; --accent: #E3AC2E; --accent-soft: #2E2712;
+      --good: #4CBE8A; --good-soft: #16301F; --bad: #E07A6E; --bad-soft: #3A1F1B;
+      --dim: #7E838A; --dim-soft: #26292E; --code-bg: #24272C;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #FAFAF7; --surface: #FFFFFF; --ink: #24272C; --ink-soft: #5A5F66;
+    --line: #E4E2DC; --accent: #A8770D; --accent-soft: #FBF3DF;
+    --good: #0E7C4A; --good-soft: #E3F3EA; --bad: #B3382C; --bad-soft: #F9E9E7;
+    --dim: #8A8F96; --dim-soft: #EFEFEC; --code-bg: #F4F3EF;
+  }
+  :root[data-theme="dark"] {
+    --ground: #16181B; --surface: #1E2125; --ink: #E6E4DE; --ink-soft: #A6A9AE;
+    --line: #33373D; --accent: #E3AC2E; --accent-soft: #2E2712;
+    --good: #4CBE8A; --good-soft: #16301F; --bad: #E07A6E; --bad-soft: #3A1F1B;
+    --dim: #7E838A; --dim-soft: #26292E; --code-bg: #24272C;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+    font: 16px/1.65 "Avenir Next", "Helvetica Neue", -apple-system, "Segoe UI", sans-serif; }
+  .page { max-width: 900px; margin: 0 auto; padding: 56px 28px 96px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .eyebrow::before { content: ""; width: 22px; height: 3px; background: var(--accent); }
+  h1 { font-size: 34px; line-height: 1.15; margin: 14px 0 6px; letter-spacing: -0.015em; text-wrap: balance; }
+  .meta { color: var(--ink-soft); font-size: 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: var(--accent-soft); color: var(--accent); }
+  h2 { font-size: 22px; margin: 52px 0 4px; letter-spacing: -0.01em; }
+  h2 .no { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  h3 { font-size: 16.5px; margin: 28px 0 6px; }
+  p { margin: 10px 0; max-width: 72ch; }
+  .lede { font-size: 18px; color: var(--ink-soft); max-width: 68ch; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 6px 0; max-width: 70ch; }
+  strong { font-weight: 650; }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; line-height: 1.55; margin: 12px 0; }
+  pre code { background: none; padding: 0; }
+  .cm { color: var(--dim); }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0; max-width: 76ch; }
+  .callout.warn { border-left-color: var(--bad); background: var(--bad-soft); }
+  .callout p { margin: 4px 0; }
+  table.data { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14.5px; }
+  table.data th { text-align: left; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-soft); padding: 8px 12px 6px; border-bottom: 2px solid var(--line); }
+  table.data td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="eyebrow">Central Intelligence · Productization</div>
+  <h1>Staging Parity Runbook</h1>
+  <div class="meta"><span class="pill">Release gate</span><span>Baseline tag <code>v1.0-greg-baseline</code></span></div>
+  <p class="lede">Every productization phase (instance profile, prompt templating,
+  sync engine, configurable directors, …) must prove it changes <strong>nothing</strong>
+  for the current client before it reaches production. This runbook is that gate.</p>
+
+  <h2><span class="no">1</span>The three parity checks</h2>
+  <div class="scroll">
+  <table class="data">
+    <tr><th>Check</th><th>What it freezes</th><th>How to run (from <code>backend/</code>)</th></tr>
+    <tr>
+      <td><strong>Prompt snapshots</strong></td>
+      <td>Every module-level prompt constant (32 constants, 24 modules)</td>
+      <td><code>PYTHONPATH=. .venv/bin/python -m tests.parity.test_prompt_snapshots</code></td>
+    </tr>
+    <tr>
+      <td><strong>Row counts</strong></td>
+      <td>COUNT(*) for all 62 ORM tables</td>
+      <td rowspan="2"><code>PYTHONPATH=. .venv/bin/python -m scripts.capture_parity_baseline --check</code></td>
+    </tr>
+    <tr>
+      <td><strong>Metric values</strong></td>
+      <td>All registry metrics' (value, sample_size) over fixed windows (all-time + since 2026-06-01)</td>
+    </tr>
+  </table>
+  </div>
+  <p>Fixtures live in <code>backend/tests/parity/fixtures/</code>. The baseline
+  production state is tagged <code>v1.0-greg-baseline</code>.</p>
+  <ul>
+    <li><strong>Prompt snapshots are data-independent</strong> — they must pass on any
+      checkout, any machine, no DB needed. Run them on every branch before merging.</li>
+    <li><strong>Row counts / metric values are data-dependent</strong> — the live DB
+      drifts by design (hourly WGR sync). A <code>--check</code> is only meaningful
+      against a frozen copy of the data, which the staging procedure below provides.</li>
+  </ul>
+
+  <h2><span class="no">2</span>Creating a staging clone</h2>
+  <p>Local restore of a production dump (preferred — cheap, disposable):</p>
+  <ol>
+    <li><strong>Dump the app DB</strong> (read-only; use the transaction pooler, port 6543):
+      <pre><code>pg_dump "$PARITY_DATABASE_URL" -Fc -f .tmp/ci_prod.dump</code></pre></li>
+    <li><strong>Restore locally</strong> into Postgres 15+ with pgvector:
+      <pre><code>createdb ci_staging &amp;&amp; pg_restore -d ci_staging --no-owner .tmp/ci_prod.dump</code></pre></li>
+    <li><strong>Point a staging env at it</strong> — copy <code>backend/.env</code> to
+      <code>backend/.env.staging</code> and edit, then run the API/scripts with it.</li>
+  </ol>
+  <div class="callout warn">
+    <p><strong>Required staging overrides</strong> — these make the clone inert:</p>
+    <p><code>DATABASE_URL</code> → the local <code>ci_staging</code> DB</p>
+    <p><code>CLIENT_SYNC_ENABLED=false</code> — never sync into staging</p>
+    <p><code>INTEGRATIONS_ENCRYPTION_KEY</code> → a <strong>freshly generated</strong> Fernet key,
+      so restored third-party credentials are unreadable and no job can accidentally
+      call Mailchimp/Meta/Google from staging</p>
+    <p><code>MOCK_MODE=true</code> unless a test explicitly needs live LLM calls
+      (keeps Anthropic/Voyage spend at zero)</p>
+  </div>
+  <p>Alternative when full-stack behavior matters (Caddy, compose, beat): snapshot
+  the DO droplet, restore to a throwaway droplet, apply the same env overrides,
+  destroy it when done.</p>
+
+  <h2><span class="no">3</span>Release gate procedure (per phase)</h2>
+  <ol>
+    <li>On the staging clone, <strong>refresh the data fixtures against the old code</strong>:
+      check out the last released tag (first time: <code>v1.0-greg-baseline</code>), then run
+      <code>capture_parity_baseline</code> with <code>PARITY_DATABASE_URL</code> pointing at the
+      staging DB. This freezes what "unchanged" means for this data snapshot.</li>
+    <li><strong>Check out the release-candidate branch</strong> (same staging DB) and run:
+      <ul>
+        <li><code>tests.parity.test_prompt_snapshots</code> — prompts identical (or intentionally
+          regenerated in the same PR, with the diff reviewed)</li>
+        <li><code>capture_parity_baseline --check</code> — counts and metrics identical</li>
+        <li>the full test suite (<code>tests/test_*.py</code>)</li>
+        <li>chat smoke test: ask the orchestrator + each director one real business
+          question; answers must cite the same numbers as before</li>
+      </ul></li>
+    <li>Only on green: tag the release, merge to org <code>main</code>, sync the
+      <code>va-jeanne-ai</code> mirror, redeploy the droplet, verify Vercel shows
+      <strong>Ready</strong> — frontend deploys fail silently on lint, so run
+      <code>npm run build</code> locally first.</li>
+  </ol>
+
+  <h2><span class="no">4</span>When a parity change is intentional</h2>
+  <p>A phase that <em>means</em> to change something (e.g. Phase 1 moves a benchmark
+  sentence between prompt files) regenerates the affected fixture <strong>in the same
+  PR</strong> and the fixture diff is reviewed like code — the diff IS the proof of
+  exactly what changed:</p>
+  <pre><code>UPDATE_PARITY_FIXTURES=1 PYTHONPATH=. .venv/bin/python -m tests.parity.test_prompt_snapshots</code></pre>
+</div>
+</body>
+</html>

@@ -87,7 +87,10 @@ _EXEMPT_PREFIXES: tuple[str, ...] = (
     "/redoc",
     "/openapi.json",
 )
-_EXEMPT_EXACT: frozenset[str] = frozenset({"/api/v1/health"})
+# /config/branding is public: the login page renders the white-label
+# app name/logo before any user is authenticated. It only ever exposes the
+# branding subset of instance_profile — never prompts/terminology/benchmarks.
+_EXEMPT_EXACT: frozenset[str] = frozenset({"/api/v1/health", "/api/v1/config/branding"})
 
 # Supabase JWTs since 2024 use asymmetric ES256 (signed with project key,
 # verified with public key from JWKS).  Older / legacy Supabase projects

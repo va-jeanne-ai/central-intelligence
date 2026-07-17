@@ -44,7 +44,11 @@ run_prefixed() {
 echo ">>> backend dev stack starting (Ctrl+C to stop all)"
 
 run_prefixed "backend" .venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-run_prefixed "worker"  env PYTHONPATH=. .venv/bin/celery -A app.tasks.celery_app worker --loglevel=info
+# --concurrency=2 matches prod (docker-compose.yml). Unbounded, celery forks one
+# child per CPU core and each child opens its own DB pool — enough to exhaust the
+# Supabase session pooler's 15-client cap alongside the production droplet
+# (EMAXCONNSESSION, seen 2026-07-17).
+run_prefixed "worker"  env PYTHONPATH=. .venv/bin/celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
 run_prefixed "beat"    env PYTHONPATH=. .venv/bin/celery -A app.tasks.celery_app beat   --loglevel=info
 
 wait
