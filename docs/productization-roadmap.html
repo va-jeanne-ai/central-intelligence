@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Productization Roadmap — Central Intelligence</title>
+<style>
+  :root {
+    --ground: #FAFAF7; --surface: #FFFFFF; --ink: #24272C; --ink-soft: #5A5F66;
+    --line: #E4E2DC; --accent: #A8770D; --accent-soft: #FBF3DF;
+    --good: #0E7C4A; --good-soft: #E3F3EA; --bad: #B3382C; --bad-soft: #F9E9E7;
+    --dim: #8A8F96; --dim-soft: #EFEFEC; --code-bg: #F4F3EF;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #16181B; --surface: #1E2125; --ink: #E6E4DE; --ink-soft: #A6A9AE;
+      --line: #33373D; --accent: #E3AC2E; --accent-soft: #2E2712;
+      --good: #4CBE8A; --good-soft: #16301F; --bad: #E07A6E; --bad-soft: #3A1F1B;
+      --dim: #7E838A; --dim-soft: #26292E; --code-bg: #24272C;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #FAFAF7; --surface: #FFFFFF; --ink: #24272C; --ink-soft: #5A5F66;
+    --line: #E4E2DC; --accent: #A8770D; --accent-soft: #FBF3DF;
+    --good: #0E7C4A; --good-soft: #E3F3EA; --bad: #B3382C; --bad-soft: #F9E9E7;
+    --dim: #8A8F96; --dim-soft: #EFEFEC; --code-bg: #F4F3EF;
+  }
+  :root[data-theme="dark"] {
+    --ground: #16181B; --surface: #1E2125; --ink: #E6E4DE; --ink-soft: #A6A9AE;
+    --line: #33373D; --accent: #E3AC2E; --accent-soft: #2E2712;
+    --good: #4CBE8A; --good-soft: #16301F; --bad: #E07A6E; --bad-soft: #3A1F1B;
+    --dim: #7E838A; --dim-soft: #26292E; --code-bg: #24272C;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+    font: 16px/1.65 "Avenir Next", "Helvetica Neue", -apple-system, "Segoe UI", sans-serif; }
+  .page { max-width: 920px; margin: 0 auto; padding: 56px 28px 96px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .eyebrow::before { content: ""; width: 22px; height: 3px; background: var(--accent); }
+  h1 { font-size: 34px; line-height: 1.15; margin: 14px 0 6px; letter-spacing: -0.015em; text-wrap: balance; }
+  .meta { color: var(--ink-soft); font-size: 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  h2 { font-size: 22px; margin: 52px 0 4px; letter-spacing: -0.01em; }
+  h2 .no { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  h3 { font-size: 16.5px; margin: 26px 0 6px; }
+  p { margin: 10px 0; max-width: 74ch; }
+  .lede { font-size: 18px; color: var(--ink-soft); max-width: 70ch; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 6px 0; max-width: 72ch; }
+  strong { font-weight: 650; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px;
+    background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .pill.blocking { background: var(--bad-soft); color: var(--bad); }
+  .pill.recommended { background: var(--accent-soft); color: var(--accent); }
+  .pill.launch { background: var(--good-soft); color: var(--good); }
+  .pill.polish { background: var(--dim-soft); color: var(--dim); }
+  .pill.time { background: var(--dim-soft); color: var(--ink-soft); font-weight: 500; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--bad); background: var(--bad-soft); }
+  .callout p { margin: 4px 0; }
+  table.data { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14.5px; }
+  table.data th { text-align: left; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-soft); padding: 8px 12px 6px; border-bottom: 2px solid var(--line); }
+  table.data td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .scroll { overflow-x: auto; }
+  .phase { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 22px; margin: 16px 0; }
+  .phase h3 { margin: 0 0 2px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .phase h3 .pnum { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .phase ul { margin-top: 8px; }
+  .pitch { counter-reset: pitch; list-style: none; padding: 0; }
+  .pitch li { counter-increment: pitch; display: flex; gap: 14px; padding: 10px 4px;
+    border-bottom: 1px solid var(--line); max-width: 78ch; }
+  .pitch li:last-child { border-bottom: none; }
+  .pitch li::before { content: counter(pitch); flex: none; width: 26px; height: 26px;
+    border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+    font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="eyebrow">Central Intelligence · Productization</div>
+  <h1>Productization Roadmap</h1>
+  <div class="meta"><span>Approved 2026-07-15</span><span>·</span><span>~5–7 solo weeks to company #2 launch</span></div>
+  <p class="lede">How Central Intelligence goes from a single-client deployment to a
+  product any company can run — starting with company #2, without ever regressing
+  the current client's instance.</p>
+
+  <h2><span class="no">1</span>Locked decisions</h2>
+  <ul>
+    <li><strong>One deployment per company.</strong> Each client gets their own droplet, app DB,
+      Supabase auth project, and Vercel frontend. No multi-tenant rewrite, no
+      <code>tenant_id</code> propagation. We provision instances (scripted); after that the
+      client's admin self-serves all configuration in-app.</li>
+    <li><strong>Company #2 is a different business entirely</strong> — their Supabase won't match
+      the current source schema. The sync layer becomes config-driven instead of hardcoded.</li>
+    <li><strong>Flagship onboarding feature: AI-assisted mapping wizard</strong> — introspect the
+      client's database, AI proposes how their tables map into CI's concepts, a human
+      approves, and the approved mapping drives backfill + hourly sync.</li>
+    <li><strong>Schema access for company #2 is pending</strong> — the discovery checklist
+      (<code>docs/company2-discovery-checklist.html</code>) collects it; all prep phases proceed without it.</li>
+  </ul>
+
+  <h2><span class="no">2</span>What blocks reuse today</h2>
+  <div class="scroll">
+  <table class="data">
+    <tr><th>#</th><th>Blocker</th><th>Where</th></tr>
+    <tr><td>1</td><td>Source-DB sync hardwired to the current client's schema (~28 tables, exact column names, stage value maps)</td><td><code>backend/app/services/wgr_sync/</code></td></tr>
+    <tr><td>2</td><td>Prompts hardcode a "coaching and consulting" vertical + literal person names; no per-instance business context</td><td><code>backend/app/prompts/</code> (~18 files)</td></tr>
+    <tr><td>3</td><td>Metric SQL bound to current table shapes (incl. join quirks)</td><td><code>backend/app/analytics/registry.py</code></td></tr>
+    <tr><td>4</td><td>Three departments hardcoded as agent classes, routes, and nav</td><td><code>agents/directors/</code>, <code>sidebar.tsx</code></td></tr>
+    <tr><td>5</td><td>Currency "$" and client-specific sync UI hardcoded in frontend</td><td><code>insights/*</code>, <code>freshness-panel.tsx</code></td></tr>
+  </table>
+  </div>
+  <p>Already reusable: client-DB connection config with read-only enforcement, UTC
+  everywhere, centralized product branding, encrypted integration credentials, the
+  generic upsert core, and the already-generic <code>DirectorAgent</code> base.</p>
+
+  <h2><span class="no">3</span>Key design choices</h2>
+  <ul>
+    <li><strong>Canonical core, not dynamic schema.</strong> <code>leads</code>, <code>calls</code>,
+      <code>appointments</code>, <code>closed_sales</code>, <code>sales_reps</code>, <code>sales_activities</code>,
+      <code>insights</code>, <code>email_campaigns</code> are generic business concepts any company maps
+      onto. Client-flavored tables (coaching strikes, webinars, scorecards…) become optional
+      <strong>modules</strong>, disabled per instance. Anything that fits nothing gets
+      <code>entity_definitions</code> + <code>custom_records</code> (JSONB — syncable, RAG-embeddable,
+      metric-queryable).</li>
+    <li><strong>Generic sync engine as a new module.</strong> The current client's pipeline is
+      expressed as the engine's first mapping-config fixture for parity testing, but
+      production stays on the legacy code until the engine proves parity. Company #2 launches
+      on the engine from day one.</li>
+    <li><strong>Metrics: hybrid.</strong> The built-in metrics stay in code; a
+      <code>metric_definitions</code> table adds per-instance metrics/overrides, with SQL
+      validated against the existing contract and executed read-only with a statement timeout.</li>
+    <li><strong>Prompts: templated.</strong> A per-instance <code>instance_profile</code> table
+      (vertical, description, terminology, benchmarks, currency, branding) is injected into
+      every prompt as a business-context block. Literal person names are scrubbed.</li>
+  </ul>
+
+  <h2><span class="no">4</span>Phases</h2>
+  <div class="callout"><p><strong>Blocking for company #2's launch: phases 0, 1, 2, 4</strong>
+  (3 strongly recommended). Phases 5–7 are product depth. Everything except phase 4 can be
+  done before their schema access arrives.</p></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase 0</span> Safety net + discovery kit <span class="pill launch">DONE 2026-07-15</span> <span class="pill time">0.5–1 wk</span></h3>
+    <ul>
+      <li>Tag <code>v1.0-greg-baseline</code>; parity fixtures (prompt snapshots, 62 table counts, 14 metric values) in <code>backend/tests/parity/</code></li>
+      <li><code>scripts/capture_parity_baseline.py</code> + staging parity runbook (<code>docs/staging-parity-runbook.html</code>)</li>
+      <li>Discovery checklist ready to send to company #2</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase 1</span> Instance profile + prompt de-hardcoding <span class="pill blocking">Blocking</span> <span class="pill time">1–2 wk</span></h3>
+    <ul>
+      <li><code>instance_profile</code> singleton table + <code>routes/config.py</code> (profile, branding)</li>
+      <li><code>prompts/context.py</code> business-context block; ~18 prompt files templated; person names scrubbed</li>
+      <li>Seed current client's profile with today's exact literals → rendered prompts byte-identical (snapshot test is the gate)</li>
+      <li>Frontend: branding from API, currency helper replacing hardcoded "$", <code>settings/business</code> page</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase 2</span> Provisioning + demo instance <span class="pill blocking">Blocking</span> <span class="pill time">1–2 wk</span></h3>
+    <ul>
+      <li>Parameterized Caddyfile; <code>scripts/provision_instance.sh</code> + new-client runbook; <code>seed_instance.py</code></li>
+      <li>Rehearse end-to-end with a <strong>demo instance</strong> on fabricated data — permanent sales demo + testbed</li>
+      <li>Verify all scheduled jobs no-op cleanly on an instance with no client-sync config</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase 3</span> Generic sync engine <span class="pill recommended">Strongly recommended</span> <span class="pill time">2 wk</span></h3>
+    <ul>
+      <li><code>source_connections</code> (encrypted DSN) + versioned <code>sync_mappings</code> JSONB configs</li>
+      <li><code>services/sync_engine/</code>: spec validation, generalized read-only source client, transform registry, generic reader/mapper/upsert, parity differ</li>
+      <li>Hourly <code>source_sync</code> task (skips when no connections); generic backfill script</li>
+      <li>Current client expressed as a config fixture; shadow-run parity on staging; production stays on legacy sync</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase 4</span> Company #2 onboarding <span class="pill launch">The launch</span> <span class="pill time">1–2 wk · gated on schema access</span></h3>
+    <ul>
+      <li>Run discovery; hand-author their mapping config (dry-runs the wizard's prompt design)</li>
+      <li><code>entity_definitions</code>/<code>custom_records</code> for anything non-canonical</li>
+      <li>Provision their instance; seed profile/departments; <code>metric_definitions</code> table pulled forward — disable non-applicable built-ins, author 5–10 metrics for their business</li>
+      <li>Backfill, hourly sync, integrations, branding; feature-verification test doc for a personal pass on real data</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase 5</span> AI mapping wizard <span class="pill recommended">Flagship</span> <span class="pill time">2 wk · not blocking</span></h3>
+    <ul>
+      <li><code>mapping_advisor</code> agent: introspection snapshot + canonical catalog + business profile → draft mapping with per-table confidence + rationale</li>
+      <li>Onboarding routes: connect → introspect → propose → dry-run → activate</li>
+      <li><code>settings/data-source</code> wizard UI; freshness panel generalized per-connection</li>
+      <li>Accuracy benchmark: score wizard proposals against both hand-approved configs</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase 6</span> Configurable departments + metrics UI <span class="pill polish">Polish</span> <span class="pill time">1–2 wk</span></h3>
+    <ul>
+      <li><code>departments</code> table seeded with today's three verbatim; agent registry; <code>ConfigurableDirector</code>; flag-flip migration then delete legacy director classes</li>
+      <li>Navigation served from <code>GET /api/v1/config/navigation</code>; sidebar fetches with static fallback</li>
+      <li>Admin pages: <code>settings/departments</code>, <code>settings/metrics</code></li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase 7</span> Optional consolidation <span class="pill polish">Later</span></h3>
+    <ul>
+      <li>Cut the original instance over to the generic engine (parity already proven); retire legacy sync</li>
+      <li>Wizard-driven re-mapping for schema drift; constrained metric-builder UI if raw-SQL authoring proves painful</li>
+    </ul>
+  </div>
+
+  <h2><span class="no">5</span>The product pitch</h2>
+  <ol class="pitch">
+    <li><span><strong>Private AI business brain</strong> — dedicated single-tenant instance: your server, your database, never commingled with anyone else's.</span></li>
+    <li><span><strong>AI executive team</strong> — an orchestrator plus configurable department directors and specialists that answer with numbers computed from your real data, never guessed.</span></li>
+    <li><span><strong>AI-assisted onboarding</strong> — connect your database, AI proposes the data mapping, you approve, and backfill + hourly sync run automatically.</span></li>
+    <li><span><strong>KPI intelligence engine</strong> — declarative metrics, daily snapshots, statistical improving/declining verdicts, threshold recommendations, weekly digest.</span></li>
+    <li><span><strong>Company knowledge base</strong> — semantic search over Drive files, emails, call transcripts, and notes (RAG).</span></li>
+    <li><span><strong>Integrations hub</strong> — Mailchimp, GoHighLevel, Google Workspace/Calendar/Drive, Meta/Google Ads, Instagram/Facebook; encrypted credentials, self-serve connection.</span></li>
+    <li><span><strong>Fully white-labeled</strong> — your name, logo, colors, currency, terminology, and business context baked into every AI interaction.</span></li>
+  </ol>
+
+  <h2><span class="no">6</span>Verification strategy</h2>
+  <ul>
+    <li><strong>Per phase:</strong> parity fixtures must hold on a staging clone before any
+      production release (see the staging parity runbook); releases pinned to git tags.</li>
+    <li><strong>Phase 1:</strong> prompt snapshot test — rendered-with-seed ≡ old literals; chat smoke tests.</li>
+    <li><strong>Phase 3:</strong> shadow-run parity report clean for every synced table; transform unit tests.</li>
+    <li><strong>Phase 4 (launch gate):</strong> backfill counts match source; every metric validated
+      on their data; directors answer real business questions correctly; <code>npm run build</code>
+      before Vercel deploy; personal pass through the feature test doc on real data.</li>
+    <li><strong>Branch discipline:</strong> fresh branch off latest main per phase; mirror synced
+      after org merges before droplet redeploys.</li>
+  </ul>
+</div>
+</body>
+</html>

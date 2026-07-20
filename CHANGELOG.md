@@ -6,6 +6,32 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Productization Phase 0: parity safety net + client discovery kit
+
+Groundwork for shipping CI to additional companies (each on its own isolated
+instance) without ever regressing the current client's deployment:
+
+- **`v1.0-greg-baseline` tag** marks the production state all parity checks
+  compare against.
+- **Prompt parity snapshots** — `backend/tests/parity/test_prompt_snapshots.py`
+  freezes all 32 module-level prompt constants across `app/prompts/` and
+  `app/agents/directors/` into `tests/parity/fixtures/prompt_snapshots.json`.
+  Any prompt refactor must keep rendered text identical (or regenerate the
+  fixture in the same PR with the diff reviewed).
+- **DB baseline capture** — `backend/scripts/capture_parity_baseline.py`
+  records COUNT(*) for all 62 ORM tables plus every registry metric's
+  (value, sample_size) over fixed absolute windows; `--check` diffs a
+  candidate build against the frozen baseline on a staging clone. Connects
+  read-only via the Supabase transaction pooler (port 6543) so it never
+  competes with production for the 15 session-pooler slots.
+- **Staging parity runbook** — `docs/staging-parity-runbook.html`: how to clone
+  production data safely (fresh Fernet key so restored integration creds are
+  unreadable, sync disabled, MOCK_MODE on) and the per-phase release gate.
+- **New-client discovery checklist** — `docs/company2-discovery-checklist.html`:
+  everything to collect from a prospective company (read-only DB access,
+  business semantics, departments/modules, KPIs, integrations, branding)
+  before their instance can be built.
+
 ### Added — In-app "What's new" tour
 
 A "What's new in Central Intelligence" hub dialog auto-opens once per release
