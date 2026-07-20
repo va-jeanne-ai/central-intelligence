@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,7 +61,13 @@ class Settings(BaseSettings):
     # cannot. SAFETY: this credential is the `postgres` role and CAN WRITE —
     # all access MUST be opened READ ONLY. Prefer a dedicated read-only role
     # once the client provides one. Empty in environments without DB access.
-    wgr_database_url: str = ""
+    # Env var: CLIENT_DATABASE_URL. The legacy name WGR_DATABASE_URL (the
+    # original client's initials) is still accepted so existing deployments
+    # keep working; prefer the generic name in all new .env files.
+    client_database_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("CLIENT_DATABASE_URL", "WGR_DATABASE_URL"),
+    )
 
     # ------------------------------------------------------------------
     # Mailchimp — F28 connector for email stats. When mailchimp_api_key is
@@ -113,7 +120,15 @@ class Settings(BaseSettings):
     embed_worker_batch_size: int = 32
     embed_worker_max_tokens_per_chunk: int = 1024
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    # extra="ignore": .env legitimately carries keys Settings doesn't model —
+    # API_DOMAIN consumed by Caddy via compose env_file, and vars introduced by
+    # a newer branch than the one currently checked out (e.g. this rename while
+    # other branches still expect the old name). Unknown keys must not be fatal.
+    # Safe direction: a typo'd security var falls back to its fail-closed
+    # default (e.g. mock_mode=False keeps auth ON).
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
 
 settings = Settings()

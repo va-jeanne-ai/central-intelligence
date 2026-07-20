@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Client source DB env var renamed to CLIENT_DATABASE_URL
+
+`WGR_DATABASE_URL` (named after the original client) is now
+`CLIENT_DATABASE_URL` in code, `.env.example`, and local `.env` files —
+groundwork for running CI for more than one company. Backward compatible:
+the settings field accepts both env names (`CLIENT_DATABASE_URL` wins when
+both are set), so existing deployments whose `.env` still says
+`WGR_DATABASE_URL` keep syncing without any change. Rename the var in each
+deployment's `.env` at the next convenient deploy.
+
 ### Added — Productization Phase 0: parity safety net + client discovery kit
 
 Groundwork for shipping CI to additional companies (each on its own isolated
