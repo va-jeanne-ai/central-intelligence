@@ -1,0 +1,216 @@
+{
+  "_meta": {
+    "captured_at": "2026-07-14T20:43:27+00:00",
+    "git_rev": "7ec8847",
+    "windows": {
+      "all_time": null,
+      "since_2026-06-01": "2026-06-01T00:00:00+00:00"
+    }
+  },
+  "metrics": {
+    "fulfillment.goal_completion": {
+      "all_time": {
+        "sample_size": 0,
+        "value": 0.0
+      },
+      "since_2026-06-01": {
+        "sample_size": 0,
+        "value": 0.0
+      }
+    },
+    "fulfillment.open_coaching_strikes": {
+      "all_time": {
+        "sample_size": 25,
+        "value": 25.0
+      },
+      "since_2026-06-01": {
+        "sample_size": 25,
+        "value": 25.0
+      }
+    },
+    "marketing.email_click_rate": {
+      "all_time": {
+        "sample_size": 10468049,
+        "value": 0.00805642006452205
+      },
+      "since_2026-06-01": {
+        "sample_size": 248264,
+        "value": 0.00609029098056907
+      }
+    },
+    "marketing.email_open_rate": {
+      "all_time": {
+        "sample_size": 10468049,
+        "value": 0.213284920618923
+      },
+      "since_2026-06-01": {
+        "sample_size": 248264,
+        "value": 0.29695404891567
+      }
+    },
+    "marketing.funnel_conversion": {
+      "all_time": {
+        "sample_size": 0,
+        "value": 0.0
+      },
+      "since_2026-06-01": {
+        "sample_size": 0,
+        "value": 0.0
+      }
+    },
+    "marketing.social_engagement": {
+      "all_time": {
+        "sample_size": 2,
+        "value": 5.3
+      },
+      "since_2026-06-01": {
+        "sample_size": 2,
+        "value": 5.3
+      }
+    },
+    "sales.appointment_show_rate": {
+      "all_time": {
+        "sample_size": 1090,
+        "value": 0.830275229357798
+      },
+      "since_2026-06-01": {
+        "sample_size": 133,
+        "value": 0.864661654135338
+      }
+    },
+    "sales.avg_call_score": {
+      "all_time": {
+        "sample_size": 775,
+        "value": 3.4412903225806453
+      },
+      "since_2026-06-01": {
+        "sample_size": 775,
+        "value": 3.4412903225806453
+      }
+    },
+    "sales.channel_response_rate": {
+      "all_time": {
+        "sample_size": 45743,
+        "value": 0.236385895109634
+      },
+      "since_2026-06-01": {
+        "sample_size": 45640,
+        "value": 0.236196319018405
+      }
+    },
+    "sales.closed_sales_count": {
+      "all_time": {
+        "sample_size": 78,
+        "value": 78.0
+      },
+      "since_2026-06-01": {
+        "sample_size": 6,
+        "value": 6.0
+      }
+    },
+    "sales.lead_to_close_rate": {
+      "all_time": {
+        "sample_size": 12259,
+        "value": 0.006362672322375398
+      },
+      "since_2026-06-01": {
+        "sample_size": 867,
+        "value": 0.002306805074971165
+      }
+    },
+    "sales.outbound_volume": {
+      "all_time": {
+        "sample_size": 45743,
+        "value": 45743.0
+      },
+      "since_2026-06-01": {
+        "sample_size": 45640,
+        "value": 45640.0
+      }
+    },
+    "sales.revenue_collected": {
+      "all_time": {
+        "sample_size": 74,
+        "value": 433250.0
+      },
+      "since_2026-06-01": {
+        "sample_size": 6,
+        "value": 60000.0
+      }
+    },
+    "sales.revenue_earned": {
+      "all_time": {
+        "sample_size": 63,
+        "value": 640000.0
+      },
+      "since_2026-06-01": {
+        "sample_size": 6,
+        "value": 60000.0
+      }
+    }
+  },
+  "row_counts": {
+    "ads_stats": 3,
+    "appointments": 1964,
+    "audit_log": 24,
+    "business_profile": 2,
+    "calls": 375,
+    "chat_messages": 4,
+    "chat_sessions": 2,
+    "closed_sales": 78,
+    "content_ideas": 933,
+    "dm_stats": 0,
+    "email_campaigns": 2409,
+    "email_messages": 0,
+    "email_threads": 0,
+    "embed_pending": 0,
+    "embedding_budget": 1,
+    "embeddings": 7363,
+    "error_log": 0,
+    "funnel_events": 0,
+    "funnel_stats": 0,
+    "goals": 0,
+    "google_calendar_events": 305,
+    "google_drive_files": 100,
+    "icp": 3,
+    "idempotency_keys": 0,
+    "insight_tags": 3280,
+    "insights": 1517,
+    "instagram_posts": 1000,
+    "integrations": 5,
+    "lead_notes": 0,
+    "leads": 12259,
+    "market_signals": 1547,
+    "member_notes": 0,
+    "members": 0,
+    "metric_snapshots": 1166,
+    "monthly_preferences": 0,
+    "objections": 0,
+    "offers": 18,
+    "opt_in_events": 14357,
+    "overall_insights": 12,
+    "pain_points": 0,
+    "promotions": 0,
+    "recommendations": 11,
+    "rep_overrides": 0,
+    "sales_activities": 56556,
+    "sales_call_scores": 775,
+    "sales_coaching_strikes": 25,
+    "sales_eod_reports": 218,
+    "sales_reps": 8,
+    "sales_scorecard_categories": 11,
+    "sales_strike_actions": 124,
+    "sales_strike_evidence": 102,
+    "sales_strike_rules": 16,
+    "social_comments": 13560,
+    "social_stats": 2,
+    "support_tickets": 0,
+    "sync_log": 360,
+    "tag_dictionary": 2331,
+    "teams": 0,
+    "user_integration_credentials": 1,
+    "users": 2,
+    "webinar_engagements": 7566,
+    "wins": 0
+  }
+}

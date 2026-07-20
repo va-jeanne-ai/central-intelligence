@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Client Discovery Checklist — Central Intelligence</title>
+<style>
+  :root {
+    --ground: #FAFAF7; --surface: #FFFFFF; --ink: #24272C; --ink-soft: #5A5F66;
+    --line: #E4E2DC; --accent: #A8770D; --accent-soft: #FBF3DF;
+    --good: #0E7C4A; --good-soft: #E3F3EA; --bad: #B3382C; --bad-soft: #F9E9E7;
+    --dim: #8A8F96; --dim-soft: #EFEFEC; --code-bg: #F4F3EF;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #16181B; --surface: #1E2125; --ink: #E6E4DE; --ink-soft: #A6A9AE;
+      --line: #33373D; --accent: #E3AC2E; --accent-soft: #2E2712;
+      --good: #4CBE8A; --good-soft: #16301F; --bad: #E07A6E; --bad-soft: #3A1F1B;
+      --dim: #7E838A; --dim-soft: #26292E; --code-bg: #24272C;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #FAFAF7; --surface: #FFFFFF; --ink: #24272C; --ink-soft: #5A5F66;
+    --line: #E4E2DC; --accent: #A8770D; --accent-soft: #FBF3DF;
+    --good: #0E7C4A; --good-soft: #E3F3EA; --bad: #B3382C; --bad-soft: #F9E9E7;
+    --dim: #8A8F96; --dim-soft: #EFEFEC; --code-bg: #F4F3EF;
+  }
+  :root[data-theme="dark"] {
+    --ground: #16181B; --surface: #1E2125; --ink: #E6E4DE; --ink-soft: #A6A9AE;
+    --line: #33373D; --accent: #E3AC2E; --accent-soft: #2E2712;
+    --good: #4CBE8A; --good-soft: #16301F; --bad: #E07A6E; --bad-soft: #3A1F1B;
+    --dim: #7E838A; --dim-soft: #26292E; --code-bg: #24272C;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+    font: 16px/1.65 "Avenir Next", "Helvetica Neue", -apple-system, "Segoe UI", sans-serif; }
+  .page { max-width: 860px; margin: 0 auto; padding: 56px 28px 96px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .eyebrow::before { content: ""; width: 22px; height: 3px; background: var(--accent); }
+  h1 { font-size: 34px; line-height: 1.15; margin: 14px 0 6px; letter-spacing: -0.015em; text-wrap: balance; }
+  .meta { color: var(--ink-soft); font-size: 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: var(--accent-soft); color: var(--accent); }
+  h2 { font-size: 22px; margin: 48px 0 4px; letter-spacing: -0.01em; }
+  h2 .no { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .who { font-size: 13px; color: var(--ink-soft); margin: 0 0 10px; }
+  p { margin: 10px 0; max-width: 72ch; }
+  .lede { font-size: 18px; color: var(--ink-soft); max-width: 68ch; }
+  strong { font-weight: 650; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px;
+    background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0; max-width: 76ch; }
+  .callout p { margin: 4px 0; }
+  ul.check { list-style: none; margin: 8px 0; padding: 0; }
+  ul.check li { display: flex; gap: 12px; align-items: flex-start; padding: 9px 4px;
+    border-bottom: 1px solid var(--line); max-width: 76ch; }
+  ul.check li:last-child { border-bottom: none; }
+  ul.check input[type="checkbox"] { margin-top: 5px; width: 15px; height: 15px; accent-color: var(--accent); flex: none; }
+  ul.check .hint { color: var(--ink-soft); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="eyebrow">Central Intelligence · Onboarding</div>
+  <h1>New Client Discovery Checklist</h1>
+  <div class="meta"><span class="pill">Send to client</span><span>Prepared 2026-07-15</span></div>
+  <p class="lede">What we need from a new company before their Central Intelligence
+  instance can be built. Items are grouped by who typically answers them.</p>
+  <div class="callout"><p><strong>Nothing here requires write access to any client
+  system.</strong> Central Intelligence only ever <em>reads</em> from the client's
+  database — read-only access is enforced at the connection level.</p></div>
+
+  <h2><span class="no">1</span>Database access</h2>
+  <p class="who">Technical contact</p>
+  <ul class="check">
+    <li><input type="checkbox"><span><strong>Read-only Postgres role</strong> on your Supabase project (or other Postgres), and its connection string (host, port, database, user, password).<br><span class="hint">A dedicated role limited to SELECT is strongly preferred — CI additionally forces READ ONLY at the session level, but least-privilege is the rule.</span></span></li>
+    <li><input type="checkbox"><span>Permission to <strong>dump the schema</strong> (tables, columns, keys, row counts) and to sample a small number of rows per table for mapping purposes.</span></li>
+    <li><input type="checkbox"><span>Confirmation of <strong>which tables are actively synced and populated</strong> — is everything in the business really landing in this database, or are some systems not wired in yet? List anything missing.</span></li>
+    <li><input type="checkbox"><span>Any tables we must <strong>exclude</strong> (PII beyond what CI needs, HR, payroll, anything contractually off-limits).</span></li>
+  </ul>
+
+  <h2><span class="no">2</span>Business semantics</h2>
+  <p class="who">Owner / ops lead — plain-English answers, no technical knowledge needed</p>
+  <ul class="check">
+    <li><input type="checkbox"><span>What is a <strong>customer</strong> in your business, and where does one live in your data?</span></li>
+    <li><input type="checkbox"><span>What is a <strong>revenue event</strong> (a sale, an invoice, a subscription payment, a placement…)? What amount and date fields define it?</span></li>
+    <li><input type="checkbox"><span>Who counts as a <strong>team member</strong> whose performance CI should track?</span></li>
+    <li><input type="checkbox"><span>What are your <strong>interactions</strong> (calls, meetings, tickets, messages, visits)?</span></li>
+    <li><input type="checkbox"><span>What does your <strong>pipeline</strong> look like — the stages a customer moves through, in order, with the exact labels your data uses.</span></li>
+    <li><input type="checkbox"><span>The <strong>KPIs you actually run the business on</strong> — ideally the spreadsheet or dashboard you look at weekly. For each: how it's computed and what "good" looks like.</span></li>
+  </ul>
+
+  <h2><span class="no">3</span>Departments &amp; modules</h2>
+  <p class="who">Owner</p>
+  <ul class="check">
+    <li><input type="checkbox"><span>What <strong>departments</strong> should CI have directors for? Default: Marketing, Sales, Fulfillment — rename, remove, or add.</span></li>
+    <li><input type="checkbox"><span>Which CI modules apply: sales calls / appointments / email marketing / social media / coaching-style QA &amp; scorecards / webinars?<br><span class="hint">Anything not applicable is simply disabled.</span></span></li>
+  </ul>
+
+  <h2><span class="no">4</span>Integrations</h2>
+  <p class="who">Technical or ops contact</p>
+  <ul class="check">
+    <li><input type="checkbox"><span>Which of these do you use and want connected: Mailchimp, GoHighLevel, Google Workspace (Gmail/Drive/Calendar), Meta Ads, Google Ads, Instagram/Facebook pages?</span></li>
+    <li><input type="checkbox"><span>For each: who owns the account and can approve the OAuth/API connection?</span></li>
+  </ul>
+
+  <h2><span class="no">5</span>Branding &amp; setup</h2>
+  <p class="who">Owner</p>
+  <ul class="check">
+    <li><input type="checkbox"><span>Product name to display (white-label name), logo file, primary brand colors.</span></li>
+    <li><input type="checkbox"><span><strong>Currency</strong> and <strong>timezone</strong> for reporting.</span></li>
+    <li><input type="checkbox"><span>Domain or subdomain for the app (e.g. <code>ci.yourcompany.com</code>) and who manages DNS.</span></li>
+    <li><input type="checkbox"><span><strong>Admin users</strong>: names + emails of the people who should have admin access.</span></li>
+    <li><input type="checkbox"><span>Preferred terminology if different from defaults (e.g. you say "clients" not "leads", "placements" not "sales").</span></li>
+  </ul>
+
+  <h2><span class="no">6</span>Commercial / ops</h2>
+  <p class="who">Us (internal)</p>
+  <ul class="check">
+    <li><input type="checkbox"><span>Anthropic/Voyage API budget expectations set with the client.</span></li>
+    <li><input type="checkbox"><span>Hosting: new DigitalOcean droplet + Supabase project + Vercel project per client (never shared with any other client).</span></li>
+    <li><input type="checkbox"><span>Signed authorization for read-only access to their database.</span></li>
+  </ul>
+
+  <h2>What happens next</h2>
+  <p>Once this is complete: we introspect the schema, propose a data mapping
+  (which of your tables feed which CI concepts), review it with you, run a
+  historical backfill, and turn on hourly sync. Then directors, metrics, and
+  branding are configured to match the answers above.</p>
+</div>
+</body>
+</html>
