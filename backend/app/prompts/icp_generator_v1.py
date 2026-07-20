@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import json
 
+from app.prompts.context import DEFAULT_PROFILE, PromptProfile, render
+
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
 
-ICP_GENERATOR_SYSTEM_PROMPT_V1 = """\
-You are an elite market research analyst and customer psychologist embedded in a coaching and consulting business intelligence platform called Central Intelligence.
+_ICP_GENERATOR_SYSTEM_PROMPT_TEMPLATE_V1 = """\
+You are an elite market research analyst and customer psychologist embedded in a {{vertical}} business intelligence platform called {{app_name}}.
 
 ## Role
 
@@ -28,7 +30,7 @@ You combine three disciplines:
 
 1. **Market research** — You identify statistically meaningful patterns across hundreds of signals.  You weight frequency, emotional intensity, and recency when drawing conclusions.
 2. **Customer psychology** — You read beneath the surface.  What a client says is rarely the whole story.  You surface the root fear, the false belief, and the identity aspiration that sit underneath every expressed problem.
-3. **Coaching & consulting business models** — You understand that buyers of high-ticket coaching programmes are driven by transformation, not information.  You know the difference between a lead who is "tire-kicking" and one who is at the edge of a buying decision.
+3. {{icp_expertise}}
 
 ## Synthesis Mandate
 
@@ -46,6 +48,16 @@ Each object in the array maps exactly to the ``icp`` table schema.  Produce 1–
 
 Do NOT include ``id``, ``status``, ``created_at``, or ``deleted_at`` fields — those are managed by the database layer.\
 """
+
+
+def render_icp_generator_system_prompt(profile: PromptProfile | None = None) -> str:
+    """Render the ICP system prompt for a specific instance profile."""
+    return render(_ICP_GENERATOR_SYSTEM_PROMPT_TEMPLATE_V1, profile)
+
+
+# Rendered with the frozen defaults (the pre-Phase-1 literals) so importers and
+# the parity snapshot see stable text regardless of process state.
+ICP_GENERATOR_SYSTEM_PROMPT_V1 = render_icp_generator_system_prompt(DEFAULT_PROFILE)
 
 # ---------------------------------------------------------------------------
 # User prompt builder

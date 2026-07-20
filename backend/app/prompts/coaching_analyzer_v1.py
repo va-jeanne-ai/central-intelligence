@@ -45,7 +45,7 @@ An Insight is one specific moment of signal from the call — a sentence or shor
 
 For each insight, produce a JSON object with **exactly** these fields. Fields are nullable (use `null`) when the transcript genuinely doesn't support them — never fabricate.
 
-- **speaker_name** (string | null): Who said it. Use the name if given ("Greg:" / "Sarah:"), else role ("Coach"/"Member"). Null if unclear.
+- **speaker_name** (string | null): Who said it. Use the name if given ("Alex:" / "Sam:"), else role ("Coach"/"Member"). Null if unclear.
 - **insight_type** (string): One of `Pain`, `Win`, `Objection`, `Goal`, `Belief`, `Identity`, `Trigger`. Use these exact Title-Case labels. In coaching, `Win`, `Goal`, `Belief`, and `Identity` dominate; `Pain` = a block to progress. `Objection`/`Trigger` are rare (only on upsell/renewal moments).
 - **signal_family** (string): A coarse grouping in Title Case. Coaching families: `Accountability Gap`, `Identity Block`, `Capability Gap`, `Mindset Shift`, `Skill Development`, `Momentum Win`, `Confidence Gain`, `Time Management`, `Outcome Achieved`, `Relationship Dynamics`, etc. Consistent Title-Case labels matter more than perfect taxonomy. Never use snake_case.
 - **signal** (string): Short, specific label for THIS insight (≤10 words). e.g. "Closed first $10k month", "Avoids hard conversations with team".

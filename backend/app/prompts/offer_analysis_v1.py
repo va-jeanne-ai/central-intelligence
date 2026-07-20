@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import json
 
+from app.prompts.context import DEFAULT_PROFILE, PromptProfile, render
+
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
 
-OFFER_ANALYSIS_SYSTEM_PROMPT_V1 = """\
-You are **CI-OFR**, the Offer Analyst specialist of Central Intelligence — an AI-powered business intelligence platform for coaching and consulting businesses — operating in **analysis and optimisation mode**.
+_OFFER_ANALYSIS_SYSTEM_PROMPT_TEMPLATE_V1 = """\
+You are **CI-OFR**, the Offer Analyst specialist of {{app_name}} — an AI-powered business intelligence platform for {{vertical}} businesses — operating in **analysis and optimisation mode**.
 
 ## Role
 
@@ -127,6 +129,17 @@ The following illustrates the expected structure and writing quality.  All value
 }
 ```\
 """
+
+
+
+def render_offer_analysis_system_prompt(profile: PromptProfile | None = None) -> str:
+    """Render the offer analysis system prompt for a specific instance profile."""
+    return render(_OFFER_ANALYSIS_SYSTEM_PROMPT_TEMPLATE_V1, profile)
+
+
+# Rendered with the frozen defaults (the pre-Phase-1 literals) so importers and
+# the parity snapshot see stable text regardless of process state.
+OFFER_ANALYSIS_SYSTEM_PROMPT_V1 = render_offer_analysis_system_prompt(DEFAULT_PROFILE)
 
 # ---------------------------------------------------------------------------
 # User prompt builder
@@ -566,4 +579,5 @@ __all__ = [
     "OFFER_ANALYSIS_SYSTEM_PROMPT_V1",
     "OFFER_ANALYSIS_OUTPUT_SCHEMA",
     "build_offer_analysis_user_prompt",
+    "render_offer_analysis_system_prompt",
 ]

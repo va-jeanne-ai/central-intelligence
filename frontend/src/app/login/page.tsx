@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { useBranding } from '@/hooks/use-branding';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,7 @@ function ErrorBanner({ remaining }: { remaining: number }) {
 export default function LoginPage() {
   const router = useRouter();
   const { signIn, resetPassword } = useAuth();
+  const { branding } = useBranding();
 
   const [form, setForm] = useState<FormState>({
     email: '',
@@ -255,25 +257,41 @@ export default function LoginPage() {
               className="flex flex-col items-center"
               style={{ marginBottom: '28px' }}
             >
-              {/* Brain icon */}
-              <div
-                aria-hidden="true"
-                style={{
-                  width: '52px',
-                  height: '52px',
-                  borderRadius: '14px',
-                  background:
-                    'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '26px',
-                  boxShadow: '0 4px 12px rgba(99,102,241,.35)',
-                  marginBottom: '12px',
-                }}
-              >
-                🧠
-              </div>
+              {/* Logo — instance logo image if configured, else brain icon */}
+              {branding.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- external, instance-configured URL
+                <img
+                  src={branding.logo_url}
+                  alt={branding.app_name}
+                  style={{
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '14px',
+                    objectFit: 'cover',
+                    boxShadow: '0 4px 12px rgba(99,102,241,.35)',
+                    marginBottom: '12px',
+                  }}
+                />
+              ) : (
+                <div
+                  aria-hidden="true"
+                  style={{
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '14px',
+                    background:
+                      'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '26px',
+                    boxShadow: '0 4px 12px rgba(99,102,241,.35)',
+                    marginBottom: '12px',
+                  }}
+                >
+                  🧠
+                </div>
+              )}
 
               {/* App name */}
               <span
@@ -284,22 +302,24 @@ export default function LoginPage() {
                   letterSpacing: '-0.03em',
                 }}
               >
-                Central Intelligence
+                {branding.app_name}
               </span>
 
               {/* Subtitle */}
-              <span
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  color: '#9CA3AF',
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  marginTop: '2px',
-                }}
-              >
-                AI Command Center
-              </span>
+              {branding.tagline && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: '#9CA3AF',
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    marginTop: '2px',
+                  }}
+                >
+                  {branding.tagline}
+                </span>
+              )}
             </div>
 
             {/* ── Heading ─────────────────────────────────────────────────── */}
@@ -513,7 +533,7 @@ export default function LoginPage() {
         >
           Powered by{' '}
           <strong style={{ color: '#F59E0B', fontWeight: 700 }}>
-            Central Intelligence AI
+            {branding.app_name}
           </strong>
         </p>
       </div>

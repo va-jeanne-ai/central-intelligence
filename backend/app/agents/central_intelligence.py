@@ -15,7 +15,7 @@ from sqlalchemy import text
 from app.agents.base import BaseAgent
 from app.config import settings
 from app.database import AsyncSessionLocal
-from app.prompts.central_intelligence_v1 import CENTRAL_INTELLIGENCE_SYSTEM_PROMPT_V1
+from app.prompts.central_intelligence_v1 import render_central_intelligence_system_prompt
 from app.services import voyage_client
 
 logger = logging.getLogger(__name__)
@@ -705,7 +705,9 @@ class CentralIntelligence(BaseAgent):
             name="Central Intelligence",
             model=settings.anthropic_model_default,
         )
-        self.system_prompt = CENTRAL_INTELLIGENCE_SYSTEM_PROMPT_V1
+        # Renders with the process-primed instance profile (see prompts/context.py);
+        # falls back to the pre-Phase-1 defaults when no profile row exists.
+        self.system_prompt = render_central_intelligence_system_prompt()
         self._register_tools()
         logger.info("CentralIntelligence agent ready (agent_id=%s)", self.agent_id)
 
@@ -758,7 +760,7 @@ class CentralIntelligence(BaseAgent):
                 "round a figure the tool didn't return. If a metric's verdict is "
                 "'insufficient_data', say so rather than implying a trend exists. "
                 "Pass the optional 'rep' field for rep-level questions (e.g. 'how is "
-                "Makyla doing?') — it resolves the name against the sales roster and "
+                "[rep name] doing?') — it resolves the name against the sales roster and "
                 "scopes the verdicts/recommendations to that one rep; an unresolvable "
                 "name comes back as a structured error with the known rep names, "
                 "which you should relay rather than guessing who was meant."
@@ -784,8 +786,8 @@ class CentralIntelligence(BaseAgent):
                     "rep": {
                         "type": "string",
                         "description": "Optional sales rep name to scope the verdicts/"
-                        "recommendations to just that rep (e.g. 'Makyla', 'Makyla "
-                        "Thompson', or a known alias). Matched case-insensitively "
+                        "recommendations to just that rep (first name, full name, "
+                        "or a known alias). Matched case-insensitively "
                         "against the sales roster. Omit for company-wide (global) "
                         "results.",
                     },

@@ -49,6 +49,12 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
+    # Default fork count for a bare `celery worker` (no --concurrency flag).
+    # Unbounded, celery forks one child per CPU core and each child opens its
+    # own DB pool — enough to exhaust the Supabase session pooler's 15-client
+    # cap alongside production (EMAXCONNSESSION, repeatedly on 2026-07-17).
+    # A CLI --concurrency flag still overrides this (prod compose passes 2).
+    worker_concurrency=2,
 )
 
 # Beat schedule — staggered intervals (UTC) so tasks don't all fire simultaneously.

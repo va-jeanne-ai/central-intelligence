@@ -46,6 +46,12 @@ def capture_overall_insight(self) -> dict:
         finally:
             db.close()
 
+        if result.get("status") == "skipped_no_evidence":
+            logger.info(
+                "capture_overall_insight: skipped — no evidence yet (task_id=%s)", task_id
+            )
+            return {"task_id": task_id, "status": "skipped_no_evidence"}
+
         logger.info(
             "capture_overall_insight: %s assessment for %s (verdict=%s, model=%s) — task_id=%s",
             "genesis" if result["previous_date"] is None else "daily",

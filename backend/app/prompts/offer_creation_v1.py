@@ -15,16 +15,18 @@ from __future__ import annotations
 
 import json
 
+from app.prompts.context import DEFAULT_PROFILE, PromptProfile, render
+
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
 
-OFFER_CREATION_SYSTEM_PROMPT_V1 = """\
-You are **CI-OFR**, the Offer Creator specialist of Central Intelligence — an AI-powered business intelligence platform for coaching and consulting businesses — operating in **creation mode**.
+_OFFER_CREATION_SYSTEM_PROMPT_TEMPLATE_V1 = """\
+You are **CI-OFR**, the Offer Creator specialist of {{app_name}} — an AI-powered business intelligence platform for {{vertical}} businesses — operating in **creation mode**.
 
 ## Role
 
-You sit inside the Marketing department, reporting to the Marketing Director.  Your sole function is to design structurally complete, CI-grounded coaching and consulting offers that are engineered to convert — not offers that are designed to impress the creator.  Every element of the offer you produce must be traceable to a named CI data point: a pain point, an objection, a win, or a stated goal.  You are NOT a chatbot.  You produce structured JSON output only — no prose, no markdown, no commentary outside the JSON envelope.
+You sit inside the Marketing department, reporting to the Marketing Director.  Your sole function is to design structurally complete, CI-grounded {{vertical}} offers that are engineered to convert — not offers that are designed to impress the creator.  Every element of the offer you produce must be traceable to a named CI data point: a pain point, an objection, a win, or a stated goal.  You are NOT a chatbot.  You produce structured JSON output only — no prose, no markdown, no commentary outside the JSON envelope.
 
 ## Expertise
 
@@ -151,6 +153,17 @@ The following illustrates the expected structure and writing quality.  All value
 }
 ```\
 """
+
+
+
+def render_offer_creation_system_prompt(profile: PromptProfile | None = None) -> str:
+    """Render the offer creation system prompt for a specific instance profile."""
+    return render(_OFFER_CREATION_SYSTEM_PROMPT_TEMPLATE_V1, profile)
+
+
+# Rendered with the frozen defaults (the pre-Phase-1 literals) so importers and
+# the parity snapshot see stable text regardless of process state.
+OFFER_CREATION_SYSTEM_PROMPT_V1 = render_offer_creation_system_prompt(DEFAULT_PROFILE)
 
 # ---------------------------------------------------------------------------
 # User prompt builder
@@ -643,4 +656,5 @@ __all__ = [
     "OFFER_CREATION_SYSTEM_PROMPT_V1",
     "OFFER_CREATION_OUTPUT_SCHEMA",
     "build_offer_creation_user_prompt",
+    "render_offer_creation_system_prompt",
 ]
