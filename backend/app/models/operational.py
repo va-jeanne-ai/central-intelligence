@@ -59,6 +59,20 @@ class Lead(Base, TimestampMixin, SoftDeleteMixin):
         nullable=True,
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Cross-system master identifier from GHL, mirrored from WGR. Nullable —
+    # only WGR-sourced leads have it.
+    ghl_contact_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    # Raw UTM attribution mirrored from WGR (first = write-once first touch,
+    # last = latest-wins). Never rewritten; channel is computed at read time
+    # via attribution_taxonomy. Text, not String(n): upstream is unbounded.
+    utm_source_first: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    utm_medium_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_campaign_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_content_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_source_last: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_medium_last: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_campaign_last: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_content_last: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
     calls: Mapped[list["Call"]] = relationship("Call", back_populates="lead", lazy="select")

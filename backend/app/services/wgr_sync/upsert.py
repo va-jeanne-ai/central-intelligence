@@ -260,7 +260,20 @@ async def sync_leads(session: AsyncSession, *, since: Optional[str] = None) -> i
         await session.commit()
         return len(new_rows) + len(updates)
 
+    drift_checked = False
     for raw in reader.read_table("leads", since=since):
+        if not drift_checked:
+            drift_checked = True
+            if "utm_source_first" not in raw:
+                # Schema-drift tripwire (attribution spec): .get() would make a
+                # dropped upstream column indistinguishable from null; the
+                # presence-conditional mapper protects the data, this line is
+                # the loud signal for the manual schema-update workflow.
+                logger.warning(
+                    "wgr_sync leads: upstream rows lack utm_source_first — "
+                    "WGR schema drift? UTM columns will stop updating until "
+                    "the mapper/migration is updated (attribution spec)."
+                )
         mapped = mapping.map_lead(raw)
         if mapped is None:
             continue

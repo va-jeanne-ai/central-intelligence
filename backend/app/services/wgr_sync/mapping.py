@@ -145,11 +145,21 @@ def map_lead_status(pipeline_stage: Optional[str]) -> Optional[str]:
 # Shared-domain tables (source='wgr' + external_id; CI UUID/string PKs)
 # ---------------------------------------------------------------------------
 
+# Marketing attribution columns (Greg's webhook layer, 2026-07): first-touch
+# is write-once upstream, last-touch is latest-wins. Mirrored verbatim —
+# canonical channel is resolved at read time via attribution_taxonomy.
+_ATTRIBUTION_COLS = (
+    "ghl_contact_id",
+    "utm_source_first", "utm_medium_first", "utm_campaign_first", "utm_content_first",
+    "utm_source_last", "utm_medium_last", "utm_campaign_last", "utm_content_last",
+)
+
+
 def map_lead(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     ext = _clean(row.get("lead_id"))
     if not ext:
         return None
-    return {
+    out = {
         "source": WGR_SOURCE,
         "external_id": ext,
         "name": _clean(row.get("name")),
@@ -164,6 +174,14 @@ def map_lead(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "entry_date": row.get("entry_date"),
         "notes": _clean(row.get("notes")),
     }
+    # Presence-conditional: a column absent from the raw row (schema drift,
+    # older snapshot) is OMITTED from the mapped dict, so the upsert leaves
+    # the previously mirrored CI value untouched instead of nulling it. All
+    # rows in a run come from one SELECT *, so batch dicts stay homogeneous.
+    for col in _ATTRIBUTION_COLS:
+        if col in row:
+            out[col] = _clean(row.get(col))
+    return out
 
 
 def map_call(row: dict[str, Any]) -> Optional[dict[str, Any]]:

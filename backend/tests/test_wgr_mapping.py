@@ -182,9 +182,44 @@ def test_map_marketing_social() -> None:
     check("tag blank → None", m.map_insight_tag({"id": 8, "tag": "  "}) is None)
 
 
+def test_map_lead_carries_utm_attribution() -> None:
+    # Hard asserts (not check()): these must fail loudly under pytest during
+    # the TDD red phase; check() only soft-fails there.
+    row = {
+        "lead_id": "LEAD_001", "name": "Jane Doe", "email": "j@x.com",
+        "phone": "12143365496", "pipeline_stage": "Applied",
+        "entry_date": "2026-07-01", "notes": None,
+        "ghl_contact_id": "ghl_abc123",
+        "utm_source_first": "ig", "utm_medium_first": "social",
+        "utm_campaign_first": "julypromo", "utm_content_first": "reel-14",
+        "utm_source_last": "email", "utm_medium_last": "broadcast",
+        "utm_campaign_last": "webinar-0722", "utm_content_last": None,
+    }
+    mapped = m.map_lead(row)
+    assert mapped["ghl_contact_id"] == "ghl_abc123"
+    assert mapped["utm_source_first"] == "ig"
+    assert mapped["utm_content_first"] == "reel-14"
+    assert mapped["utm_source_last"] == "email"
+    assert mapped["utm_content_last"] is None
+
+
+def test_map_lead_missing_utm_columns_omits_keys_entirely() -> None:
+    # Presence-conditional (audit r6 #4): when SELECT * no longer returns a
+    # column, the mapped dict must OMIT the key — never emit None, which the
+    # upsert would write over previously mirrored values. An explicit upstream
+    # NULL (key present, value None) still maps to None.
+    mapped = m.map_lead({"lead_id": "LEAD_002"})
+    assert "utm_source_first" not in mapped
+    assert "ghl_contact_id" not in mapped
+    explicit_null = m.map_lead({"lead_id": "LEAD_003", "utm_source_first": None})
+    assert explicit_null["utm_source_first"] is None
+
+
 def main() -> int:
     for fn in (
         test_normalize_phone, test_test_call_filter, test_map_lead,
+        test_map_lead_carries_utm_attribution,
+        test_map_lead_missing_utm_columns_omits_keys_entirely,
         test_map_appointment_status, test_map_lead_status,
         test_map_insight, test_map_content_idea,
         test_map_market_signal, test_map_sales_rep, test_map_closed_sale_and_activity,
