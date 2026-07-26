@@ -22,7 +22,7 @@ Strictly a read-only mirror: CI never writes to the WGR database.
 |---|---|---|
 | Channel resolution | **Python read-time resolver** (`services/attribution.py`) | Unit-testable contract; honors Greg's raw-never-rewritten / normalize-at-read rule; fits CI's Python-first analytics. SQL views (Greg's approach) rejected as untestable-in-unit and gnarly for the specificity rules; sync-time materialization rejected because taxonomy edits would leave stale channels. |
 | `commenter_lead_links` (DM identity bridge) | **Deferred** | Auto-linked commenters already carry first-touch UTMs on `leads` upstream; mirror the bridge only when a surface needs commenter-level drill-down or review-queue visibility. |
-| Snapshot-table deletions (`attribution_taxonomy`, `meta_campaigns`, `meta_ads`) | **Snapshot + delete-reconciliation against RAW ids, count-guarded** | Upserts never delete, and a stale taxonomy rule would keep winning resolution (stale ads/campaigns would look active). Each run pulls the full table and deletes CI rows absent from the **raw** (successfully read) id set — NOT the mapped set: reconciling on mapped ids would turn a mapper bug or upstream type drift into mass deletion (r3 #3 — this supersedes the r2 #5 position; a present-but-unmappable row is kept, skipped, and loudly counted instead of deleted). Guard against silent partial reads (r3 #2): a source-side `COUNT(*)` on the same connection must match the rows actually read, else reconciliation is skipped for that run. Failure semantics: a read failure or count mismatch aborts reconciliation (transient problems can never wipe the mirror); a *successful, count-confirmed* pull returning 0 rows is honored — upstream legitimately emptied the table, CI empties too (r2 #4/r3 #4: this single rule applies everywhere; there is no separate "non-empty" condition). These tables are far smaller than one page (page_size 1000), so pagination-shift omission cannot occur in practice; the count guard covers it anyway. |
+| Snapshot-table deletions (`attribution_taxonomy`, `meta_campaigns`, `meta_ads`) | **Snapshot + delete-reconciliation against RAW ids, count-guarded** | Upserts never delete, and a stale taxonomy rule would keep winning resolution (stale ads/campaigns would look active). Each run pulls the full table and deletes CI rows absent from the **raw** (successfully read) id set — NOT the mapped set: reconciling on mapped ids would turn a mapper bug or upstream type drift into mass deletion (r3 #3 — this supersedes the r2 #5 position; a present-but-unmappable row is kept, skipped, and loudly counted instead of deleted). One deliberate exception (r4): a taxonomy row whose `canonical_channel` is nulled/blanked upstream is a *source-data disable statement*, checkable on the RAW row — it is excluded from the raw-id set and reconciled away, so a disabled rule stops resolving instead of resolving with its stale channel. Guard against silent partial reads (r3 #2): a source-side `COUNT(*)` on the same connection must match the rows actually read, else reconciliation is skipped for that run. Failure semantics: a read failure or count mismatch aborts reconciliation (transient problems can never wipe the mirror); a *successful, count-confirmed* pull returning 0 rows is honored — upstream legitimately emptied the table, CI empties too (r2 #4/r3 #4: this single rule applies everywhere; there is no separate "non-empty" condition). These tables are far smaller than one page (page_size 1000), so pagination-shift omission cannot occur in practice; the count guard covers it anyway. |
 | Lead joins from mirror tables | **`external_id` first, `ghl_contact_id` fallback** | The lead email-merge path (`plan_lead_writes` case 4) preserves a pre-existing lead's `source`/`external_id`, so `wgr_lead_id → leads.external_id` misses email-merged leads. `ghl_contact_id` is a data column (survives merges) and exists on both sides. A crosswalk table was considered and rejected as over-engineering (audit finding #1). |
 | Meta Ads tables | **Gated on probe** | Mirrored only if the read-only probe finds rows in `meta_ad_performance`; no speculative mirrors. |
 | FKs on mirrored tables | **None** | Mirror data tolerates orphans (WGR filters/test rows); joins go through `leads.external_id` (source='wgr'). |
@@ -91,7 +91,11 @@ separately); coaching/EOD/webinar tables (already mirrored).
   retroactively change historical reports by design** — that is Greg's
   read-time-normalization contract ("no backfill rewrite"); if reproducibility
   is ever needed, stamp reports with a taxonomy revision (future option, not
-  built). Ships in the foundation so deliverable 9 consumes it ready-made.
+  built). **`utm_campaign` is intentionally outside the resolution contract**
+  (r4): Greg's `attribution_taxonomy` has no `observed_campaign` column — his
+  contract is the (source, medium, content) triple; campaign is mirrored as
+  data and displayable, never matched on. Ships in the foundation so
+  deliverable 9 consumes it ready-made.
 - **Three hand-written Alembic migrations** (lead columns; taxonomy;
   engagements + meta tables). No autogenerate (project rule — it emits spurious
   index drops).
@@ -140,9 +144,15 @@ changes his database, the workflow is **manual and owned by us**:
    probe's expected-columns set → test → backfill. Same pattern as this
    feature, every time.
 
-Cadence note (r3 #9): run `python -m scripts.backfill_wgr` after any mapper/
-schema change, after EOD server-off gaps (existing practice), and roughly
-monthly as the correction sweep for the `created_at`-watermarked tables.
+Cadence note (r3 #9): run a full pull after any mapper/schema change, after
+EOD server-off gaps (existing practice), and roughly monthly as the
+correction sweep for the `created_at`-watermarked tables. **The full-pull
+command is `sync_wgr(since='full')`** (in-process:
+`python -c "from app.tasks.wgr_sync import sync_wgr; print(sync_wgr(since='full'))"`)
+— NOT `scripts/backfill_wgr.py`, which drives the legacy `bulk_load` loader
+whose separate `_PLAN` does not cover the attribution-era tables (r4 catch);
+the sync-task path also honors `client_sync_enabled`, so the kill switch
+gates both scheduled and manual pulls.
 
 Deployment order (r3 #16) is handled by the droplet's compose stack: the
 one-shot `migrate` service runs Alembic before api/worker/beat start, and all

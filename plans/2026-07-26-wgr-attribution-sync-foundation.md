@@ -443,8 +443,10 @@ class Resolution(NamedTuple):
     reportable: bool
 
 
-def _norm(v: Optional[str]) -> Optional[str]:
-    v = (v or "").strip().lower()
+def _norm(v) -> Optional[str]:
+    # Defensive: mirrored columns are text, but never crash on a stray
+    # non-string (r4) — coerce, trim, casefold to lower.
+    v = str(v).strip().lower() if v is not None else ""
     return v or None
 
 
@@ -564,6 +566,7 @@ Sync function (`upsert.py`): import `AttributionTaxonomy` from `app.models.marke
 async def _sync_snapshot_reconcile(
     session: AsyncSession, *, wgr_table: str, model, pk_attr: str,
     wgr_pk: str, map_fn: Callable[[dict], Optional[dict]],
+    raw_invalid_fn: Optional[Callable[[dict], bool]] = None,
 ) -> int:
     """Full-snapshot mirror WITH delete-reconciliation, count-guarded.
 
@@ -582,14 +585,29 @@ async def _sync_snapshot_reconcile(
     raw_ids: set = set()
     rows: list[dict[str, Any]] = []
     skipped = 0
-    for raw in reader.read_table(wgr_table):  # raises on failure → run aborts
-        if raw.get(wgr_pk) is not None:
-            raw_ids.add(raw[wgr_pk])
+    invalidated = 0
+    # page_size > table size ⇒ the read is ONE statement ⇒ Postgres
+    # statement-level MVCC gives a consistent snapshot (r4: no cross-page
+    # omission is possible while these tables stay under one page).
+    for raw in reader.read_table(wgr_table, page_size=10_000):
+        if raw.get(wgr_pk) is None:
+            continue
+        if raw_invalid_fn is not None and raw_invalid_fn(raw):
+            # Source-data statement (e.g. taxonomy canonical_channel nulled):
+            # the row is deliberately invalid upstream → exclude from raw_ids
+            # so reconciliation DELETES it — a disabled rule must stop
+            # resolving (r4 policy; distinct from mapper-skip below).
+            invalidated += 1
+            continue
+        raw_ids.add(raw[wgr_pk])
         m = map_fn(raw)
         if m is None:
             skipped += 1
         else:
             rows.append(m)
+    if invalidated:
+        logger.info("wgr_sync %s: %d rows invalid upstream — reconciled away",
+                    wgr_table, invalidated)
     if skipped:
         logger.warning("wgr_sync %s: %d rows present upstream but unmappable "
                        "— kept in CI, NOT deleted; investigate mapper/schema",
@@ -624,6 +642,10 @@ Register it in `sync_all()` alongside the other custom-path tables (after `count
     counts["attribution_taxonomy"] = await _sync_snapshot_reconcile(
         session, wgr_table="attribution_taxonomy", model=AttributionTaxonomy,
         pk_attr="id", wgr_pk="id", map_fn=mapping.map_attribution_row,
+        # A taxonomy row whose canonical_channel is nulled upstream is a
+        # deliberate disable → reconcile it away (r4). Other mapper skips
+        # (type drift/bugs) stay kept-and-warned.
+        raw_invalid_fn=lambda raw: not (raw.get("canonical_channel") or "").strip(),
     )
 ```
 
@@ -1172,10 +1194,16 @@ git commit -m "feat: mirror WGR Meta Ads tables (campaigns, ads, daily performan
 **Interfaces:**
 - Consumes: `backend/scripts/backfill_wgr.py` (existing full-pull entrypoint) and the Task 2–5 sync registrations.
 
-- [ ] **Step 1: Full backfill — run it TWICE**
+- [ ] **Step 1: Full backfill via the REAL sync path — run it TWICE**
 
-Run: `cd backend && python -m scripts.backfill_wgr && python -m scripts.backfill_wgr`
-Expected: first pass logs `attribution_taxonomy: upserted N` (N>0), `lead_engagements: upserted N` (N>0), `leads: upserted N`, and (if Task 5 ran) the three meta tables with N>0. The second pass is the drift catch: LIMIT/OFFSET paging under live upstream writes can skip rows mid-pass (audit round-2 #3), and an immediate idempotent re-run sweeps up anything pass 1 missed — its counts should be ≈0 new rows. If any expected-nonzero table reports 0, **stop and diagnose** against the Task 1 probe numbers — do not mark the ticket done on empty tables.
+**Do NOT use `scripts/backfill_wgr.py`** — it calls `bulk_load.run_backfill()`, a separate legacy loader with its own `_PLAN` that does not know the new tables (audit r4 catch). The full pull must go through the same `sync_all()` path this feature extends, which also honors `client_sync_enabled`:
+
+Run (twice):
+`cd backend && python -c "from app.tasks.wgr_sync import sync_wgr; print(sync_wgr(since='full'))" && python -c "from app.tasks.wgr_sync import sync_wgr; print(sync_wgr(since='full'))"`
+
+Expected: first pass logs `attribution_taxonomy: upserted N` (N>0), `lead_engagements: upserted N` (N>0), `leads: upserted N`, and (if Task 5 ran) the meta tables with N>0. The second pass is the drift catch: LIMIT/OFFSET paging under live upstream writes can skip rows mid-pass on the large watermarked tables, and an immediate idempotent re-run sweeps up anything pass 1 missed — its counts should be ≈0 new rows. If any expected-nonzero table reports 0, **stop and diagnose** against the Task 1 probe numbers — do not mark the ticket done on empty tables.
+
+Also add a warning line to the `scripts/backfill_wgr.py` docstring in this task's commit: `NOTE: legacy bulk_load path — does NOT cover the attribution-era tables (attribution_taxonomy, lead_engagements, meta_*); for those use sync_wgr(since='full').`
 
 - [ ] **Step 2: Spot-check UTM landing**
 
@@ -1233,8 +1261,8 @@ appear in sync_log.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add FEATURE-VERIFICATION.md CHANGELOG.md
-git commit -m "docs: attribution sync verification + changelog"
+git add FEATURE-VERIFICATION.md CHANGELOG.md backend/scripts/backfill_wgr.py
+git commit -m "docs: attribution sync verification + changelog; flag legacy backfill scope"
 ```
 
 ---
