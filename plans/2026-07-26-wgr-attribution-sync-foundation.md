@@ -22,6 +22,7 @@
 - Commit that expands the WGR integration must update `INTEGRATIONS.md` in the same commit (project rule) — handled in Task 5 (or Task 4 if Task 5 is skipped).
 - After each task that modifies code files, rebuild the knowledge graph before committing: `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` from the project root.
 - Run backend tests as `cd backend && python -m pytest tests/<file> -v`.
+- **Execution context for manual sync/probe commands** (internal red-team): on the droplet, always `docker compose exec worker python …` — Redis is compose-network-only, so from the host the fail-closed lock reports "skipped" and looks like a wedged sync. Locally, run from `backend/` with the local stack's Redis up. Env-flag changes on the droplet require container **recreation** (`docker compose up -d`), never `restart`/`stop`+`start`, which do not reload `env_file`.
 - No paid API calls anywhere in this feature.
 
 ---
@@ -171,7 +172,7 @@ def main() -> None:
     if ident["role"] != "ci_reader":
         print("GATE FAILED: not connected as ci_reader — fix CLIENT_DATABASE_URL "
               "(Task 0) before running any pull.")
-        return
+        raise SystemExit(1)  # scripted executors must not sail past the gate
     failed = []
     for table, (expected_cols, count_sql) in CHECKS.items():
         try:
@@ -193,6 +194,7 @@ def main() -> None:
             print(f"{table}: FAILED — {exc}")
     if failed:
         print(f"\nGATE: failures in {failed} — see plan Task 1 Step 2 for go/no-go rules.")
+        raise SystemExit(1)  # nonzero exit so automation can't proceed past a failed gate
 
 
 if __name__ == "__main__":
@@ -317,7 +319,7 @@ Expected: FAIL with `KeyError: 'ghl_contact_id'`
     # Raw UTM attribution mirrored from WGR (first = write-once first touch,
     # last = latest-wins). Never rewritten; channel is computed at read time.
     # Text, not String(n): upstream is unbounded text (global constraint).
-    utm_source_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_source_first: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     utm_medium_first: Mapped[str | None] = mapped_column(Text, nullable=True)
     utm_campaign_first: Mapped[str | None] = mapped_column(Text, nullable=True)
     utm_content_first: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -618,9 +620,11 @@ class AttributionTaxonomy(Base):
     __tablename__ = "attribution_taxonomy"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
-    observed_source: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    observed_medium: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    observed_content: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Text, not String(n): observed_* ARE UTM values (global constraint —
+    # internal red-team caught the earlier String(256) violating it).
+    observed_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    observed_medium: Mapped[str | None] = mapped_column(Text, nullable=True)
+    observed_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     canonical_channel: Mapped[str] = mapped_column(String(128), nullable=False)
     platform: Mapped[str | None] = mapped_column(String(64), nullable=True)
     include_in_channel_reporting: Mapped[bool] = mapped_column(Boolean, nullable=False)
@@ -683,29 +687,39 @@ async def _sync_snapshot_reconcile(
     aborting before reconciliation. A successful, count-confirmed pull of 0
     rows is honored: upstream legitimately emptied the table, CI empties too.
     """
-    raw_ids: set = set()
+    keep_ids: set = set()   # raw AND mapped PK forms — anything here survives
     rows: list[dict[str, Any]] = []
+    rows_read = 0            # every row seen, incl. pk-null + invalidated —
+                             # this (not keep_ids) is what COUNT(*) must match
     skipped = 0
     invalidated = 0
+    pk_null = 0
     # page_size > table size ⇒ the read is ONE statement ⇒ Postgres
     # statement-level MVCC gives a consistent snapshot (r4: no cross-page
     # omission is possible while these tables stay under one page).
     for raw in reader.read_table(wgr_table, page_size=10_000):
+        rows_read += 1
         if raw.get(wgr_pk) is None:
+            pk_null += 1
             continue
         if raw_invalid_fn is not None and raw_invalid_fn(raw):
             # Source-data statement (e.g. taxonomy canonical_channel nulled):
-            # the row is deliberately invalid upstream → exclude from raw_ids
+            # the row is deliberately invalid upstream → exclude from keep_ids
             # so reconciliation DELETES it — a disabled rule must stop
             # resolving (r4 policy; distinct from mapper-skip below).
             invalidated += 1
             continue
-        raw_ids.add(raw[wgr_pk])
+        keep_ids.add(raw[wgr_pk])
         m = map_fn(raw)
         if m is None:
             skipped += 1
         else:
             rows.append(m)
+            # Internal red-team fix: also keep the MAPPED pk form. mapping
+            # _clean()s text PKs; a padded upstream id (" X" → "X") would
+            # otherwise be upserted as "X" and deleted in the same run by
+            # not_in(raw-form ids) — perpetual silent row loss.
+            keep_ids.add(m[pk_attr])
     if invalidated:
         logger.info("wgr_sync %s: %d rows invalid upstream — reconciled away",
                     wgr_table, invalidated)
@@ -714,9 +728,12 @@ async def _sync_snapshot_reconcile(
                        "— kept in CI, NOT deleted; investigate mapper/schema",
                        wgr_table, skipped)
     written = 0
-    if rows:
-        written = await _on_conflict_upsert(session, model, pk_attr, rows)
-    if len(raw_ids) + invalidated >= 10_000:
+    # Chunked: CI's Supabase is pooler-only with a short statement_timeout —
+    # never one unbounded statement (module lesson; internal red-team).
+    for i in range(0, len(rows), BATCH):
+        written += await _on_conflict_upsert(
+            session, model, pk_attr, rows[i:i + BATCH])
+    if rows_read >= 10_000:
         # Page-overflow tripwire: the single-statement consistency argument
         # only holds while the table fits one page (r5 #2). Never reconcile
         # on a possibly-paginated read.
@@ -726,36 +743,41 @@ async def _sync_snapshot_reconcile(
         await session.commit()
         return written
     source_count = reader.count_table(wgr_table)
-    if source_count != len(raw_ids) + (1 if None in raw_ids else 0) and \
-            source_count != len(raw_ids):
+    if source_count != rows_read:
+        # Internal red-team fix: compare against rows READ (incl. invalidated
+        # + pk-null), not keep_ids — a single disabled rule upstream must not
+        # jam reconciliation forever.
         logger.warning("wgr_sync %s: read %d rows but source counts %d — "
                        "skipping delete-reconciliation this run",
-                       wgr_table, len(raw_ids), source_count)
+                       wgr_table, rows_read, source_count)
         await session.commit()
         return written
     pk_col = getattr(model, pk_attr)
     # Deletion circuit breaker (r6 #1): reconciliation may trim, never gut.
     # A wrong replica, source cutover, permission change, or upstream truncate
-    # must stop here and demand a human. Override is TABLE-SCOPED (r7 — a
-    # bare boolean env would keep authorizing every later run): set
-    # WGR_SYNC_MASS_DELETE_TABLE=<this table> for the one deliberate run,
-    # then unset it. Also covers confirmed-empty: emptying a populated
-    # mirror always trips the breaker.
+    # must stop here and demand a human. Override is TABLE-SCOPED (r7): set
+    # WGR_SYNC_MASS_DELETE_TABLE=<this table> for the one deliberate run
+    # (via `docker compose exec -e` for true one-run scoping), then unset.
     existing = (await session.execute(
         select(func.count()).select_from(model)
     )).scalar() or 0
     doomed_q = select(pk_col)
-    if raw_ids:
-        doomed_q = doomed_q.where(pk_col.not_in(raw_ids))
+    if keep_ids:
+        doomed_q = doomed_q.where(pk_col.not_in(keep_ids))
     doomed_ids = list((await session.execute(doomed_q)).scalars())
     doomed = len(doomed_ids)
     override = settings.wgr_sync_mass_delete_table == wgr_table
-    if doomed > 10 and doomed > 0.2 * existing and not override:
+    # Wipe case trips UNCONDITIONALLY (internal red-team: the >10 threshold
+    # alone would let an empty pull silently gut a small table): emptying a
+    # populated mirror ALWAYS requires the override, at any size.
+    wipe = doomed > 0 and not keep_ids
+    if (wipe or (doomed > 10 and doomed > 0.2 * existing)) and not override:
         logger.error("wgr_sync %s: reconciliation wants to delete %d of %d CI "
-                     "rows — circuit breaker OPEN, skipping deletion. Verify "
-                     "the source, then re-run once with "
-                     "WGR_SYNC_MASS_DELETE_TABLE=%s and unset it after.",
-                     wgr_table, doomed, existing, wgr_table)
+                     "rows%s — circuit breaker OPEN, skipping deletion. Verify "
+                     "the source, then run once with "
+                     "WGR_SYNC_MASS_DELETE_TABLE=%s.",
+                     wgr_table, doomed, existing,
+                     " (FULL WIPE)" if wipe else "", wgr_table)
         await session.commit()
         return written
     if doomed_ids:
@@ -768,19 +790,19 @@ async def _sync_snapshot_reconcile(
             table_name=model.__tablename__, record_count=doomed,
             status="ok",
             details={"deleted_ids": [str(i) for i in doomed_ids[:1000]],
-                     "upserted": written, "raw_id_count": len(raw_ids),
+                     "upserted": written, "rows_read": rows_read,
                      "override_used": override},
         ))
     await session.commit()
-    logger.info("wgr_sync %s: upserted %d, reconciled to %d raw ids "
-                "(%d unmappable kept, %d deleted)",
-                wgr_table, written, len(raw_ids), skipped, doomed)
+    logger.info("wgr_sync %s: upserted %d, kept %d ids "
+                "(%d unmappable kept, %d invalidated, %d deleted)",
+                wgr_table, written, len(keep_ids), skipped, invalidated, doomed)
     return written
 ```
 
-(Note: `count_table` runs on a separate connection from `read_table`, so under heavy concurrent upstream writes the guard can occasionally skip reconciliation on a healthy run — that is the safe direction; deletion just waits for the next hourly run. These tables are far smaller than one page (page_size 1000), so the pagination-shift scenario needs the guard only as belt-and-braces.)
+(Note: `count_table` runs on a separate connection from `read_table`, so under heavy concurrent upstream writes the guard can occasionally skip reconciliation on a healthy run — that is the safe direction; deletion just waits for the next hourly run.)
 
-Add the breaker's override to `app/config.py` `Settings`: `wgr_sync_mass_delete_table: str = ""` (env `WGR_SYNC_MASS_DELETE_TABLE` — set to the exact table name for one deliberate run, then unset; table-scoped so it can never blanket-authorize, r7). In `upsert.py`, import `settings` and `SyncLog` (from `app.models.audit` — confirm module with `grep -rn "class SyncLog" backend/app/models/`) if not already imported.
+Add the breaker's override to `app/config.py` `Settings`: `wgr_sync_mass_delete_table: str = ""` (env `WGR_SYNC_MASS_DELETE_TABLE` — table-scoped so it can never blanket-authorize, r7; supplied via `docker compose exec -e … worker python -c …` for true one-run semantics, never written to `.env`). In `upsert.py`, import `settings` and `SyncLog` (from `app.models.audit` — confirm module with `grep -rn "class SyncLog" backend/app/models/`) if not already imported.
 
 Register it in `sync_all()` alongside the other custom-path tables (after `counts["market_signals"]`):
 
@@ -821,9 +843,9 @@ def upgrade() -> None:
     op.create_table(
         "attribution_taxonomy",
         sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=False),
-        sa.Column("observed_source", sa.String(256), nullable=True),
-        sa.Column("observed_medium", sa.String(256), nullable=True),
-        sa.Column("observed_content", sa.String(256), nullable=True),
+        sa.Column("observed_source", sa.Text(), nullable=True),
+        sa.Column("observed_medium", sa.Text(), nullable=True),
+        sa.Column("observed_content", sa.Text(), nullable=True),
         sa.Column("canonical_channel", sa.String(128), nullable=False),
         sa.Column("platform", sa.String(64), nullable=True),
         sa.Column("include_in_channel_reporting", sa.Boolean(), nullable=False,
@@ -1347,8 +1369,8 @@ Ends the overlapping-runs class (hourly beat + user trigger + manual full pull r
 - Test: `backend/tests/test_wgr_sync_lock.py` (new)
 
 **Interfaces:**
-- Consumes: the Celery broker Redis URL from settings (confirm the exact field with `grep -n "broker\|redis" backend/app/config.py` — likely `settings.celery_broker_url` or similar).
-- Produces: `sync_wgr` returns `{"status": "skipped", "reason": "another sync run holds the lock"}` when a run is already active.
+- Consumes: `settings.redis_url` (`backend/app/config.py:9` — the same field Celery uses at `celery_app.py:19`; verified, do not guess other names).
+- Produces: `sync_wgr` returns `{"status": "skipped", "reason": "run lock not acquired (held, or redis unreachable — check logs)"}` when it cannot run.
 
 - [ ] **Step 1: Failing test** (`backend/tests/test_wgr_sync_lock.py`) — test the lock helpers pure, no Celery:
 
@@ -1412,17 +1434,20 @@ return 0
 
 
 def _redis():
-    return _redis_lib.Redis.from_url(settings.celery_broker_url)
+    # settings.redis_url — same source Celery uses (celery_app.py:19).
+    # Internal red-team: an earlier draft said celery_broker_url, which does
+    # not exist; with a broad except that typo would have silently skipped
+    # every run forever.
+    return _redis_lib.Redis.from_url(settings.redis_url)
 
 
 def _acquire_lock(token: str) -> bool:
-    # Fail CLOSED (r7): if Redis is unreachable, skip the run rather than
-    # risk an unserialized sync. (Redis down usually means Celery is down
-    # anyway; the explicit guard covers direct in-process invocations.)
+    # Fail CLOSED (r7) — but ONLY on real connectivity errors. Programming
+    # errors must crash loudly, never masquerade as "lock held".
     try:
         return bool(_redis().set(LOCK_KEY, token, nx=True, ex=LOCK_TTL_SECONDS))
-    except Exception:
-        logger.error("wgr_sync: redis unavailable for run lock — skipping run")
+    except (_redis_lib.exceptions.RedisError, OSError):
+        logger.error("wgr_sync: redis unreachable for run lock — skipping run")
         return False
 
 
@@ -1457,7 +1482,24 @@ And in `sync_wgr(...)`, immediately after the `client_sync_enabled` check — th
     advances_watermark = since_override in (None, "full")
 ```
 
-…and in the success `SyncLog` details, write `"watermark": new_watermark.isoformat()` only when `advances_watermark`, else `"watermark_held": True` (confirm the exact details-dict shape at [wgr_sync.py:124-133](projects/central-intelligence/backend/app/tasks/wgr_sync.py#L124-L133) and keep `_read_watermark`'s query compatible — it must skip rows without a `watermark` key).
+…and in the success `SyncLog` details, write `"watermark": new_watermark.isoformat()` only when `advances_watermark`, else `"watermark_held": True`. **`_read_watermark` must be updated in the same commit** (internal red-team: it reads only the single latest ok row — a held row would return None and trigger a surprise full pull of all ~20 tables). Change it to walk recent ok rows and take the first that actually carries a watermark:
+
+```python
+    rows = (await session.execute(
+        select(SyncLog.details)
+        .where(SyncLog.operation == SYNC_OPERATION, SyncLog.status == "ok")
+        .order_by(SyncLog.created_at.desc())
+        .limit(20)
+    )).scalars()
+    for details in rows:
+        if details and details.get("watermark"):
+            return details["watermark"]
+    return None
+```
+
+(Adapt to `_read_watermark`'s existing query shape at [wgr_sync.py:50-66](projects/central-intelligence/backend/app/tasks/wgr_sync.py#L50-L66) — the change is "latest row with a watermark key", not "latest row".)
+
+Also add connection resilience to `wgr_client._connection` in this task's commit (internal red-team: a mid-stream network stall could outlive the 2-hour lock TTL): pass `options='-c statement_timeout=300000'`, `keepalives=1`, `keepalives_idle=30` to `psycopg2.connect` alongside the existing `connect_timeout`.
 
 - [ ] **Step 4: Tests pass** — `cd backend && python -m pytest tests/test_wgr_sync_lock.py -v` → PASS. Confirm `redis` is already a backend dependency (`grep -n "redis" backend/requirements*.txt backend/pyproject.toml 2>/dev/null`) — it ships with Celery's redis broker; add explicitly only if missing.
 
@@ -1482,23 +1524,35 @@ git commit -m "feat: serialize WGR sync runs with a redis lock"
 
 - [ ] **Step 1: Full backfill via the REAL sync path — run it TWICE**
 
-**Do NOT use `scripts/backfill_wgr.py`** — it calls `bulk_load.run_backfill()`, a separate legacy loader with its own `_PLAN` that does not know the new tables (audit r4 catch). The full pull must go through the same `sync_all()` path this feature extends, which also honors `client_sync_enabled`:
+**Do NOT use `scripts/backfill_wgr.py`** — it calls `bulk_load.run_backfill()`, a separate legacy loader with its own `_PLAN` that does not know the new tables (audit r4 catch). The full pull must go through the same `sync_all()` path this feature extends, which also honors `client_sync_enabled`.
+
+**Execution context matters** (internal red-team): the lock + embed enqueues need Redis, which is compose-network-only on the droplet — on the droplet run everything via `docker compose exec worker …`; locally run from `backend/` with local Redis up. The runner must FAIL on a skipped run, not sail past it:
 
 Run (twice):
-`cd backend && python -c "from app.tasks.wgr_sync import sync_wgr; print(sync_wgr(since='full'))" && python -c "from app.tasks.wgr_sync import sync_wgr; print(sync_wgr(since='full'))"`
 
-Expected: first pass logs `attribution_taxonomy: upserted N` (N>0), `lead_engagements: upserted N` (N>0), `leads: upserted N`, and (if Task 5 ran) the meta tables with N>0. The second pass is the drift catch: LIMIT/OFFSET paging under live upstream writes can skip rows mid-pass on the large watermarked tables, and an immediate idempotent re-run sweeps up anything pass 1 missed — its counts should be ≈0 new rows. If any expected-nonzero table reports 0, **stop and diagnose** against the Task 1 probe numbers — do not mark the ticket done on empty tables.
+```bash
+cd backend && python - <<'EOF'
+from app.tasks.wgr_sync import sync_wgr
+for attempt in (1, 2):
+    result = sync_wgr(since="full")
+    print(f"pass {attempt}: {result}")
+    if result.get("status") == "skipped":
+        raise SystemExit(f"pass {attempt} skipped: {result.get('reason')}")
+EOF
+```
 
-Also add a warning line to the `scripts/backfill_wgr.py` docstring in this task's commit: `NOTE: legacy bulk_load path — does NOT cover the attribution-era tables (attribution_taxonomy, lead_engagements, meta_*); for those use sync_wgr(since='full').`
+Expected: both passes complete (the run lock serializes them naturally since they run sequentially). Verify with **CI row counts, not sync return counts** (internal red-team: sync counts are rows *upserted* — a full pass re-upserts everything, so "pass 2 ≈ 0" was measuring nothing): after pass 1 and pass 2, `SELECT count(*)` per new table must be stable pass-to-pass (delta ≈ 0) and in the same ballpark as the Task 1 probe's WGR counts. If any expected-nonzero table is 0, **stop and diagnose** — do not mark the ticket done on empty tables.
+
+Also in this task's commit, two guards on the legacy script `scripts/backfill_wgr.py`: (a) docstring warning line: `NOTE: legacy bulk_load path — does NOT cover the attribution-era tables (attribution_taxonomy, lead_engagements, meta_*); for those use sync_wgr(since='full').` (b) make it refuse to run while the sync lock is held (it writes the same tables): at the top of its confirm path, `from app.tasks.wgr_sync import _redis, LOCK_KEY` and exit with a message if `_redis().exists(LOCK_KEY)`.
 
 - [ ] **Step 2: Spot-check UTM landing**
 
-Run (adjust the session-factory import to `app/db.py`'s actual export — check with `grep -n "session" backend/app/db.py`):
+Run (verified import — the session factory is `AsyncSessionLocal` in `app/database.py`, the same one `wgr_sync.py:30` uses; there is no `app/db.py`):
 
 `cd backend && python -c "
 import asyncio
 from sqlalchemy import text
-from app.db import async_session_factory
+from app.database import AsyncSessionLocal as async_session_factory
 async def main():
     async with async_session_factory() as s:
         r = (await s.execute(text(

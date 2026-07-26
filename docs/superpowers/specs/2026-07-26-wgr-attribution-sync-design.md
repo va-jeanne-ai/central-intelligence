@@ -232,12 +232,15 @@ hardening ticket because they predate it and affect all ~20 existing mirrors:
   verified at runtime, not asserted: the probe checks
   `current_user = 'ci_reader'` and fails its gate on any other role, and
   Task 0 includes a plain-connection write probe proving CREATE is denied.
-- **Mass-delete override is table-scoped (r7)** —
-  `WGR_SYNC_MASS_DELETE_TABLE=<table>` authorizes exactly one table's
-  reconciliation, is set for one deliberate run and then unset, and every
-  reconciliation deletion writes a `sync_log` audit row
-  (`wgr_snapshot_reconcile`) carrying the deleted ids — the rollback
-  artifact for the only destructive step in the feature.
+- **Mass-delete override is table-scoped AND process-scoped (r7 + internal
+  red-team)** — `WGR_SYNC_MASS_DELETE_TABLE=<table>` authorizes exactly one
+  table's reconciliation and is supplied via `docker compose exec -e` for the
+  single deliberate run (never written to `.env`, where it would persist
+  until the next container recreation). Every reconciliation deletion writes
+  a `sync_log` audit row (`wgr_snapshot_reconcile`) carrying the deleted ids
+  — the rollback artifact for the only destructive step in the feature. The
+  breaker trips unconditionally on a full-wipe of a populated table, at any
+  size.
 - **Data sensitivity:** UTMs and `ghl_contact_id` are marketing identifiers;
   CI already stores names/emails/phones/transcripts under the same auth
   boundary, and agent SQL access goes through the business-prose gate. No new
@@ -248,31 +251,47 @@ hardening ticket because they predate it and affect all ~20 existing mirrors:
 WGR is the durable source of truth; CI mirrors are rebuildable by design, and
 no CI report references this data until deliverable 9 ships. Rollback path:
 
-1. Set `client_sync_enabled=false` (stops NEW hourly + on-demand runs; the
-   task checks it at start).
-2. Drain in-flight work before touching schema: `docker compose stop worker
-   beat` on the droplet (or locally, stop the celery processes). An already-
-   running sync finishes or dies with the worker. Precision on "safe" (r3
-   #14): a killed run leaves already-committed batches in place — the mirror
-   is *replayable*, not atomically undone; the un-advanced watermark makes
-   the next clean run re-pull and converge. Between kill and next clean run
-   the mirror can be partially updated — acceptable for an hourly analytics
-   mirror, and moot once sync is disabled in step 1. Revoke queued WGR sync
-   tasks **specifically** — never a blanket `celery purge`, which would
-   discard unrelated email/embed/transcription work (r6 #3): list reserved/
-   scheduled tasks with `celery -A app.tasks.celery_app inspect reserved
-   scheduled`, then `celery ... control revoke <task-id>` for each
-   `app.tasks.wgr_sync.sync_wgr` entry. The Task 5b run lock prevents any
-   revoked stragglers from overlapping a later manual run anyway.
-3. Revert the feature branch (resolver + sync registrations disappear;
-   `sync_all` returns to the prior table set). Redeploy so workers load the
-   reverted code.
-4. `alembic downgrade` through the three migrations if schema removal is
-   wanted — safe TODAY because every mirrored value still exists upstream in
-   WGR and nothing in CI references the tables yet; **this step becomes
-   destructive to CI reporting state once deliverable 9 ships** — after that,
-   prefer stopping at step 3 and leaving the schema in place.
-5. Re-enable `client_sync_enabled` and restart workers.
+Order matters — steps corrected per the internal ops red-team (the previous
+order would have bricked the compose stack: reverting code deletes the
+migration files, after which the one-shot `migrate` service cannot locate the
+DB's revision and api/worker/beat never start).
+
+1. **Kill switch, with real semantics:** set `CLIENT_SYNC_ENABLED=false` in
+   the droplet's env, then `docker compose up -d` — **recreation, not
+   `restart`** (restart/stop+start never reload `env_file`; the flag is read
+   into settings at process start). The task checks it at run start.
+2. **Revoke queued WGR sync tasks WHILE WORKERS ARE STILL UP** (inspect gets
+   no replies and revoke broadcasts to nobody once they're stopped):
+   `docker compose exec worker celery -A app.tasks.celery_app inspect reserved`
+   and `… inspect scheduled` (one action per invocation), then
+   `… control revoke <task-id>` for each `app.tasks.wgr_sync.sync_wgr` entry.
+   Never blanket `celery purge` — it discards unrelated email/embed work.
+   Then `docker compose stop worker beat`. A killed run leaves committed
+   batches in place — the mirror is *replayable*, not atomically undone; the
+   un-advanced watermark makes the next clean run converge. Stragglers that
+   survive revocation are gated by the kill switch + run lock anyway.
+3. **Schema decision BEFORE touching code** (if schema removal is wanted):
+   `docker compose run --rm migrate alembic downgrade x5c6d7e8f9a0` — a named
+   revision, not a count (the feature has FOUR migrations: y6d7…, z7e8…,
+   a8f9…, b9a0…). This must run while the feature image/migration files
+   still exist. Safe today because every mirrored value exists upstream and
+   nothing in CI references the tables yet; **destructive to CI reporting
+   state once deliverable 9 ships** — then prefer keeping the schema
+   (additive schema + old code coexist fine).
+4. **Now revert the feature branch** and `docker compose up -d --build` so
+   workers load the reverted code. If you skipped step 3, keep the migration
+   files in the revert (additive-only) so `migrate` still recognizes the DB
+   revision.
+5. Re-enable: `CLIENT_SYNC_ENABLED=true` + `docker compose up -d` (recreate
+   again).
+
+**Mass-delete override procedure** (one-run semantics for real): never bake
+`WGR_SYNC_MASS_DELETE_TABLE` into `.env` — run the one deliberate
+reconciliation as
+`docker compose exec -e WGR_SYNC_MASS_DELETE_TABLE=<table> worker python -c
+"from app.tasks.wgr_sync import sync_wgr; print(sync_wgr(since='full'))"` —
+the variable exists only for that process, so nothing needs unsetting and the
+hourly worker never sees it.
 
 "Bad but successful data" (r2 #24): for a pure mirror, replaying current WGR
 IS the recovery — a mapper bug is fixed in code and the next full backfill
