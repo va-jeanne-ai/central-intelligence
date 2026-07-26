@@ -64,7 +64,15 @@ def _connection():
     no statement on this connection can mutate the client's database. The
     connection is always closed on exit.
     """
-    conn = psycopg2.connect(_dsn(), connect_timeout=_CONNECT_TIMEOUT)
+    conn = psycopg2.connect(
+        _dsn(),
+        connect_timeout=_CONNECT_TIMEOUT,
+        # A mid-stream network stall must not outlive the sync run lock's TTL:
+        # cap statements at 5 min and detect dead peers via TCP keepalives.
+        options="-c statement_timeout=300000",
+        keepalives=1,
+        keepalives_idle=30,
+    )
     try:
         # autocommit so the read-only session characteristic applies to every
         # implicit transaction; readonly=True issues SET SESSION ... READ ONLY.
