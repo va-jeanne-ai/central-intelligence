@@ -199,19 +199,41 @@ hardening ticket because they predate it and affect all ~20 existing mirrors:
 - **`created_at` watermarks miss post-insert edits** on `lead_engagements` /
   `meta_ad_performance` (no upstream `updated_at`); healed by periodic full
   `backfill_wgr` runs.
-- **Sync concurrency: RESOLVED in-feature (r6)** — a Redis run lock (plan
-  Task 5b) serializes hourly beat, user trigger, and manual full pulls;
-  latecomers skip with an explicit status. (Redis, not Postgres advisory
-  locks, because the app DB sits behind Supabase's pooler.) Trigger
+- **Sync concurrency: RESOLVED in-feature (r6, hardened r7)** — a Redis run
+  lock (plan Task 5b) serializes hourly beat, user trigger, and manual full
+  pulls; latecomers skip with an explicit status. Lock craft per r7: unique
+  owner token, compare-and-delete release (never frees a successor's lock),
+  fail-closed when Redis is unreachable, 2-hour TTL (≫ run time, no renewal
+  machinery), acquired before the watermark is read. (Redis, not Postgres
+  advisory locks, because the app DB sits behind Supabase's pooler.) Trigger
   rate-limiting/role-gating stays in hardening ticket 86d3u66pj.
+- **Manual partial pulls never advance the canonical watermark (r7)** —
+  `sync_wgr(since=<ISO>)` repairs a window without touching the cursor; only
+  incremental (None) and `since='full'` runs own it. Closes the
+  operator-poisons-history path (`since=now` would otherwise skip everything
+  between the old watermark and now, forever).
+- **Lead deletion policy (r7):** CI leads are append-only — WGR lead
+  deletions are not propagated (upstream deletes leads essentially never;
+  test rows are filtered at map time). If that changes, leads get the
+  soft-delete treatment (the model already carries SoftDeleteMixin), not
+  hard reconciliation.
 - **LIMIT/OFFSET pagination can skip rows under live upstream writes** —
   affects every mirrored table today. Hardening ticket: keyset pagination on
   `(watermark, pk)`.
-- **WGR credential: RESOLVED as a prerequisite (r6)** — plan Task 0
-  provisions a dedicated `ci_reader` SELECT-only Postgres role on Greg's
-  project; every WGR connection in this feature (probe + backfill + hourly)
-  runs on it, with Postgres enforcing the boundary rather than our session
-  flag. Old `postgres` DSN rotation is Greg's follow-up action.
+- **WGR credential: RESOLVED as a prerequisite (r6, enforced r7)** — plan
+  Task 0 provisions a dedicated `ci_reader` SELECT-only Postgres role on
+  Greg's project; every WGR connection in this feature runs on it, with
+  Postgres enforcing the boundary rather than our session flag. Enforcement
+  is verified at runtime, not asserted: the probe checks
+  `current_user = 'ci_reader'` and fails its gate on any other role, and
+  Task 0 includes a plain-connection write probe proving CREATE is denied.
+  Old `postgres` DSN rotation is Greg's follow-up action.
+- **Mass-delete override is table-scoped (r7)** —
+  `WGR_SYNC_MASS_DELETE_TABLE=<table>` authorizes exactly one table's
+  reconciliation, is set for one deliberate run and then unset, and every
+  reconciliation deletion writes a `sync_log` audit row
+  (`wgr_snapshot_reconcile`) carrying the deleted ids — the rollback
+  artifact for the only destructive step in the feature.
 - **Data sensitivity:** UTMs and `ghl_contact_id` are marketing identifiers;
   CI already stores names/emails/phones/transcripts under the same auth
   boundary, and agent SQL access goes through the business-prose gate. No new

@@ -140,6 +140,18 @@ CHECKS: dict[str, tuple[set[str], str]] = {
 
 
 def main() -> None:
+    # r7: verify the connection identity at runtime — the ci_reader boundary
+    # must be enforced, not assumed. A config mistake (legacy postgres DSN)
+    # fails the gate here before any pull.
+    ident = list(wgr_client.query(
+        "SELECT current_user AS role, "
+        "current_setting('transaction_read_only') AS read_only"
+    ))[0]
+    print(f"connection identity: {ident}")
+    if ident["role"] != "ci_reader":
+        print("GATE FAILED: not connected as ci_reader — fix CLIENT_DATABASE_URL "
+              "(Task 0) before running any pull.")
+        return
     failed = []
     for table, (expected_cols, count_sql) in CHECKS.items():
         try:
@@ -445,6 +457,16 @@ def test_tie_broken_by_lowest_id():
     assert build_resolver(rows).resolve("ig", "organic", None).channel == "SHOULD_WIN"
 
 
+def test_resolver_contract_excludes_campaign():
+    # r7: campaign is mirrored data, NOT part of resolution — encode the
+    # contract in the API surface so a downstream implementer can't assume it.
+    import inspect
+    from app.services.attribution import Resolver
+    assert list(inspect.signature(Resolver.resolve).parameters) == [
+        "self", "source", "medium", "content"
+    ]
+
+
 def test_content_only_input_gets_placeholder_label():
     # Non-empty content with null source/medium is not "all empty"; the
     # unmapped label uses '-' placeholders, never "unmapped:/".
@@ -590,6 +612,14 @@ class AttributionTaxonomy(Base):
 Mapping (append to `mapping.py`, after `map_opt_in_event`):
 
 ```python
+def _coerce_bool(v: Any, default: bool = True) -> bool:
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return default
+    return str(v).strip().lower() in ("t", "true", "1", "yes")
+
+
 def map_attribution_row(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     if row.get("id") is None or not _clean(row.get("canonical_channel")):
         return None
@@ -600,7 +630,11 @@ def map_attribution_row(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "observed_content": _clean(row.get("observed_content")),
         "canonical_channel": _clean(row.get("canonical_channel")),
         "platform": _clean(row.get("platform")),
-        "include_in_channel_reporting": bool(row.get("include_in_channel_reporting", True)),
+        # Strict coercion (r7): psycopg returns real bools for boolean
+        # columns, but a drifted text value like "false" must not become
+        # truthy via bool().
+        "include_in_channel_reporting": _coerce_bool(
+            row.get("include_in_channel_reporting"), default=True),
         "notes": _clean(row.get("notes")),
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
@@ -682,28 +716,41 @@ async def _sync_snapshot_reconcile(
     pk_col = getattr(model, pk_attr)
     # Deletion circuit breaker (r6 #1): reconciliation may trim, never gut.
     # A wrong replica, source cutover, permission change, or upstream truncate
-    # must stop here and demand a human — set WGR_SYNC_ALLOW_MASS_DELETE=1 for
-    # one deliberate run to override. This also covers the confirmed-empty
-    # case: emptying a populated mirror always trips the breaker.
+    # must stop here and demand a human. Override is TABLE-SCOPED (r7 — a
+    # bare boolean env would keep authorizing every later run): set
+    # WGR_SYNC_MASS_DELETE_TABLE=<this table> for the one deliberate run,
+    # then unset it. Also covers confirmed-empty: emptying a populated
+    # mirror always trips the breaker.
     existing = (await session.execute(
         select(func.count()).select_from(model)
     )).scalar() or 0
-    doomed_q = select(func.count()).select_from(model)
+    doomed_q = select(pk_col)
     if raw_ids:
         doomed_q = doomed_q.where(pk_col.not_in(raw_ids))
-    doomed = (await session.execute(doomed_q)).scalar() or 0
-    if (doomed > 10 and doomed > 0.2 * existing
-            and not settings.wgr_sync_allow_mass_delete):
+    doomed_ids = list((await session.execute(doomed_q)).scalars())
+    doomed = len(doomed_ids)
+    override = settings.wgr_sync_mass_delete_table == wgr_table
+    if doomed > 10 and doomed > 0.2 * existing and not override:
         logger.error("wgr_sync %s: reconciliation wants to delete %d of %d CI "
                      "rows — circuit breaker OPEN, skipping deletion. Verify "
-                     "the source, then re-run with WGR_SYNC_ALLOW_MASS_DELETE=1",
-                     wgr_table, doomed, existing)
+                     "the source, then re-run once with "
+                     "WGR_SYNC_MASS_DELETE_TABLE=%s and unset it after.",
+                     wgr_table, doomed, existing, wgr_table)
         await session.commit()
         return written
-    stmt = delete(model)
-    if raw_ids:
-        stmt = stmt.where(pk_col.not_in(raw_ids))
-    await session.execute(stmt)
+    if doomed_ids:
+        await session.execute(delete(model).where(pk_col.in_(doomed_ids)))
+        # Audit record (r7): the deleted ids are the rollback artifact for
+        # this destructive step — recoverable by re-inserting from WGR or,
+        # if WGR moved on, from this row's details.
+        session.add(SyncLog(
+            id=uuid.uuid4(), operation="wgr_snapshot_reconcile",
+            table_name=model.__tablename__, record_count=doomed,
+            status="ok",
+            details={"deleted_ids": [str(i) for i in doomed_ids[:1000]],
+                     "upserted": written, "raw_id_count": len(raw_ids),
+                     "override_used": override},
+        ))
     await session.commit()
     logger.info("wgr_sync %s: upserted %d, reconciled to %d raw ids "
                 "(%d unmappable kept, %d deleted)",
@@ -713,7 +760,7 @@ async def _sync_snapshot_reconcile(
 
 (Note: `count_table` runs on a separate connection from `read_table`, so under heavy concurrent upstream writes the guard can occasionally skip reconciliation on a healthy run — that is the safe direction; deletion just waits for the next hourly run. These tables are far smaller than one page (page_size 1000), so the pagination-shift scenario needs the guard only as belt-and-braces.)
 
-Add the breaker's override flag to `app/config.py` `Settings`: `wgr_sync_allow_mass_delete: bool = False` (env `WGR_SYNC_ALLOW_MASS_DELETE`), and import `settings` in `upsert.py` if not already imported.
+Add the breaker's override to `app/config.py` `Settings`: `wgr_sync_mass_delete_table: str = ""` (env `WGR_SYNC_MASS_DELETE_TABLE` — set to the exact table name for one deliberate run, then unset; table-scoped so it can never blanket-authorize, r7). In `upsert.py`, import `settings` and `SyncLog` (from `app.models.audit` — confirm module with `grep -rn "class SyncLog" backend/app/models/`) if not already imported.
 
 Register it in `sync_all()` alongside the other custom-path tables (after `counts["market_signals"]`):
 
@@ -783,6 +830,13 @@ def test_map_attribution_row_skips_rows_without_channel():
         {"id": 2, "observed_source": "ig", "canonical_channel": "instagram_organic"}
     )
     assert ok["id"] == 2 and ok["include_in_channel_reporting"] is True
+
+
+def test_map_attribution_row_coerces_string_booleans():
+    # r7: a drifted text "false" must not become truthy.
+    row = {"id": 3, "canonical_channel": "email",
+           "include_in_channel_reporting": "false"}
+    assert mapping.map_attribution_row(row)["include_in_channel_reporting"] is False
 ```
 
 - [ ] **Step 6: Apply migration + run tests**
@@ -1288,16 +1342,30 @@ def test_lock_skips_when_held():
     fake = MagicMock()
     fake.set.return_value = None  # SET NX returns None when key exists
     with patch.object(wgr_sync, "_redis", return_value=fake):
-        assert wgr_sync._acquire_lock() is False
+        assert wgr_sync._acquire_lock("tok-a") is False
 
 
 def test_lock_acquires_when_free():
     fake = MagicMock()
     fake.set.return_value = True
     with patch.object(wgr_sync, "_redis", return_value=fake):
-        assert wgr_sync._acquire_lock() is True
+        assert wgr_sync._acquire_lock("tok-a") is True
     fake.set.assert_called_once_with(
-        wgr_sync.LOCK_KEY, "1", nx=True, ex=wgr_sync.LOCK_TTL_SECONDS
+        wgr_sync.LOCK_KEY, "tok-a", nx=True, ex=wgr_sync.LOCK_TTL_SECONDS
+    )
+
+
+def test_lock_fails_closed_when_redis_down():
+    with patch.object(wgr_sync, "_redis", side_effect=ConnectionError):
+        assert wgr_sync._acquire_lock("tok-a") is False
+
+
+def test_release_uses_compare_and_delete():
+    fake = MagicMock()
+    with patch.object(wgr_sync, "_redis", return_value=fake):
+        wgr_sync._release_lock("tok-a")
+    fake.eval.assert_called_once_with(
+        wgr_sync._RELEASE_LUA, 1, wgr_sync.LOCK_KEY, "tok-a"
     )
 ```
 
@@ -1309,28 +1377,47 @@ def test_lock_acquires_when_free():
 import redis as _redis_lib
 
 LOCK_KEY = "wgr_sync:run_lock"
-LOCK_TTL_SECONDS = 55 * 60  # auto-expires below the hourly cadence
+# Generous vs. minutes-long runs — avoids TTL-renewal machinery while still
+# self-clearing if a worker dies mid-run (r7).
+LOCK_TTL_SECONDS = 2 * 60 * 60
+
+# Compare-and-delete: only the owner's token may release the lock (r7 —
+# a naive DELETE could release a successor's lock after our TTL expired).
+_RELEASE_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+end
+return 0
+"""
 
 
 def _redis():
     return _redis_lib.Redis.from_url(settings.celery_broker_url)
 
 
-def _acquire_lock() -> bool:
-    return bool(_redis().set(LOCK_KEY, "1", nx=True, ex=LOCK_TTL_SECONDS))
-
-
-def _release_lock() -> None:
+def _acquire_lock(token: str) -> bool:
+    # Fail CLOSED (r7): if Redis is unreachable, skip the run rather than
+    # risk an unserialized sync. (Redis down usually means Celery is down
+    # anyway; the explicit guard covers direct in-process invocations.)
     try:
-        _redis().delete(LOCK_KEY)
+        return bool(_redis().set(LOCK_KEY, token, nx=True, ex=LOCK_TTL_SECONDS))
+    except Exception:
+        logger.error("wgr_sync: redis unavailable for run lock — skipping run")
+        return False
+
+
+def _release_lock(token: str) -> None:
+    try:
+        _redis().eval(_RELEASE_LUA, 1, LOCK_KEY, token)
     except Exception:
         pass  # TTL expiry is the backstop
 ```
 
-And in `sync_wgr(...)`, immediately after the `client_sync_enabled` check:
+And in `sync_wgr(...)`, immediately after the `client_sync_enabled` check — the lock is acquired **before** `_run()` touches the watermark, so no two runs can read it concurrently:
 
 ```python
-    if not _acquire_lock():
+    lock_token = str(uuid.uuid4())
+    if not _acquire_lock(lock_token):
         logger.info("wgr_sync: skipped — another sync run holds the lock")
         return {"status": "skipped", "reason": "another sync run holds the lock"}
     try:
@@ -1338,8 +1425,19 @@ And in `sync_wgr(...)`, immediately after the `client_sync_enabled` check:
         result = asyncio.run(_run(since))
         ...  # existing body unchanged
     finally:
-        _release_lock()
+        _release_lock(lock_token)
 ```
+
+- [ ] **Step 3b: Manual partial pulls must not advance the canonical watermark** (r7 — best catch of the round). Today `_run` records the new watermark on ANY clean run; an operator running `sync_wgr(since=<recent ISO>)` would advance it and permanently skip history. In `_run`, gate the watermark on the run mode:
+
+```python
+    # Only scheduled/incremental (None) and full pulls own the watermark.
+    # A manual partial pull (since=<ISO>) repairs a window; it must never
+    # advance the canonical cursor past unpulled history (r7).
+    advances_watermark = since_override in (None, "full")
+```
+
+…and in the success `SyncLog` details, write `"watermark": new_watermark.isoformat()` only when `advances_watermark`, else `"watermark_held": True` (confirm the exact details-dict shape at [wgr_sync.py:124-133](projects/central-intelligence/backend/app/tasks/wgr_sync.py#L124-L133) and keep `_read_watermark`'s query compatible — it must skip rows without a `watermark` key).
 
 - [ ] **Step 4: Tests pass** — `cd backend && python -m pytest tests/test_wgr_sync_lock.py -v` → PASS. Confirm `redis` is already a backend dependency (`grep -n "redis" backend/requirements*.txt backend/pyproject.toml 2>/dev/null`) — it ships with Celery's redis broker; add explicitly only if missing.
 
