@@ -22,7 +22,7 @@ Strictly a read-only mirror: CI never writes to the WGR database.
 |---|---|---|
 | Channel resolution | **Python read-time resolver** (`services/attribution.py`) | Unit-testable contract; honors Greg's raw-never-rewritten / normalize-at-read rule; fits CI's Python-first analytics. SQL views (Greg's approach) rejected as untestable-in-unit and gnarly for the specificity rules; sync-time materialization rejected because taxonomy edits would leave stale channels. |
 | `commenter_lead_links` (DM identity bridge) | **Deferred** | Auto-linked commenters already carry first-touch UTMs on `leads` upstream; mirror the bridge only when a surface needs commenter-level drill-down or review-queue visibility. |
-| Snapshot-table deletions (`attribution_taxonomy`, `meta_campaigns`, `meta_ads`) | **Snapshot + delete-reconciliation against RAW ids, count-guarded** | Upserts never delete, and a stale taxonomy rule would keep winning resolution (stale ads/campaigns would look active). Each run pulls the full table and deletes CI rows absent from the **raw** (successfully read) id set — NOT the mapped set: reconciling on mapped ids would turn a mapper bug or upstream type drift into mass deletion (r3 #3 — this supersedes the r2 #5 position; a present-but-unmappable row is kept, skipped, and loudly counted instead of deleted). One deliberate exception (r4): a taxonomy row whose `canonical_channel` is nulled/blanked upstream is a *source-data disable statement*, checkable on the RAW row — it is excluded from the raw-id set and reconciled away, so a disabled rule stops resolving instead of resolving with its stale channel. Guard against silent partial reads (r3 #2): a source-side `COUNT(*)` on the same connection must match the rows actually read, else reconciliation is skipped for that run. Failure semantics: a read failure or count mismatch aborts reconciliation (transient problems can never wipe the mirror); a *successful, count-confirmed* pull returning 0 rows is honored — upstream legitimately emptied the table, CI empties too (r2 #4/r3 #4: this single rule applies everywhere; there is no separate "non-empty" condition). These tables are far smaller than one page (page_size 1000), so pagination-shift omission cannot occur in practice; the count guard covers it anyway. |
+| Snapshot-table deletions (`attribution_taxonomy`, `meta_campaigns`, `meta_ads`) | **Snapshot + delete-reconciliation against RAW ids, count-guarded** | Upserts never delete, and a stale taxonomy rule would keep winning resolution (stale ads/campaigns would look active). Each run pulls the full table and deletes CI rows absent from the **raw** (successfully read) id set — NOT the mapped set: reconciling on mapped ids would turn a mapper bug or upstream type drift into mass deletion (r3 #3 — this supersedes the r2 #5 position; a present-but-unmappable row is kept, skipped, and loudly counted instead of deleted). One deliberate exception (r4): a taxonomy row whose `canonical_channel` is nulled/blanked upstream is a *source-data disable statement*, checkable on the RAW row — it is excluded from the raw-id set and reconciled away, so a disabled rule stops resolving instead of resolving with its stale channel. Guard against silent partial reads (r3 #2): a source-side `COUNT(*)` on the same connection must match the rows actually read, else reconciliation is skipped for that run. Failure semantics: a read failure or count mismatch aborts reconciliation (transient problems can never wipe the mirror); a *successful, count-confirmed* pull returning 0 rows is honored — upstream legitimately emptied the table, CI empties too (r2 #4/r3 #4: this single rule applies everywhere; there is no separate "non-empty" condition). These tables are far smaller than one page, and snapshot reads use page_size 10 000 → a single SQL statement → Postgres statement-level MVCC consistency; a page-overflow tripwire skips reconciliation if that assumption ever breaks. **Deletion circuit breaker (r6 #1):** reconciliation that would delete >10 rows AND >20% of the CI table skips and demands `WGR_SYNC_ALLOW_MASS_DELETE=1` for one deliberate run — so a wrong replica, source cutover, permission change, or upstream truncate can trim nothing without a human. The confirmed-empty rule operates through the breaker: emptying a populated mirror always requires the override. |
 | Lead joins from mirror tables | **`external_id` first, `ghl_contact_id` fallback** | The lead email-merge path (`plan_lead_writes` case 4) preserves a pre-existing lead's `source`/`external_id`, so `wgr_lead_id → leads.external_id` misses email-merged leads. `ghl_contact_id` is a data column (survives merges) and exists on both sides. A crosswalk table was considered and rejected as over-engineering (audit finding #1). |
 | Meta Ads tables | **Gated on probe** | Mirrored only if the read-only probe finds rows in `meta_ad_performance`; no speculative mirrors. |
 | FKs on mirrored tables | **None** | Mirror data tolerates orphans (WGR filters/test rows); joins go through `leads.external_id` (source='wgr'). |
@@ -51,10 +51,12 @@ Strictly a read-only mirror: CI never writes to the WGR database.
    deletions self-heal). **`meta_ad_performance`:** text PK `perf_id`,
    watermark `created_at` (no `updated_at` exists upstream); later edits to
    kpi_status/notes are missed until a full `backfill_wgr` run (documented
-   limitation). All gated on probe. **Gate re-evaluation:** the gate is not a
-   permanent off-switch — if skipped, the Ads ticket (86d3u65cc) carries the
-   re-enable recipe (re-run the probe; if rows now exist, execute plan Task 5
-   on a fresh branch). Manual re-evaluation is acceptable at this scale.
+   limitation). **Gating is per table family** (r6 #14): Task 5 is skipped
+   only when all three meta tables are empty; if any has rows, all three are
+   mirrored (empty ones sync to empty and fill whenever upstream starts
+   producing — no re-enable action needed). Only the all-empty case needs
+   manual re-evaluation, recipe on the Ads ticket (86d3u65cc): re-run the
+   probe; if rows now exist, execute plan Task 5 on a fresh branch.
 
 **Out of scope:** `commenter_lead_links`; any channel UI (deliverable-9
 ticket); RAG/embedding hookup for the new tables (open policy gap, tracked
@@ -90,7 +92,14 @@ separately); coaching/EOD/webinar tables (already mirrored).
   triples — wildcard/NULL rows included — are prevented upstream by WGR's
   expression unique index on `lower(coalesce(observed_*, ''))` (verified in
   his migration `20260724_000000`, lines 42–47; r5 #8's NULLS-NOT-DISTINCT
-  concern does not apply to an expression index over coalesced values). **Taxonomy edits
+  concern does not apply to an expression index over coalesced values).
+  Two documented divergences (r6 #9–#10): CI's normalization also TRIMS
+  whitespace, which WGR's index does not — upstream rows differing only by
+  padding collapse in CI and resolve deterministically by lowest id
+  (pathological seed data, benign outcome); and a highly specific
+  non-reportable rule DOES win resolution over a less-specific reportable
+  one, marking the touch non-reportable — that is Greg's contract ("honest
+  origins, not marketing touches"), not an accident. **Taxonomy edits
   retroactively change historical reports by design** — that is Greg's
   read-time-normalization contract ("no backfill rewrite"); if reproducibility
   is ever needed, stamp reports with a taxonomy revision (future option, not
@@ -190,17 +199,19 @@ hardening ticket because they predate it and affect all ~20 existing mirrors:
 - **`created_at` watermarks miss post-insert edits** on `lead_engagements` /
   `meta_ad_performance` (no upstream `updated_at`); healed by periodic full
   `backfill_wgr` runs.
-- **No sync concurrency lock** (hourly beat + user trigger can overlap) —
-  self-healing by design: watermark only advances on clean runs, upserts are
-  idempotent, and the leads unique index turns races into a failed run, not
-  corruption. Hardening ticket: advisory lock + return-active-run.
+- **Sync concurrency: RESOLVED in-feature (r6)** — a Redis run lock (plan
+  Task 5b) serializes hourly beat, user trigger, and manual full pulls;
+  latecomers skip with an explicit status. (Redis, not Postgres advisory
+  locks, because the app DB sits behind Supabase's pooler.) Trigger
+  rate-limiting/role-gating stays in hardening ticket 86d3u66pj.
 - **LIMIT/OFFSET pagination can skip rows under live upstream writes** —
   affects every mirrored table today. Hardening ticket: keyset pagination on
   `(watermark, pk)`.
-- **`CLIENT_DATABASE_URL` is the write-capable `postgres` role**, made safe
-  only by session-level READ ONLY on this code path (documented footgun in
-  `wgr_client.py`). Hardening ticket: ask Greg for a dedicated
-  SELECT-only role.
+- **WGR credential: RESOLVED as a prerequisite (r6)** — plan Task 0
+  provisions a dedicated `ci_reader` SELECT-only Postgres role on Greg's
+  project; every WGR connection in this feature (probe + backfill + hourly)
+  runs on it, with Postgres enforcing the boundary rather than our session
+  flag. Old `postgres` DSN rotation is Greg's follow-up action.
 - **Data sensitivity:** UTMs and `ghl_contact_id` are marketing identifiers;
   CI already stores names/emails/phones/transcripts under the same auth
   boundary, and agent SQL access goes through the business-prose gate. No new
@@ -220,10 +231,13 @@ no CI report references this data until deliverable 9 ships. Rollback path:
    is *replayable*, not atomically undone; the un-advanced watermark makes
    the next clean run re-pull and converge. Between kill and next clean run
    the mirror can be partially updated — acceptable for an hourly analytics
-   mirror, and moot once sync is disabled in step 1. Also purge any queued
-   sync tasks so none fire on worker restart:
-   `docker compose exec api celery -A app.tasks.celery_app purge -f`
-   (adjust the service/app path to the compose file's actual names).
+   mirror, and moot once sync is disabled in step 1. Revoke queued WGR sync
+   tasks **specifically** — never a blanket `celery purge`, which would
+   discard unrelated email/embed/transcription work (r6 #3): list reserved/
+   scheduled tasks with `celery -A app.tasks.celery_app inspect reserved
+   scheduled`, then `celery ... control revoke <task-id>` for each
+   `app.tasks.wgr_sync.sync_wgr` entry. The Task 5b run lock prevents any
+   revoked stragglers from overlapping a later manual run anyway.
 3. Revert the feature branch (resolver + sync registrations disappear;
    `sync_all` returns to the prior table set). Redeploy so workers load the
    reverted code.

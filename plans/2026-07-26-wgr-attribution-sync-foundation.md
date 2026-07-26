@@ -26,6 +26,40 @@
 
 ---
 
+### Task 0: Provision a SELECT-only WGR role (prerequisite for any data pull)
+
+Six audit rounds held firm on this and it is now a gate: **Tasks 1 and 6 (anything that connects to WGR) run on the new role, never on the `postgres` credential.** Code tasks 2–5 need no WGR connection and proceed in parallel while waiting on Greg.
+
+**Files:** none in this repo (SQL runs on Greg's Supabase; `.env` change locally).
+
+- [ ] **Step 1: Send Greg the SQL** (he runs it in the WGR project's SQL editor, or approves us running it via his MCP):
+
+```sql
+-- CI read-only mirror role (2026-07: attribution sync prerequisite)
+create role ci_reader login password '<GENERATE-STRONG-PASSWORD>';
+grant connect on database postgres to ci_reader;
+grant usage on schema public to ci_reader;
+grant select on all tables in schema public to ci_reader;
+alter default privileges in schema public grant select on tables to ci_reader;
+```
+
+- [ ] **Step 2: Swap the DSN** — update `CLIENT_DATABASE_URL` in `backend/.env` (and the droplet's env at release time) to the `ci_reader` credential (Supabase pooler user format: `ci_reader.<project-ref>`).
+
+- [ ] **Step 3: Verify the boundary is real** — `cd backend && python -c "
+from app.services import wgr_client
+print(list(wgr_client.query('SELECT 1 AS ok')))
+import psycopg2; from app.config import settings
+conn = psycopg2.connect(settings.client_database_url); cur = conn.cursor()
+try:
+    cur.execute(\"CREATE TABLE _ci_write_probe(x int)\"); print('WRITE SUCCEEDED — WRONG ROLE')
+except Exception as e: print('write correctly denied:', type(e).__name__)
+"`
+Expected: SELECT works; CREATE fails with insufficient privilege **on a plain connection** (i.e. Postgres enforces it, not our session flag).
+
+- [ ] **Step 4:** Note the old `postgres` DSN for rotation once the feature ships (rotation itself is Greg's action; remind him).
+
+---
+
 ### Task 1: WGR-side discovery gate (read-only probe)
 
 The plan assumes Greg's WGR DB has the new columns/tables and that they contain rows. Verify before building. **Go/no-go for Task 5 (meta mirror) scope.**
@@ -139,7 +173,7 @@ if __name__ == "__main__":
 
 Run: `cd backend && python -m scripts.probe_wgr_attribution`
 Expected: every check prints counts. Record the numbers in the PR description.
-- If `meta_ad_performance` is empty or the meta tables fail → **skip Task 5** and note it on the Ads ticket (86d3u65cc): the ads deliverable needs a different data source.
+- Meta gating is **per table family** (audit r6 #14): skip Task 5 only if ALL THREE meta tables are empty/failing. If campaigns/ads have rows while performance is empty, mirror all three — performance fills whenever Greg's daily sync starts producing, with no action on our side. Note whatever is empty on the Ads ticket (86d3u65cc).
 - If `leads.utm_source_first` fails → **stop the plan entirely** and surface it (WGR primary hasn't received Greg's migrations; do not guess).
 
 - [ ] **Step 3: Commit**
@@ -185,11 +219,16 @@ def test_map_lead_carries_utm_attribution():
     assert mapped["utm_content_last"] is None
 
 
-def test_map_lead_missing_utm_columns_defaults_to_none():
-    # Older WGR snapshots may lack the columns entirely; .get() must not blow up.
+def test_map_lead_missing_utm_columns_omits_keys_entirely():
+    # Presence-conditional (audit r6 #4): when SELECT * no longer returns a
+    # column, the mapped dict must OMIT the key — never emit None, which the
+    # upsert would write over previously mirrored values. An explicit upstream
+    # NULL (key present, value None) still maps to None.
     mapped = mapping.map_lead({"lead_id": "LEAD_002"})
-    assert mapped["utm_source_first"] is None
-    assert mapped["ghl_contact_id"] is None
+    assert "utm_source_first" not in mapped
+    assert "ghl_contact_id" not in mapped
+    explicit_null = mapping.map_lead({"lead_id": "LEAD_003", "utm_source_first": None})
+    assert explicit_null["utm_source_first"] is None
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -197,22 +236,28 @@ def test_map_lead_missing_utm_columns_defaults_to_none():
 Run: `cd backend && python -m pytest tests/test_wgr_mapping.py -k utm -v`
 Expected: FAIL with `KeyError: 'ghl_contact_id'`
 
-- [ ] **Step 3: Extend `map_lead` in `mapping.py`** — add inside the returned dict, after `"notes"`:
+- [ ] **Step 3: Extend `map_lead` in `mapping.py`** — restructure so the function builds the existing dict into a local `out`, then appends attribution fields **presence-conditionally** before returning:
 
 ```python
-        # Marketing attribution (Greg's webhook layer, 2026-07): first-touch is
-        # write-once upstream, last-touch is latest-wins. Mirrored verbatim —
-        # canonical channel is resolved at read time via attribution_taxonomy.
-        "ghl_contact_id": _clean(row.get("ghl_contact_id")),
-        "utm_source_first": _clean(row.get("utm_source_first")),
-        "utm_medium_first": _clean(row.get("utm_medium_first")),
-        "utm_campaign_first": _clean(row.get("utm_campaign_first")),
-        "utm_content_first": _clean(row.get("utm_content_first")),
-        "utm_source_last": _clean(row.get("utm_source_last")),
-        "utm_medium_last": _clean(row.get("utm_medium_last")),
-        "utm_campaign_last": _clean(row.get("utm_campaign_last")),
-        "utm_content_last": _clean(row.get("utm_content_last")),
+    _ATTRIBUTION_COLS = (
+        "ghl_contact_id",
+        "utm_source_first", "utm_medium_first", "utm_campaign_first", "utm_content_first",
+        "utm_source_last", "utm_medium_last", "utm_campaign_last", "utm_content_last",
+    )
+    # Marketing attribution (Greg's webhook layer, 2026-07): first-touch is
+    # write-once upstream, last-touch is latest-wins. Mirrored verbatim —
+    # canonical channel is resolved at read time via attribution_taxonomy.
+    # Presence-conditional (r6 #4): a column absent from the raw row (schema
+    # drift, older snapshot) is OMITTED from the mapped dict, so the upsert
+    # leaves the previously mirrored CI value untouched instead of nulling it.
+    # All rows in a run come from one SELECT *, so batch dicts stay homogeneous.
+    for col in _ATTRIBUTION_COLS:
+        if col in row:
+            out[col] = _clean(row.get(col))
+    return out
 ```
+
+(Define `_ATTRIBUTION_COLS` at module level next to the other `_*_FIELDS` constants; the drift tripwire in Step 3b remains the loud signal that the manual schema-update workflow is needed.)
 
 - [ ] **Step 3b: Add a schema-drift tripwire to `sync_leads`** (`upsert.py`) — `.get()` makes a dropped upstream column indistinguishable from null (audit r3 #8); this one-time check per run turns silent drift into a loud log line, which is the signal for the manual schema-update workflow (see spec, "Schema evolution"). At the top of the read loop in `sync_leads`:
 
@@ -635,17 +680,40 @@ async def _sync_snapshot_reconcile(
         await session.commit()
         return written
     pk_col = getattr(model, pk_attr)
+    # Deletion circuit breaker (r6 #1): reconciliation may trim, never gut.
+    # A wrong replica, source cutover, permission change, or upstream truncate
+    # must stop here and demand a human — set WGR_SYNC_ALLOW_MASS_DELETE=1 for
+    # one deliberate run to override. This also covers the confirmed-empty
+    # case: emptying a populated mirror always trips the breaker.
+    existing = (await session.execute(
+        select(func.count()).select_from(model)
+    )).scalar() or 0
+    doomed_q = select(func.count()).select_from(model)
+    if raw_ids:
+        doomed_q = doomed_q.where(pk_col.not_in(raw_ids))
+    doomed = (await session.execute(doomed_q)).scalar() or 0
+    if (doomed > 10 and doomed > 0.2 * existing
+            and not settings.wgr_sync_allow_mass_delete):
+        logger.error("wgr_sync %s: reconciliation wants to delete %d of %d CI "
+                     "rows — circuit breaker OPEN, skipping deletion. Verify "
+                     "the source, then re-run with WGR_SYNC_ALLOW_MASS_DELETE=1",
+                     wgr_table, doomed, existing)
+        await session.commit()
+        return written
     stmt = delete(model)
     if raw_ids:
         stmt = stmt.where(pk_col.not_in(raw_ids))
     await session.execute(stmt)
     await session.commit()
     logger.info("wgr_sync %s: upserted %d, reconciled to %d raw ids "
-                "(%d unmappable kept)", wgr_table, written, len(raw_ids), skipped)
+                "(%d unmappable kept, %d deleted)",
+                wgr_table, written, len(raw_ids), skipped, doomed)
     return written
 ```
 
 (Note: `count_table` runs on a separate connection from `read_table`, so under heavy concurrent upstream writes the guard can occasionally skip reconciliation on a healthy run — that is the safe direction; deletion just waits for the next hourly run. These tables are far smaller than one page (page_size 1000), so the pagination-shift scenario needs the guard only as belt-and-braces.)
+
+Add the breaker's override flag to `app/config.py` `Settings`: `wgr_sync_allow_mass_delete: bool = False` (env `WGR_SYNC_ALLOW_MASS_DELETE`), and import `settings` in `upsert.py` if not already imported.
 
 Register it in `sync_all()` alongside the other custom-path tables (after `counts["market_signals"]`):
 
@@ -915,7 +983,7 @@ git commit -m "feat: mirror WGR lead_engagements attribution touches"
 
 ### Task 5: Mirror Meta Ads tables (GATED on Task 1 finding rows) + INTEGRATIONS.md
 
-**Skip this task entirely if Task 1 found `meta_ad_performance` empty** — then make the INTEGRATIONS.md update (minus the meta tables) part of Task 4's commit instead, and note the gap on the Ads ticket (86d3u65cc).
+**Skip this task only if Task 1 found ALL THREE meta tables empty** (per-family gating, r6 #14) — then make the INTEGRATIONS.md update (minus the meta tables) part of Task 4's commit instead, and note the gap on the Ads ticket (86d3u65cc). If any family has rows, mirror all three; empty ones sync to empty harmlessly and fill when Greg's side starts producing.
 
 **Files:**
 - Create: `backend/app/models/meta_ads.py` (new file — `models/meta.py` is users/teams, don't touch it)
@@ -1196,6 +1264,95 @@ git commit -m "feat: mirror WGR Meta Ads tables (campaigns, ads, daily performan
 
 ---
 
+### Task 5b: Serialize sync runs (Redis lock)
+
+Ends the overlapping-runs class (hourly beat + user trigger + manual full pull racing): only one WGR sync executes at a time; latecomers skip with an honest status. Redis-based because the app DB sits behind Supabase's pooler, where Postgres session-scoped advisory locks are unreliable — and Redis is already in the stack for Celery.
+
+**Files:**
+- Modify: `backend/app/tasks/wgr_sync.py` (lock acquire/release around the run)
+- Test: `backend/tests/test_wgr_sync_lock.py` (new)
+
+**Interfaces:**
+- Consumes: the Celery broker Redis URL from settings (confirm the exact field with `grep -n "broker\|redis" backend/app/config.py` — likely `settings.celery_broker_url` or similar).
+- Produces: `sync_wgr` returns `{"status": "skipped", "reason": "another sync run holds the lock"}` when a run is already active.
+
+- [ ] **Step 1: Failing test** (`backend/tests/test_wgr_sync_lock.py`) — test the lock helpers pure, no Celery:
+
+```python
+from unittest.mock import MagicMock, patch
+
+from app.tasks import wgr_sync
+
+
+def test_lock_skips_when_held():
+    fake = MagicMock()
+    fake.set.return_value = None  # SET NX returns None when key exists
+    with patch.object(wgr_sync, "_redis", return_value=fake):
+        assert wgr_sync._acquire_lock() is False
+
+
+def test_lock_acquires_when_free():
+    fake = MagicMock()
+    fake.set.return_value = True
+    with patch.object(wgr_sync, "_redis", return_value=fake):
+        assert wgr_sync._acquire_lock() is True
+    fake.set.assert_called_once_with(
+        wgr_sync.LOCK_KEY, "1", nx=True, ex=wgr_sync.LOCK_TTL_SECONDS
+    )
+```
+
+- [ ] **Step 2: Run to verify failure** — `cd backend && python -m pytest tests/test_wgr_sync_lock.py -v` → FAIL (`AttributeError: _acquire_lock`)
+
+- [ ] **Step 3: Implement in `tasks/wgr_sync.py`**
+
+```python
+import redis as _redis_lib
+
+LOCK_KEY = "wgr_sync:run_lock"
+LOCK_TTL_SECONDS = 55 * 60  # auto-expires below the hourly cadence
+
+
+def _redis():
+    return _redis_lib.Redis.from_url(settings.celery_broker_url)
+
+
+def _acquire_lock() -> bool:
+    return bool(_redis().set(LOCK_KEY, "1", nx=True, ex=LOCK_TTL_SECONDS))
+
+
+def _release_lock() -> None:
+    try:
+        _redis().delete(LOCK_KEY)
+    except Exception:
+        pass  # TTL expiry is the backstop
+```
+
+And in `sync_wgr(...)`, immediately after the `client_sync_enabled` check:
+
+```python
+    if not _acquire_lock():
+        logger.info("wgr_sync: skipped — another sync run holds the lock")
+        return {"status": "skipped", "reason": "another sync run holds the lock"}
+    try:
+        started = datetime.now(timezone.utc)
+        result = asyncio.run(_run(since))
+        ...  # existing body unchanged
+    finally:
+        _release_lock()
+```
+
+- [ ] **Step 4: Tests pass** — `cd backend && python -m pytest tests/test_wgr_sync_lock.py -v` → PASS. Confirm `redis` is already a backend dependency (`grep -n "redis" backend/requirements*.txt backend/pyproject.toml 2>/dev/null`) — it ships with Celery's redis broker; add explicitly only if missing.
+
+- [ ] **Step 5: Rebuild graph + commit**
+
+```bash
+python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"
+git add backend/app/tasks/wgr_sync.py backend/tests/test_wgr_sync_lock.py graphify-out
+git commit -m "feat: serialize WGR sync runs with a redis lock"
+```
+
+---
+
 ### Task 6: Backfill, verify, and document
 
 **Files:**
@@ -1234,6 +1391,13 @@ asyncio.run(main())
 "`
 
 Expected: `first_touch` > 0 and roughly matching the Task 1 probe's `with_first` count.
+
+- [ ] **Step 2b: Record GHL-id join ambiguity for deliverable 9** (r6 #8) — count duplicate `ghl_contact_id` values so the join consumer knows the real conflict surface:
+
+Run (same python -c harness as Step 2, swapping the SQL):
+`SELECT count(*) FROM (SELECT ghl_contact_id FROM leads WHERE ghl_contact_id IS NOT NULL GROUP BY ghl_contact_id HAVING count(*) > 1) d`
+
+Record the number in the PR description and on the deliverable-9 ticket (86d3u65cb). Expected: small single digits (cross-source duplicates of the same person). If it's large, flag before deliverable 9 builds the join.
 
 - [ ] **Step 3: Confirm hourly task needs no change**
 
