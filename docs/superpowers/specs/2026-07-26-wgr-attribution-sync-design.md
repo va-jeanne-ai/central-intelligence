@@ -22,15 +22,15 @@ Strictly a read-only mirror: CI never writes to the WGR database.
 |---|---|---|
 | Channel resolution | **Python read-time resolver** (`services/attribution.py`) | Unit-testable contract; honors Greg's raw-never-rewritten / normalize-at-read rule; fits CI's Python-first analytics. SQL views (Greg's approach) rejected as untestable-in-unit and gnarly for the specificity rules; sync-time materialization rejected because taxonomy edits would leave stale channels. |
 | `commenter_lead_links` (DM identity bridge) | **Deferred** | Auto-linked commenters already carry first-touch UTMs on `leads` upstream; mirror the bridge only when a surface needs commenter-level drill-down or review-queue visibility. |
-| Snapshot-table deletions (`attribution_taxonomy`, `meta_campaigns`, `meta_ads`) | **Snapshot + delete-reconciliation against RAW ids, count-guarded** | Upserts never delete, and a stale taxonomy rule would keep winning resolution (stale ads/campaigns would look active). Each run pulls the full table and deletes CI rows absent from the **raw** (successfully read) id set — NOT the mapped set: reconciling on mapped ids would turn a mapper bug or upstream type drift into mass deletion (r3 #3 — this supersedes the r2 #5 position; a present-but-unmappable row is kept, skipped, and loudly counted instead of deleted). One deliberate exception (r4): a taxonomy row whose `canonical_channel` is nulled/blanked upstream is a *source-data disable statement*, checkable on the RAW row — it is excluded from the raw-id set and reconciled away, so a disabled rule stops resolving instead of resolving with its stale channel. Guard against silent partial reads (r3 #2): a source-side `COUNT(*)` on the same connection must match the rows actually read, else reconciliation is skipped for that run. Failure semantics: a read failure or count mismatch aborts reconciliation (transient problems can never wipe the mirror); a *successful, count-confirmed* pull returning 0 rows is honored — upstream legitimately emptied the table, CI empties too (r2 #4/r3 #4: this single rule applies everywhere; there is no separate "non-empty" condition). These tables are far smaller than one page, and snapshot reads use page_size 10 000 → a single SQL statement → Postgres statement-level MVCC consistency; a page-overflow tripwire skips reconciliation if that assumption ever breaks. **Deletion circuit breaker (r6 #1):** reconciliation that would delete >10 rows AND >20% of the CI table skips and demands `WGR_SYNC_ALLOW_MASS_DELETE=1` for one deliberate run — so a wrong replica, source cutover, permission change, or upstream truncate can trim nothing without a human. The confirmed-empty rule operates through the breaker: emptying a populated mirror always requires the override. |
+| Snapshot-table deletions (`attribution_taxonomy`, `meta_campaigns`, `meta_ads`) | **Snapshot + delete-reconciliation against RAW ids, count-guarded** | Upserts never delete, and a stale taxonomy rule would keep winning resolution (stale ads/campaigns would look active). Each run pulls the full table and deletes CI rows absent from the **raw** (successfully read) id set — NOT the mapped set: reconciling on mapped ids would turn a mapper bug or upstream type drift into mass deletion (r3 #3 — this supersedes the r2 #5 position; a present-but-unmappable row is kept, skipped, and loudly counted instead of deleted). One deliberate exception (r4): a taxonomy row whose `canonical_channel` is nulled/blanked upstream is a *source-data disable statement*, checkable on the RAW row — it is excluded from the raw-id set and reconciled away, so a disabled rule stops resolving instead of resolving with its stale channel. Guard against silent partial reads (r3 #2): a source-side `COUNT(*)` (a separate advisory query — NOT a same-snapshot guarantee; the single-statement read below is what provides consistency) must match the rows actually read, else reconciliation is skipped for that run. Failure semantics: a read failure or count mismatch aborts reconciliation (transient problems can never wipe the mirror); a *successful, count-confirmed* pull returning 0 rows is honored — upstream legitimately emptied the table, CI empties too (r2 #4/r3 #4: this single rule applies everywhere; there is no separate "non-empty" condition). These tables are far smaller than one page, and snapshot reads use page_size 10 000 → a single SQL statement → Postgres statement-level MVCC consistency; a page-overflow tripwire skips reconciliation if that assumption ever breaks. **Deletion circuit breaker (r6 #1):** reconciliation that would delete >10 rows AND >20% of the CI table (or would fully wipe a populated table, at any size) skips and demands the table-scoped override `WGR_SYNC_MASS_DELETE_TABLE=<table>` for one deliberate run (via `docker compose exec -e` — see Rollback) — so a wrong replica, source cutover, permission change, or upstream truncate can trim nothing without a human. The confirmed-empty rule operates through the breaker: emptying a populated mirror always requires the override. |
 | Lead joins from mirror tables | **`external_id` first, `ghl_contact_id` fallback** | The lead email-merge path (`plan_lead_writes` case 4) preserves a pre-existing lead's `source`/`external_id`, so `wgr_lead_id → leads.external_id` misses email-merged leads. `ghl_contact_id` is a data column (survives merges) and exists on both sides. A crosswalk table was considered and rejected as over-engineering (audit finding #1). |
-| Meta Ads tables | **Gated on probe** | Mirrored only if the read-only probe finds rows in `meta_ad_performance`; no speculative mirrors. |
+| Meta Ads tables | **Gated on probe, per table family (r6 #14)** | Skipped only if ALL THREE meta tables are empty at probe time; if any has rows, all three are mirrored (empty ones sync to empty and fill when upstream produces). No speculative mirrors when the whole family is empty. |
 | FKs on mirrored tables | **None** | Mirror data tolerates orphans (WGR filters/test rows); joins go through `leads.external_id` (source='wgr'). |
 | Resolver caching | **None (load per request)** | Taxonomy is tiny; add caching only if profiling shows it hot. |
 
 ## Scope
 
-**Mirrored into CI's own DB (`DATABASE_URL`), sourced from WGR (`WGR_DATABASE_URL`):**
+**Mirrored into CI's own DB (`DATABASE_URL`), sourced from WGR (`CLIENT_DATABASE_URL`; the legacy name `WGR_DATABASE_URL` is still accepted by config):**
 
 1. **`leads` — 9 new nullable columns:** `utm_source_first`, `utm_medium_first`,
    `utm_campaign_first`, `utm_content_first`, `utm_source_last`,
@@ -44,14 +44,14 @@ Strictly a read-only mirror: CI never writes to the WGR database.
    upstream edits AND deletions propagate.
 3. **`lead_engagements`:** native text PK `engagement_id`; WGR `lead_id`
    stored as plain-text `wgr_lead_id`; watermark `created_at`. Append-mostly
-   upstream; post-insert edits are missed until a full `backfill_wgr` run
-   (documented limitation — no `updated_at` exists upstream).
+   upstream; post-insert edits are missed until a `sync_wgr(since='full')`
+   run (documented limitation — no `updated_at` exists upstream).
 4. **`meta_campaigns` / `meta_ads`:** native text PKs, **snapshot +
    delete-reconciliation every run** (small config tables — upstream edits AND
    deletions self-heal). **`meta_ad_performance`:** text PK `perf_id`,
    watermark `created_at` (no `updated_at` exists upstream); later edits to
-   kpi_status/notes are missed until a full `backfill_wgr` run (documented
-   limitation). **Gating is per table family** (r6 #14): Task 5 is skipped
+   kpi_status/notes are missed until a `sync_wgr(since='full')` run
+   (documented limitation). **Gating is per table family** (r6 #14): Task 5 is skipped
    only when all three meta tables are empty; if any has rows, all three are
    mirrored (empty ones sync to empty and fill whenever upstream starts
    producing — no re-enable action needed). Only the all-empty case needs
@@ -108,9 +108,9 @@ separately); coaching/EOD/webinar tables (already mirrored).
   contract is the (source, medium, content) triple; campaign is mirrored as
   data and displayable, never matched on. Ships in the foundation so
   deliverable 9 consumes it ready-made.
-- **Three hand-written Alembic migrations** (lead columns; taxonomy;
-  engagements + meta tables). No autogenerate (project rule — it emits spurious
-  index drops).
+- **Four hand-written Alembic migrations** (lead columns; taxonomy;
+  engagements; meta tables — y6d7…, z7e8…, a8f9…, b9a0…). No autogenerate
+  (project rule — it emits spurious index drops).
 
 ## Data flow
 
@@ -172,8 +172,10 @@ gates both scheduled and manual pulls.
 Deployment order (r3 #16) is handled by the droplet's compose stack: the
 one-shot `migrate` service runs Alembic before api/worker/beat start, and all
 migrations in this feature are additive, so old code + new schema coexist
-safely during the deploy window. Rollback runs the same order in reverse
-(stop workers → revert code → optional downgrade).
+safely during the deploy window. For rollback order, follow the **Rollback
+section below verbatim** — in particular, any schema downgrade happens
+BEFORE the code revert, never after (self red-team: an earlier draft of this
+paragraph taught the reverse order, which bricks the compose stack).
 
 ## Known limitations & inherited properties (2026-07-26 audit)
 
@@ -197,8 +199,9 @@ hardening ticket because they predate it and affect all ~20 existing mirrors:
   run time could still commit rows behind the watermark (accepted; healed by
   full backfills; keyset pagination tracked in hardening ticket 86d3u66pj).
 - **`created_at` watermarks miss post-insert edits** on `lead_engagements` /
-  `meta_ad_performance` (no upstream `updated_at`); healed by periodic full
-  `backfill_wgr` runs.
+  `meta_ad_performance` (no upstream `updated_at`); healed by the periodic
+  `sync_wgr(since='full')` sweep (see cadence — never `backfill_wgr`, which
+  cannot see these tables).
 - **Sync concurrency: RESOLVED in-feature (r6, hardened r7)** — a Redis run
   lock (plan Task 5b) serializes hourly beat, user trigger, and manual full
   pulls; latecomers skip with an explicit status. Lock craft per r7: unique

@@ -740,6 +740,12 @@ async def _sync_snapshot_reconcile(
                        "— kept in CI, NOT deleted; investigate mapper/schema",
                        wgr_table, skipped)
     written = 0
+    # Dedup on the MAPPED pk before upserting (self red-team): two upstream
+    # rows whose text PKs differ only by padding collapse to one mapped PK,
+    # and Postgres rejects two conflicting rows in a single INSERT..ON
+    # CONFLICT statement ("cannot affect row a second time") — last wins,
+    # matching _sync_source_external's convention.
+    rows = list({r[pk_attr]: r for r in rows}.values())
     # Chunked: CI's Supabase is pooler-only with a short statement_timeout —
     # never one unbounded statement (module lesson; internal red-team).
     for i in range(0, len(rows), BATCH):
@@ -1553,7 +1559,7 @@ for attempt in (1, 2):
 EOF
 ```
 
-Expected: both passes complete (the run lock serializes them naturally since they run sequentially). Verify with **CI row counts, not sync return counts** (internal red-team: sync counts are rows *upserted* — a full pass re-upserts everything, so "pass 2 ≈ 0" was measuring nothing): after pass 1 and pass 2, `SELECT count(*)` per new table must be stable pass-to-pass (delta ≈ 0) and in the same ballpark as the Task 1 probe's WGR counts. If any expected-nonzero table is 0, **stop and diagnose** — do not mark the ticket done on empty tables.
+Expected: both passes complete (the run lock serializes them naturally since they run sequentially). **Timing:** start well clear of :50 — the hourly beat can legitimately hold the lock, and the runner will (correctly) abort with "skipped"; either pick another minute or `docker compose stop beat` for the duration. Verify with **CI row counts, not sync return counts** (internal red-team: sync counts are rows *upserted* — a full pass re-upserts everything, so "pass 2 ≈ 0" was measuring nothing): after pass 1 and pass 2, `SELECT count(*)` per new table must be stable pass-to-pass (delta ≈ 0) and in the same ballpark as the Task 1 probe's WGR counts. If any expected-nonzero table is 0, **stop and diagnose** — do not mark the ticket done on empty tables.
 
 Also in this task's commit, two guards on the legacy script `scripts/backfill_wgr.py`: (a) docstring warning line: `NOTE: legacy bulk_load path — does NOT cover the attribution-era tables (attribution_taxonomy, lead_engagements, meta_*); for those use sync_wgr(since='full').` (b) make it refuse to run while the sync lock is held (it writes the same tables): at the top of its confirm path, `from app.tasks.wgr_sync import _redis, LOCK_KEY` and exit with a message if `_redis().exists(LOCK_KEY)`.
 
