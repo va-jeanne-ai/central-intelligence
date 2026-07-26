@@ -222,12 +222,16 @@ hardening ticket because they predate it and affect all ~20 existing mirrors:
   `(watermark, pk)`.
 - **WGR credential: RESOLVED as a prerequisite (r6, enforced r7)** — plan
   Task 0 provisions a dedicated `ci_reader` SELECT-only Postgres role on
-  Greg's project; every WGR connection in this feature runs on it, with
-  Postgres enforcing the boundary rather than our session flag. Enforcement
-  is verified at runtime, not asserted: the probe checks
+  the WGR project; every WGR connection in this feature runs on it, with
+  Postgres enforcing the boundary rather than our session flag.
+  **Provisioning is self-service** (Jeanne, 2026-07-26): we run the CREATE
+  ROLE SQL ourselves over the existing `postgres` DSN — a one-time,
+  documented exception to the read-only rule (role DDL only; no app tables
+  or data touched), matching how Greg applies SQL to his projects; Greg
+  gets an FYI plus a rotation recommendation afterwards. Enforcement is
+  verified at runtime, not asserted: the probe checks
   `current_user = 'ci_reader'` and fails its gate on any other role, and
   Task 0 includes a plain-connection write probe proving CREATE is denied.
-  Old `postgres` DSN rotation is Greg's follow-up action.
 - **Mass-delete override is table-scoped (r7)** —
   `WGR_SYNC_MASS_DELETE_TABLE=<table>` authorizes exactly one table's
   reconciliation, is set for one deliberate run and then unset, and every

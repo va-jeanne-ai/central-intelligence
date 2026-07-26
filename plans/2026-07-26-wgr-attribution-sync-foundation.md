@@ -28,22 +28,42 @@
 
 ### Task 0: Provision a SELECT-only WGR role (prerequisite for any data pull)
 
-Six audit rounds held firm on this and it is now a gate: **Tasks 1 and 6 (anything that connects to WGR) run on the new role, never on the `postgres` credential.** Code tasks 2–5 need no WGR connection and proceed in parallel while waiting on Greg.
+Six audit rounds held firm on this and it is now a gate: **Tasks 1 and 6 (anything that connects to WGR) run on the new role, never on the `postgres` credential.** Code tasks 2–5 need no WGR connection and run in parallel.
 
-**Files:** none in this repo (SQL runs on Greg's Supabase; `.env` change locally).
+**Provisioning is self-service** (decided by Jeanne 2026-07-26): we run the SQL ourselves over the existing `postgres`-role DSN — the same way Greg applies SQL to his projects. This single administrative action is a **deliberate, documented exception** to the WGR read-only rule (it creates a role; it touches no app tables or data), authorized specifically for this bootstrap. Everything before and after it goes through `wgr_client`'s read-only path. Greg gets an FYI afterwards (Step 4), not a blocking ask.
 
-- [ ] **Step 1: Send Greg the SQL** (he runs it in the WGR project's SQL editor, or approves us running it via his MCP):
+**Files:** none in this repo except `backend/.env` (SQL runs once against the WGR project).
 
-```sql
--- CI read-only mirror role (2026-07: attribution sync prerequisite)
-create role ci_reader login password '<GENERATE-STRONG-PASSWORD>';
+- [ ] **Step 1: Generate a password and run the SQL ourselves** — do NOT use `wgr_client` (it forces read-only by design); open a one-time administrative connection:
+
+```bash
+cd backend && python - <<'EOF'
+import secrets, psycopg2
+from app.config import settings
+
+password = "ci_" + secrets.token_urlsafe(24)
+sql = f"""
+create role ci_reader login password '{password}';
 grant connect on database postgres to ci_reader;
 grant usage on schema public to ci_reader;
 grant select on all tables in schema public to ci_reader;
 alter default privileges in schema public grant select on tables to ci_reader;
+"""
+conn = psycopg2.connect(settings.client_database_url)  # postgres role, one-time admin use
+conn.autocommit = True
+with conn.cursor() as cur:
+    cur.execute(sql)
+conn.close()
+# Write the new DSN straight into a scratch file; NEVER print the password.
+with open(".ci_reader_dsn.tmp", "w") as f:
+    f.write(password)
+print("ci_reader created; password written to backend/.ci_reader_dsn.tmp — move it into .env and delete the file")
+EOF
 ```
 
-- [ ] **Step 2: Swap the DSN** — update `CLIENT_DATABASE_URL` in `backend/.env` (and the droplet's env at release time) to the `ci_reader` credential (Supabase pooler user format: `ci_reader.<project-ref>`).
+(`alter default privileges` runs as `postgres` — the same role Greg's migrations use — so tables he creates later are SELECT-granted to `ci_reader` automatically, which is exactly what the manual schema-evolution workflow needs.)
+
+- [ ] **Step 2: Swap the DSN** — update `CLIENT_DATABASE_URL` in `backend/.env` (and the droplet's env at release time): same host/port as the current DSN, credentials swapped to `ci_reader`. If the DSN goes through Supabase's pooler rather than a direct connection, the username takes the `ci_reader.<project-ref>` form. Then delete `backend/.ci_reader_dsn.tmp`.
 
 - [ ] **Step 3: Verify the boundary is real** — `cd backend && python -c "
 from app.services import wgr_client
@@ -56,7 +76,7 @@ except Exception as e: print('write correctly denied:', type(e).__name__)
 "`
 Expected: SELECT works; CREATE fails with insufficient privilege **on a plain connection** (i.e. Postgres enforces it, not our session flag).
 
-- [ ] **Step 4:** Note the old `postgres` DSN for rotation once the feature ships (rotation itself is Greg's action; remind him).
+- [ ] **Step 4: FYI to Greg (not an ask)** — short Slack note: a read-only `ci_reader` role now exists on the WGR project so CI's mirror never connects with write capability; recommend he rotates the `postgres` password once we confirm the swap (rotation is his action — after it, our copy of the old DSN goes dead, which is the point).
 
 ---
 
