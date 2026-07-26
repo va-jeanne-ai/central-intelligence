@@ -535,3 +535,36 @@ After each session, count:
   - F24 ICP "Generate" is fire-and-forget; no task-status polling.
   - F24 ICP UI/backend schema mismatch (industry, criteria, matchScore vs segment, demographics, psychographics, is_primary). Mapped what I could; full schema alignment deferred.
   - F13 content-ideas POST has ~5s latency from local Mac → Supabase ap-southeast-2 pooler. Optimistic rendering would mask it.
+
+## WGR Attribution Data Sync (2026-07-26)
+
+**Feature:** CI now mirrors Greg's attribution data: per-lead first/last-touch
+UTMs + GHL contact id, the attribution taxonomy (UTM → canonical channel,
+with a read-time resolver at `backend/app/services/attribution.py`),
+attribution touches (`lead_engagements`), and Meta Ads campaigns/ads/daily
+performance. Sync runs are serialized by a Redis lock; manual partial pulls
+no longer advance the watermark.
+
+**How to locate:** backend data only for now (the Leads/Sales UI ships in the
+next ticket, ClickUp 86d3u65cb). Verify via DB or API.
+
+**Steps:**
+1. Run the probe: `cd backend && PYTHONPATH=. .venv/bin/python -m
+   scripts.probe_wgr_attribution` — connection identity must say `ci_reader`,
+   every table OK. Note the WGR-side counts.
+2. In CI's DB (Supabase table editor or psql): `attribution_taxonomy`,
+   `meta_campaigns`, `meta_ads`, `meta_ad_performance` row counts are > 0 and
+   match the probe's WGR counts (2026-07-26 reference: 27 / 29 / 472 / 635).
+   `lead_engagements` is expected EMPTY until Greg's email-attribution flow
+   starts producing — not a failure.
+3. Pick a lead you know came from Instagram or email — its row in `leads`
+   shows `utm_source_last` (first-touch coverage is sparse upstream: ~85 of
+   12k leads; last-touch ~2.4k — expected).
+4. Wait for (or trigger) the hourly sync; `sync_log` shows the new tables
+   syncing without errors, and a second concurrent trigger returns
+   `run lock not acquired`.
+
+**Pass:** counts match WGR's; a known lead carries UTM values; concurrent
+runs skip cleanly. **Fail:** any mirrored table empty while WGR has rows
+(except lead_engagements), sync errors in sync_log, or probe reports a role
+other than ci_reader.

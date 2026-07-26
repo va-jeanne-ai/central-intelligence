@@ -6,6 +6,28 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — WGR attribution data sync (foundation, 2026-07-26)
+
+Mirrors Greg's attribution-era data into CI (spec:
+`docs/superpowers/specs/2026-07-26-wgr-attribution-sync-design.md`):
+
+- `leads` gains first/last-touch UTM columns + `ghl_contact_id`
+  (presence-conditional mapping — absent upstream columns never
+  null-overwrite; drift tripwire warns in logs).
+- New mirrors: `attribution_taxonomy` (snapshot + delete-reconciliation with
+  count guard, deletion circuit breaker, and `sync_log` audit rows),
+  `lead_engagements` (watermarked; empty upstream at ship time), and
+  `meta_campaigns` / `meta_ads` / `meta_ad_performance` (real Meta Ads data:
+  29/472/635 rows at backfill).
+- Read-time channel resolver (`app/services/attribution.py`) implementing
+  Greg's taxonomy contract — channel is computed, never stored.
+- Sync hardening shipped alongside: Redis run lock serializes hourly/manual
+  runs; manual partial pulls (`since=<ISO>`) hold the watermark instead of
+  advancing it; WGR connections run as the new SELECT-only `ci_reader` role
+  with statement timeout + keepalives; alembic works over the transaction
+  pooler (statement cache disabled).
+- No UI yet — deliverable-9 ticket (86d3u65cb) consumes this foundation.
+
 ### Added — Productization Phase 2: instance provisioning + fresh-instance safety
 
 A new company's CI instance can now be stood up from scratch with one script,
