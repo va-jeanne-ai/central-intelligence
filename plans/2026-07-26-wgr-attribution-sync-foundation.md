@@ -55,16 +55,28 @@ conn.autocommit = True
 with conn.cursor() as cur:
     cur.execute(sql)
 conn.close()
-# Write the new DSN straight into a scratch file; NEVER print the password.
-with open(".ci_reader_dsn.tmp", "w") as f:
+# Scratch file named under the .env.* glob so .gitignore covers it even if
+# it lingers (internal red-team: *.tmp FILES are NOT ignored, only .tmp/
+# directories). NEVER print the password.
+with open(".env.ci_reader.tmp", "w") as f:
     f.write(password)
-print("ci_reader created; password written to backend/.ci_reader_dsn.tmp — move it into .env and delete the file")
+print("ci_reader created; password written to backend/.env.ci_reader.tmp — move it into .env and delete the file")
 EOF
 ```
 
+**Re-run / teardown recipe** (internal red-team — `CREATE ROLE` is not idempotent and the failure mode strands you): if Step 1 errors with `role "ci_reader" already exists` (lost password, second run), do NOT try to drop-and-recreate — run `ALTER ROLE ci_reader PASSWORD '<new-password>'` instead. Full teardown, should it ever be needed, must run in this order or `DROP ROLE` fails on the default-privileges dependency:
+
+```sql
+alter default privileges in schema public revoke select on tables from ci_reader;
+drop owned by ci_reader;
+drop role ci_reader;
+```
+
+Caveats to note in the PR: the CREATE ROLE statement may appear in the WGR project's Postgres logs (Supabase logs DDL) — acceptable for a SELECT-only role, but rotate if concerned; and the auto-grant covers tables created **by the `postgres` role** — if Greg ever migrates under a different role, new tables fail the probe with permission denied (the probe is the detector; the fix is a one-line GRANT).
+
 (`alter default privileges` runs as `postgres` — the same role Greg's migrations use — so tables he creates later are SELECT-granted to `ci_reader` automatically, which is exactly what the manual schema-evolution workflow needs.)
 
-- [ ] **Step 2: Swap the DSN** — update `CLIENT_DATABASE_URL` in `backend/.env` (and the droplet's env at release time): same host/port as the current DSN, credentials swapped to `ci_reader`. If the DSN goes through Supabase's pooler rather than a direct connection, the username takes the `ci_reader.<project-ref>` form. Then delete `backend/.ci_reader_dsn.tmp`.
+- [ ] **Step 2: Swap the DSN** — update `CLIENT_DATABASE_URL` in `backend/.env` (and the droplet's env at release time): same host/port as the current DSN, credentials swapped to `ci_reader`. If the DSN goes through Supabase's pooler rather than a direct connection, the username takes the `ci_reader.<project-ref>` form. Then delete `backend/.env.ci_reader.tmp` and confirm with `git status` that nothing credential-shaped is untracked.
 
 - [ ] **Step 3: Verify the boundary is real** — `cd backend && python -c "
 from app.services import wgr_client
