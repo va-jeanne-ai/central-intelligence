@@ -48,6 +48,15 @@ logger = logging.getLogger(__name__)
 
 BATCH = 500
 
+# Per-table nullable-FK orphan checks applied inside the native-PK loop.
+# sales_coaching_strikes.resolved_by: Greg's 2026-07 revalidation writes
+# system sentinels ('system_revalidation') that aren't reps; the FK is
+# SET NULL by design, so null the orphan and keep the row (the sentinel
+# context survives in resolution_notes).
+_NATIVE_ORPHAN_CHECKS: dict[str, list] = {
+    "sales_coaching_strikes": [("resolved_by", SalesRep.rep_id)],
+}
+
 
 def _attr_to_column_map(model) -> dict[str, str]:
     """ORM attribute name → DB column name, for attrs that differ from columns.
@@ -128,20 +137,29 @@ async def _sync_native_pk(
     map_fn: Callable[[dict], Optional[dict]], since: Optional[str],
 ) -> int:
     """Generic sync for WGR-native-PK tables, batched + ON CONFLICT."""
+    orphan_checks = _NATIVE_ORPHAN_CHECKS.get(wgr_table)
     batch: list[dict[str, Any]] = []
     total = 0
+
+    async def flush(rows: list[dict[str, Any]]) -> int:
+        if orphan_checks:
+            nulled = await _null_orphan_fks(session, rows, orphan_checks)
+            if nulled:
+                logger.info("wgr_sync %s: nulled orphan FKs %s", wgr_table, nulled)
+        n = await _on_conflict_upsert(session, model, pk_col, rows)
+        await session.commit()
+        return n
+
     for raw in reader.read_table(wgr_table, since=since):
         mapped = map_fn(raw)
         if mapped is None:
             continue
         batch.append(mapped)
         if len(batch) >= BATCH:
-            total += await _on_conflict_upsert(session, model, pk_col, batch)
-            await session.commit()
+            total += await flush(batch)
             batch = []
     if batch:
-        total += await _on_conflict_upsert(session, model, pk_col, batch)
-        await session.commit()
+        total += await flush(batch)
     logger.info("wgr_sync %s: upserted %d", wgr_table, total)
     return total
 
