@@ -96,8 +96,32 @@ def test_all_present_no_nulling() -> None:
     check("rows untouched", rows[0]["call_id"] == "X" and rows[1]["call_id"] == "Y")
 
 
+def test_coaching_strikes_null_orphan_resolved_by() -> None:
+    # Greg's 2026-07-21 revalidation stamps resolved_by='system_revalidation'
+    # — a system sentinel, not a rep. CI's FK (ondelete=SET NULL, nullable)
+    # says the intent is orphan tolerance: null it, keep the row. The sentinel
+    # context survives in resolution_notes. Hard asserts (TDD red phase).
+    from app.models.sales import SalesRep
+
+    checks = upsert._NATIVE_ORPHAN_CHECKS.get("sales_coaching_strikes")
+    assert checks is not None, "coaching strikes must carry an orphan check"
+    assert [(k, c.key) for k, c in checks] == [("resolved_by", "rep_id")]
+
+    rows = [
+        {"strike_id": "S1", "resolved_by": "system_revalidation"},
+        {"strike_id": "S2", "resolved_by": "REP_X"},
+        {"strike_id": "S3", "resolved_by": None},
+    ]
+    session = _FakeSession(present={"REP_X"})
+    nulled = asyncio.run(upsert._null_orphan_fks(session, rows, checks))
+    assert nulled == {"resolved_by": 1}
+    assert rows[0]["resolved_by"] is None
+    assert rows[1]["resolved_by"] == "REP_X"
+
+
 def main() -> int:
-    for fn in (test_nulls_orphans_keeps_present, test_no_refs_no_query, test_all_present_no_nulling):
+    for fn in (test_nulls_orphans_keeps_present, test_no_refs_no_query, test_all_present_no_nulling,
+               test_coaching_strikes_null_orphan_resolved_by):
         print(fn.__name__)
         fn()
     if _failures:
