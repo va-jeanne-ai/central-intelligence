@@ -102,6 +102,11 @@ async def run_async_migrations() -> None:
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = _ssl.CERT_NONE
         connect_args["ssl"] = ssl_ctx
+        # Transaction pooler (pgbouncer) reuses backends across sessions, so
+        # asyncpg's prepared-statement cache collides intermittently
+        # (DuplicatePreparedStatement at connect). Disable the cache — same
+        # remedy asyncpg's own docs prescribe for pgbouncer.
+        connect_args["statement_cache_size"] = 0
 
     connectable = create_async_engine(
         url,
