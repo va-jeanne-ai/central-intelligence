@@ -87,7 +87,10 @@ separately); coaching/EOD/webinar tables (already mirrored).
   rule loses to a concrete source+medium rule; deterministic, and matches
   Greg's seed data (his content rules always carry source+medium too).
   Normalization = `strip().lower()`; empty string ≡ NULL. Duplicate observed
-  triples are prevented upstream by WGR's unique index. **Taxonomy edits
+  triples — wildcard/NULL rows included — are prevented upstream by WGR's
+  expression unique index on `lower(coalesce(observed_*, ''))` (verified in
+  his migration `20260724_000000`, lines 42–47; r5 #8's NULLS-NOT-DISTINCT
+  concern does not apply to an expression index over coalesced values). **Taxonomy edits
   retroactively change historical reports by design** — that is Greg's
   read-time-normalization contract ("no backfill rewrite"); if reproducibility
   is ever needed, stamp reports with a taxonomy revision (future option, not
@@ -104,8 +107,11 @@ separately); coaching/EOD/webinar tables (already mirrored).
 
 Hourly `sync_wgr` (:50 UTC) → watermark-scoped `reader.read_table` →
 `mapping.map_*` → idempotent batched upserts (existing `_NATIVE_PLAN` /
-batch-500 machinery). One-time `python -m scripts.backfill_wgr` run after
-migration populates history.
+batch-500 machinery). One-time full pull after migration populates history —
+**command: `sync_wgr(since='full')`**, the same everywhere in this feature
+(see Schema evolution → cadence; `scripts/backfill_wgr.py` is the legacy
+bulk_load path and does not cover these tables — r5 #1 resolved this
+section's stale reference).
 
 ## Error handling
 
@@ -214,7 +220,10 @@ no CI report references this data until deliverable 9 ships. Rollback path:
    is *replayable*, not atomically undone; the un-advanced watermark makes
    the next clean run re-pull and converge. Between kill and next clean run
    the mirror can be partially updated — acceptable for an hourly analytics
-   mirror, and moot once sync is disabled in step 1.
+   mirror, and moot once sync is disabled in step 1. Also purge any queued
+   sync tasks so none fire on worker restart:
+   `docker compose exec api celery -A app.tasks.celery_app purge -f`
+   (adjust the service/app path to the compose file's actual names).
 3. Revert the feature branch (resolver + sync registrations disappear;
    `sync_all` returns to the prior table set). Redeploy so workers load the
    reverted code.
