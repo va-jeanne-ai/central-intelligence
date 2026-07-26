@@ -22,7 +22,7 @@ Strictly a read-only mirror: CI never writes to the WGR database.
 |---|---|---|
 | Channel resolution | **Python read-time resolver** (`services/attribution.py`) | Unit-testable contract; honors Greg's raw-never-rewritten / normalize-at-read rule; fits CI's Python-first analytics. SQL views (Greg's approach) rejected as untestable-in-unit and gnarly for the specificity rules; sync-time materialization rejected because taxonomy edits would leave stale channels. |
 | `commenter_lead_links` (DM identity bridge) | **Deferred** | Auto-linked commenters already carry first-touch UTMs on `leads` upstream; mirror the bridge only when a surface needs commenter-level drill-down or review-queue visibility. |
-| Snapshot-table deletions (`attribution_taxonomy`, `meta_campaigns`, `meta_ads`) | **Snapshot + delete-reconciliation** | Upserts never delete, and a stale taxonomy rule would keep winning resolution (stale ads/campaigns would look active). Each run pulls the full table and deletes CI rows absent from the **mapped** pull. Failure semantics: a read failure raises and aborts the run before reconciliation (transient failures can never wipe the mirror); a *successful* pull returning 0 mapped rows is honored — upstream legitimately emptied the table, CI empties too, and the next hourly run restores whatever reappears. Rows the mapper skips (e.g. canonical_channel gone NULL) are deleted rather than left resolving with a stale channel. (Audit findings #2 r1; #4, #5, #18 r2.) |
+| Snapshot-table deletions (`attribution_taxonomy`, `meta_campaigns`, `meta_ads`) | **Snapshot + delete-reconciliation against RAW ids, count-guarded** | Upserts never delete, and a stale taxonomy rule would keep winning resolution (stale ads/campaigns would look active). Each run pulls the full table and deletes CI rows absent from the **raw** (successfully read) id set — NOT the mapped set: reconciling on mapped ids would turn a mapper bug or upstream type drift into mass deletion (r3 #3 — this supersedes the r2 #5 position; a present-but-unmappable row is kept, skipped, and loudly counted instead of deleted). Guard against silent partial reads (r3 #2): a source-side `COUNT(*)` on the same connection must match the rows actually read, else reconciliation is skipped for that run. Failure semantics: a read failure or count mismatch aborts reconciliation (transient problems can never wipe the mirror); a *successful, count-confirmed* pull returning 0 rows is honored — upstream legitimately emptied the table, CI empties too (r2 #4/r3 #4: this single rule applies everywhere; there is no separate "non-empty" condition). These tables are far smaller than one page (page_size 1000), so pagination-shift omission cannot occur in practice; the count guard covers it anyway. |
 | Lead joins from mirror tables | **`external_id` first, `ghl_contact_id` fallback** | The lead email-merge path (`plan_lead_writes` case 4) preserves a pre-existing lead's `source`/`external_id`, so `wgr_lead_id → leads.external_id` misses email-merged leads. `ghl_contact_id` is a data column (survives merges) and exists on both sides. A crosswalk table was considered and rejected as over-engineering (audit finding #1). |
 | Meta Ads tables | **Gated on probe** | Mirrored only if the read-only probe finds rows in `meta_ad_performance`; no speculative mirrors. |
 | FKs on mirrored tables | **None** | Mirror data tolerates orphans (WGR filters/test rows); joins go through `leads.external_id` (source='wgr'). |
@@ -39,8 +39,9 @@ Strictly a read-only mirror: CI never writes to the WGR database.
    provenance (`'wgr'`) — never overloaded with marketing attribution.
 2. **`attribution_taxonomy`:** WGR bigint id kept as PK; full snapshot every
    run (tiny, no watermark) **with delete-reconciliation** — CI rows whose id
-   is absent from a successful non-empty pull are deleted, so upstream edits
-   AND deletions propagate.
+   is absent from a successful, count-confirmed pull are deleted (raw-id set;
+   see Decisions for the exact rule — a confirmed-empty pull empties CI), so
+   upstream edits AND deletions propagate.
 3. **`lead_engagements`:** native text PK `engagement_id`; WGR `lead_id`
    stored as plain-text `wgr_lead_id`; watermark `created_at`. Append-mostly
    upstream; post-insert edits are missed until a full `backfill_wgr` run
@@ -124,6 +125,31 @@ migration populates history.
 - Backfill spot-check: landed counts vs probe counts; sample WGR lead shows
   UTM values in CI.
 
+## Schema evolution — the operating model (owner: Jeanne)
+
+CI's mirror schema is deliberately decoupled from Greg's: our tables are
+shaped for our app, and they change only when we change them. When Greg
+changes his database, the workflow is **manual and owned by us**:
+
+1. Signal: the `sync_leads` drift tripwire warns in logs when expected
+   upstream columns disappear; new upstream tables/columns are discovered by
+   re-running `scripts/probe_wgr_attribution.py` (or hearing it from Greg).
+2. Decide whether CI needs the new data (does a surface or the recommendation
+   engine want it?). If not, ignore it — the sync only pulls what we map.
+3. If yes: hand-written Alembic migration → extend the mapper → extend the
+   probe's expected-columns set → test → backfill. Same pattern as this
+   feature, every time.
+
+Cadence note (r3 #9): run `python -m scripts.backfill_wgr` after any mapper/
+schema change, after EOD server-off gaps (existing practice), and roughly
+monthly as the correction sweep for the `created_at`-watermarked tables.
+
+Deployment order (r3 #16) is handled by the droplet's compose stack: the
+one-shot `migrate` service runs Alembic before api/worker/beat start, and all
+migrations in this feature are additive, so old code + new schema coexist
+safely during the deploy window. Rollback runs the same order in reverse
+(stop workers → revert code → optional downgrade).
+
 ## Known limitations & inherited properties (2026-07-26 audit)
 
 Accepted for this feature; the systemic items are tracked in a separate
@@ -173,8 +199,12 @@ no CI report references this data until deliverable 9 ships. Rollback path:
    task checks it at start).
 2. Drain in-flight work before touching schema: `docker compose stop worker
    beat` on the droplet (or locally, stop the celery processes). An already-
-   running sync finishes or dies with the worker; the watermark only advances
-   on clean completion, so a killed run is safe.
+   running sync finishes or dies with the worker. Precision on "safe" (r3
+   #14): a killed run leaves already-committed batches in place — the mirror
+   is *replayable*, not atomically undone; the un-advanced watermark makes
+   the next clean run re-pull and converge. Between kill and next clean run
+   the mirror can be partially updated — acceptable for an hourly analytics
+   mirror, and moot once sync is disabled in step 1.
 3. Revert the feature branch (resolver + sync registrations disappear;
    `sync_all` returns to the prior table set). Redeploy so workers load the
    reverted code.

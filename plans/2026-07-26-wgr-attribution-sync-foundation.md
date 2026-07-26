@@ -213,6 +213,23 @@ Expected: FAIL with `KeyError: 'ghl_contact_id'`
         "utm_content_last": _clean(row.get("utm_content_last")),
 ```
 
+- [ ] **Step 3b: Add a schema-drift tripwire to `sync_leads`** (`upsert.py`) — `.get()` makes a dropped upstream column indistinguishable from null (audit r3 #8); this one-time check per run turns silent drift into a loud log line, which is the signal for the manual schema-update workflow (see spec, "Schema evolution"). At the top of the read loop in `sync_leads`:
+
+```python
+    drift_checked = False
+    for raw in reader.read_table("leads", since=since):
+        if not drift_checked:
+            drift_checked = True
+            if "utm_source_first" not in raw:
+                logger.warning(
+                    "wgr_sync leads: upstream rows lack utm_source_first — "
+                    "WGR schema drift? UTM columns will sync as NULL until "
+                    "the mapper/migration is updated (attribution spec)."
+                )
+        mapped = mapping.map_lead(raw)
+        ...  # existing body unchanged
+```
+
 - [ ] **Step 4: Extend the `Lead` model** (`models/operational.py`, after the `notes` column, before Relationships):
 
 ```python
@@ -431,6 +448,14 @@ def _norm(v: Optional[str]) -> Optional[str]:
     return v or None
 
 
+def _label_part(v: Optional[str]) -> str:
+    """Unmapped labels embed raw UTM values (Greg's surface-loudly contract).
+    Keep them display/CSV-safe: printable chars only, length-capped, no
+    spreadsheet-formula lead characters (audit r3 #13)."""
+    v = "".join(ch for ch in (v or "")[:64] if ch.isprintable())
+    return v.lstrip("=+@\t") or "-"
+
+
 class Resolver:
     def __init__(self, rows: Sequence) -> None:
         # Precompute normalized match keys once; row order irrelevant.
@@ -469,9 +494,11 @@ class Resolver:
             if best is None or key < best[0]:
                 best = (key, row)
         if best is None:
-            # '-' placeholder keeps content-only/partial inputs readable
-            # (audit round-2 #13: avoid "unmapped:/" style labels).
-            return Resolution(f"unmapped:{s or '-'}/{m or '-'}", None, True)
+            # Placeholder + sanitization keeps partial/hostile inputs readable
+            # and safe in CSV/log/UI contexts (r2 #13, r3 #13).
+            return Resolution(
+                f"unmapped:{_label_part(s)}/{_label_part(m)}", None, True
+            )
         row = best[1]
         return Resolution(
             row.canonical_channel, row.platform,
@@ -536,50 +563,67 @@ Sync function (`upsert.py`): import `AttributionTaxonomy` from `app.models.marke
 ```python
 async def _sync_snapshot_reconcile(
     session: AsyncSession, *, wgr_table: str, model, pk_attr: str,
-    map_fn: Callable[[dict], Optional[dict]],
+    wgr_pk: str, map_fn: Callable[[dict], Optional[dict]],
 ) -> int:
-    """Full-snapshot mirror WITH delete-reconciliation.
+    """Full-snapshot mirror WITH delete-reconciliation, count-guarded.
 
     Unlike the _NATIVE_PLAN tables, upstream deletes matter for snapshot
     tables (a removed taxonomy rule that lingers in CI keeps winning channel
-    resolution; a deleted ad/campaign stays "active"). Pull the whole table,
-    upsert, then delete CI rows absent from the mapped pull.
+    resolution; a deleted ad/campaign stays "active").
 
-    Failure semantics: a read/connection failure raises out of
-    reader.read_table, aborting the run before any reconciliation — a
-    transient upstream failure can never wipe the mirror. A SUCCESSFUL pull
-    that returns 0 mapped rows is honored: upstream legitimately emptied the
-    table (or every row became malformed), so CI empties too. Rows the mapper
-    skips (e.g. taxonomy rows whose canonical_channel went NULL) are absent
-    from the mapped set and therefore deleted — a corrupted rule stops
-    resolving instead of resolving with its stale channel.
+    Deletion set = RAW ids successfully read from WGR, not mapped ids: a
+    mapper bug or upstream type drift must degrade to "row kept + loud skip
+    count", never to mass deletion (audit r3 #3). Guard against a silently
+    partial read (r3 #2): source COUNT(*) must equal rows read, else skip
+    reconciliation this run. A read failure raises out of reader/wgr_client,
+    aborting before reconciliation. A successful, count-confirmed pull of 0
+    rows is honored: upstream legitimately emptied the table, CI empties too.
     """
+    raw_ids: set = set()
     rows: list[dict[str, Any]] = []
+    skipped = 0
     for raw in reader.read_table(wgr_table):  # raises on failure → run aborts
+        if raw.get(wgr_pk) is not None:
+            raw_ids.add(raw[wgr_pk])
         m = map_fn(raw)
-        if m is not None:
+        if m is None:
+            skipped += 1
+        else:
             rows.append(m)
+    if skipped:
+        logger.warning("wgr_sync %s: %d rows present upstream but unmappable "
+                       "— kept in CI, NOT deleted; investigate mapper/schema",
+                       wgr_table, skipped)
     written = 0
     if rows:
         written = await _on_conflict_upsert(session, model, pk_attr, rows)
-    pulled_ids = {r[pk_attr] for r in rows}
+    source_count = reader.count_table(wgr_table)
+    if source_count != len(raw_ids) + (1 if None in raw_ids else 0) and \
+            source_count != len(raw_ids):
+        logger.warning("wgr_sync %s: read %d rows but source counts %d — "
+                       "skipping delete-reconciliation this run",
+                       wgr_table, len(raw_ids), source_count)
+        await session.commit()
+        return written
     pk_col = getattr(model, pk_attr)
     stmt = delete(model)
-    if pulled_ids:
-        stmt = stmt.where(pk_col.not_in(pulled_ids))
+    if raw_ids:
+        stmt = stmt.where(pk_col.not_in(raw_ids))
     await session.execute(stmt)
     await session.commit()
-    logger.info("wgr_sync %s: upserted %d, reconciled to %d",
-                wgr_table, written, len(pulled_ids))
+    logger.info("wgr_sync %s: upserted %d, reconciled to %d raw ids "
+                "(%d unmappable kept)", wgr_table, written, len(raw_ids), skipped)
     return written
 ```
+
+(Note: `count_table` runs on a separate connection from `read_table`, so under heavy concurrent upstream writes the guard can occasionally skip reconciliation on a healthy run — that is the safe direction; deletion just waits for the next hourly run. These tables are far smaller than one page (page_size 1000), so the pagination-shift scenario needs the guard only as belt-and-braces.)
 
 Register it in `sync_all()` alongside the other custom-path tables (after `counts["market_signals"]`):
 
 ```python
     counts["attribution_taxonomy"] = await _sync_snapshot_reconcile(
         session, wgr_table="attribution_taxonomy", model=AttributionTaxonomy,
-        pk_attr="id", map_fn=mapping.map_attribution_row,
+        pk_attr="id", wgr_pk="id", map_fn=mapping.map_attribution_row,
     )
 ```
 
@@ -1086,11 +1130,11 @@ In `sync_all()`, after the attribution_taxonomy line:
 ```python
     counts["meta_campaigns"] = await _sync_snapshot_reconcile(
         session, wgr_table="meta_campaigns", model=MetaCampaign,
-        pk_attr="campaign_id", map_fn=mapping.map_meta_campaign,
+        pk_attr="campaign_id", wgr_pk="campaign_id", map_fn=mapping.map_meta_campaign,
     )
     counts["meta_ads"] = await _sync_snapshot_reconcile(
         session, wgr_table="meta_ads", model=MetaAd,
-        pk_attr="ad_id", map_fn=mapping.map_meta_ad,
+        pk_attr="ad_id", wgr_pk="ad_id", map_fn=mapping.map_meta_ad,
     )
 ```
 
