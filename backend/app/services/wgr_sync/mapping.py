@@ -692,3 +692,27 @@ def map_attribution_row(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
     }
+
+
+def map_lead_engagement(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    ext = _clean(row.get("engagement_id"))
+    if not ext:
+        return None
+    return {
+        "engagement_id": ext,
+        "wgr_lead_id": _clean(row.get("lead_id")),
+        "ghl_contact_id": _clean(row.get("ghl_contact_id")),
+        "engagement_type": _clean(row.get("engagement_type")),
+        "engagement_date": row.get("engagement_date"),
+        "utm_source": _clean(row.get("utm_source")),
+        "utm_medium": _clean(row.get("utm_medium")),
+        "utm_campaign": _clean(row.get("utm_campaign")),
+        "utm_content": _clean(row.get("utm_content")),
+        "source_type": _clean(row.get("source_type")),
+        "email_campaign_id": _clean(row.get("email_campaign_id")),
+        "email_id": _clean(row.get("email_id")),
+        "offer_id": _clean(row.get("offer_id")),
+        "page_url": _clean(row.get("page_url")),
+        "notes": _clean(row.get("notes")),
+        "created_at": row.get("created_at"),
+    }

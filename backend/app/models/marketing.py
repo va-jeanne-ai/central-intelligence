@@ -370,3 +370,31 @@ class AttributionTaxonomy(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LeadEngagement(Base):
+    """Attribution touch (opt-in, email click, booking credit …) mirrored
+    read-only from WGR. No FK on purpose (mirror data). Join to CI leads via
+    leads.external_id (source='wgr') FIRST, falling back to
+    leads.ghl_contact_id — email-merged leads keep their original
+    source/external_id (see plan_lead_writes case 4) and are only reachable
+    through the GHL id. UTM/page_url are Text (unbounded upstream)."""
+
+    __tablename__ = "lead_engagements"
+
+    engagement_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    wgr_lead_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    ghl_contact_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    engagement_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    engagement_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    utm_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_medium: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_campaign: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    email_campaign_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    email_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    offer_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    page_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

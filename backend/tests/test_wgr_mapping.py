@@ -230,6 +230,25 @@ def test_map_attribution_row_coerces_string_booleans() -> None:
     assert m.map_attribution_row(row)["include_in_channel_reporting"] is False
 
 
+def test_map_lead_engagement() -> None:
+    row = {
+        "engagement_id": "ENG_001", "lead_id": "LEAD_001",
+        "ghl_contact_id": "ghl_abc", "engagement_type": "opt_in",
+        "engagement_date": "2026-07-20T10:00:00+00:00",
+        "utm_source": "email", "utm_medium": "broadcast",
+        "utm_campaign": "webinar-0722", "utm_content": None,
+        "source_type": "email", "email_campaign_id": "EMAIL_202607_003",
+        "email_id": "EMAIL_202607_003", "offer_id": None,
+        "page_url": "https://x.com/optin", "notes": None,
+        "created_at": "2026-07-20T10:00:01+00:00",
+    }
+    out = m.map_lead_engagement(row)
+    assert out["engagement_id"] == "ENG_001"
+    assert out["wgr_lead_id"] == "LEAD_001"
+    assert out["engagement_type"] == "opt_in"
+    assert m.map_lead_engagement({"engagement_id": None}) is None
+
+
 def main() -> int:
     for fn in (
         test_normalize_phone, test_test_call_filter, test_map_lead,
@@ -237,6 +256,7 @@ def main() -> int:
         test_map_lead_missing_utm_columns_omits_keys_entirely,
         test_map_attribution_row_skips_rows_without_channel,
         test_map_attribution_row_coerces_string_booleans,
+        test_map_lead_engagement,
         test_map_appointment_status, test_map_lead_status,
         test_map_insight, test_map_content_idea,
         test_map_market_signal, test_map_sales_rep, test_map_closed_sale_and_activity,

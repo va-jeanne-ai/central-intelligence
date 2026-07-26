@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.marketing import (
     EmailCampaign, InstagramPost, OptInEvent, SocialComment, WebinarEngagement,
 )
-from app.models.marketing import AttributionTaxonomy
+from app.models.marketing import AttributionTaxonomy, LeadEngagement
 from app.models.intelligence import (
     BusinessProfile, InsightTag, MarketSignal, Offer, TagDictionary,
 )
@@ -555,6 +555,7 @@ _NATIVE_PLAN: list[tuple] = [
     ("sales_activities", SalesActivity, "activity_id", mapping.map_sales_activity),
     ("webinar_engagements", WebinarEngagement, "engagement_id", mapping.map_webinar_engagement),
     ("lead_opt_in_events", OptInEvent, "opt_in_event_id", mapping.map_opt_in_event),
+    ("lead_engagements", LeadEngagement, "engagement_id", mapping.map_lead_engagement),
     # insight_tags handled by sync_insight_tags (FK-orphan resolution like evidence).
 ]
 
