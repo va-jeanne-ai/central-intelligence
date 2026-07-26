@@ -1,0 +1,9 @@
+# gitleaks config — extends the default ruleset; allowlists documented false positives ONLY.
+# Every entry here must name a specific path and say why it is safe.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "API contract doc: curl examples use a <supabase-...> placeholder and a truncated eyJ... JWT with a literal ellipsis — not real tokens (verified 2026-07-27)"
+paths = ['''New Documents/api-contract-enhanced\.md''']
