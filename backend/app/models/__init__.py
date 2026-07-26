@@ -88,6 +88,11 @@ from app.models.audit import (  # noqa: F401
 )
 
 # integrations — no FK dependencies (tenant_id is FK-less for now)
+from app.models.meta_ads import (  # noqa: F401
+    MetaAd,
+    MetaAdPerformance,
+    MetaCampaign,
+)
 from app.models.integration import Integration  # noqa: F401
 
 # chat — depends on User (user_id FK)

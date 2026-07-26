@@ -716,3 +716,87 @@ def map_lead_engagement(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "notes": _clean(row.get("notes")),
         "created_at": row.get("created_at"),
     }
+
+
+def map_meta_campaign(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    ext = _clean(row.get("campaign_id"))
+    if not ext:
+        return None
+    return {
+        "campaign_id": ext,
+        "meta_campaign_id": _clean(row.get("meta_campaign_id")),
+        "name": _clean(row.get("name")),
+        "campaign_type": _clean(row.get("campaign_type")),
+        "objective": _clean(row.get("objective")),
+        "status": _clean(row.get("status")),
+        "daily_budget": row.get("daily_budget"),
+        "lifetime_budget": row.get("lifetime_budget"),
+        "targeting_type": _clean(row.get("targeting_type")),
+        "targeting_notes": _clean(row.get("targeting_notes")),
+        "start_date": row.get("start_date"),
+        "end_date": row.get("end_date"),
+        "notes": _clean(row.get("notes")),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def map_meta_ad(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    ext = _clean(row.get("ad_id"))
+    if not ext:
+        return None
+    return {
+        "ad_id": ext,
+        "campaign_id": _clean(row.get("campaign_id")),
+        "meta_ad_id": _clean(row.get("meta_ad_id")),
+        "name": _clean(row.get("name")),
+        "ad_format": _clean(row.get("ad_format")),
+        "status": _clean(row.get("status")),
+        "hook_text": _clean(row.get("hook_text")),
+        "hook_type": _clean(row.get("hook_type")),
+        "script_body": _clean(row.get("script_body")),
+        "script_cta": _clean(row.get("script_cta")),
+        "framework_used": _clean(row.get("framework_used")),
+        "offer_id": _clean(row.get("offer_id")),
+        "target_audience": _clean(row.get("target_audience")),
+        "calendar_entry_id": _clean(row.get("calendar_entry_id")),
+        "parent_ad_id": _clean(row.get("parent_ad_id")),
+        "iteration_notes": _clean(row.get("iteration_notes")),
+        "result": _clean(row.get("result")),
+        "launched_date": row.get("launched_date"),
+        "kill_date": row.get("kill_date"),
+        "kill_reason": _clean(row.get("kill_reason")),
+        "notes": _clean(row.get("notes")),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def map_meta_ad_performance(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    ext = _clean(row.get("perf_id"))
+    if not ext:
+        return None
+    return {
+        "perf_id": ext,
+        "ad_id": _clean(row.get("ad_id")),
+        "snapshot_date": row.get("snapshot_date"),
+        "snapshot_type": _clean(row.get("snapshot_type")),
+        "amount_spent": row.get("amount_spent"),
+        "impressions": row.get("impressions"),
+        "reach": row.get("reach"),
+        "leads": row.get("leads"),
+        "cost_per_lead": row.get("cost_per_lead"),
+        "booked_calls": row.get("booked_calls"),
+        "cost_per_booked_call": row.get("cost_per_booked_call"),
+        "link_clicks": row.get("link_clicks"),
+        "cost_per_link_click": row.get("cost_per_link_click"),
+        "hook_rate": row.get("hook_rate"),
+        "hold_rate": row.get("hold_rate"),
+        "ctr": row.get("ctr"),
+        "cpm": row.get("cpm"),
+        "frequency": row.get("frequency"),
+        "kpi_status": _clean(row.get("kpi_status")),
+        "metric_notes": _clean(row.get("metric_notes")),
+        "action_taken": _clean(row.get("action_taken")),
+        "created_at": row.get("created_at"),
+    }

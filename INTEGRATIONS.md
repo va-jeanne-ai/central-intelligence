@@ -127,7 +127,36 @@ A second inbound endpoint `POST /api/v1/webhooks/ghl/{webhook_token}/appointment
 - **`public_api_base_url` setting** — defaults to `http://localhost:8000`. In prod, set this in `.env` to the externally-reachable URL (e.g. `https://api.centralintelligence.ai`) or the URL the user copies won't be reachable from GHL's servers.
 - **What's stored encrypted:** `{"webhook_token": "...", "api_access_token": "...", "location_id": "..."}` in a single Fernet-encrypted blob on `integrations.credentials_encrypted`. The webhook_token is server-generated on first save (regenerable via Update); api_access_token + location_id are user-supplied. Disconnecting clears all three.
 
+**Appointments — rep attribution (added 2026-07-09)**
+
+The WGR mirror's `appointments` table carries `rep_id` + `appointment_owner` (raw display name) that CI's sync previously dropped. `map_appointment` (`backend/app/services/wgr_sync/mapping.py`) now maps both onto new `appointments.rep_id` / `appointments.appointment_owner` columns (migration `w4b5c6d7e8f9`); `GET /appointments` filters by `rep` (rep_id) and returns `rep_id`/`rep_name` per row (`sales_reps.full_name` when the rep_id resolves, else the raw `appointment_owner` string — covers reps no longer on the roster). `GET /ci/calls` gained the equivalent for `calls.call_owner`, resolved against the `sales_reps` roster + `historical_aliases` (handles messy variants like "Colton"/"Colton  Lindsay"/"Colton Lindsay" all resolving to one rep) rather than a new stored column. Both endpoints also gained `start`/`end` date-range params. New light `GET /reps` endpoint (`backend/app/routes/sales.py`) feeds the rep filter dropdowns on `/appointments` and `/sales-calls`. Existing appointment rows need one backfill re-run (`scripts/backfill_wgr.py --yes`) before `rep_id` is populated — the WGR sync only writes forward, it doesn't retroactively touch already-synced rows outside that CLI backfill (appointments' bulk-load path already delete+re-inserts every `source='wgr'` row per run, so the columns land automatically once the loader has the new mapping).
+
 ---
+
+## WGR client database mirror — attribution expansion ✅ (2026-07-26)
+
+The hourly read-only WGR→CI sync now also mirrors Greg's attribution-era data
+(feature branch `feature/wgr-attribution-sync`; spec
+`docs/superpowers/specs/2026-07-26-wgr-attribution-sync-design.md`):
+
+- **`leads` UTM columns** — `utm_{source,medium,campaign,content}_{first,last}`
+  + `ghl_contact_id`, mirrored verbatim (presence-conditional: a column absent
+  upstream never null-overwrites CI values). Canonical channel is **resolved at
+  read time** via [`backend/app/services/attribution.py`](backend/app/services/attribution.py)
+  — never stored.
+- **`attribution_taxonomy`** — snapshot + delete-reconciliation each run
+  (upstream edits AND deletions propagate; deletion is count-guarded +
+  circuit-breakered, audit-logged to `sync_log`).
+- **`lead_engagements`** — attribution touches; empty upstream at ship time,
+  fills when Greg's email-attribution flow produces.
+- **`meta_campaigns` / `meta_ads`** (snapshot-reconciled) and
+  **`meta_ad_performance`** (watermarked) — real Meta Ads data for the Ads
+  surface (probe 2026-07-26: 29/472/635 rows).
+
+Connection runs as the dedicated SELECT-only `ci_reader` Postgres role
+(provisioned 2026-07-26; the old write-capable DSN is pending rotation by the
+client). Open policy gap: these new tables are not yet embedded into the RAG
+vector store.
 
 ## Google Workspace (Gmail + Drive + Calendar + RAG) ✅
 

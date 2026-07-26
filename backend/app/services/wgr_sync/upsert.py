@@ -35,6 +35,7 @@ from app.models.marketing import (
     EmailCampaign, InstagramPost, OptInEvent, SocialComment, WebinarEngagement,
 )
 from app.models.marketing import AttributionTaxonomy, LeadEngagement
+from app.models.meta_ads import MetaAd, MetaAdPerformance, MetaCampaign
 from app.models.intelligence import (
     BusinessProfile, InsightTag, MarketSignal, Offer, TagDictionary,
 )
@@ -556,6 +557,7 @@ _NATIVE_PLAN: list[tuple] = [
     ("webinar_engagements", WebinarEngagement, "engagement_id", mapping.map_webinar_engagement),
     ("lead_opt_in_events", OptInEvent, "opt_in_event_id", mapping.map_opt_in_event),
     ("lead_engagements", LeadEngagement, "engagement_id", mapping.map_lead_engagement),
+    ("meta_ad_performance", MetaAdPerformance, "perf_id", mapping.map_meta_ad_performance),
     # insight_tags handled by sync_insight_tags (FK-orphan resolution like evidence).
 ]
 
@@ -806,6 +808,14 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
         # deliberate disable → reconcile it away. Other mapper skips (type
         # drift/bugs) stay kept-and-warned.
         raw_invalid_fn=lambda raw: not (raw.get("canonical_channel") or "").strip(),
+    )
+    counts["meta_campaigns"] = await _sync_snapshot_reconcile(
+        session, wgr_table="meta_campaigns", model=MetaCampaign,
+        pk_attr="campaign_id", wgr_pk="campaign_id", map_fn=mapping.map_meta_campaign,
+    )
+    counts["meta_ads"] = await _sync_snapshot_reconcile(
+        session, wgr_table="meta_ads", model=MetaAd,
+        pk_attr="ad_id", wgr_pk="ad_id", map_fn=mapping.map_meta_ad,
     )
     # 5. (source, external_id)-deduped marketing/social mirrors.
     for wgr_table, model, map_fn in _SOURCE_EXTERNAL_PLAN:

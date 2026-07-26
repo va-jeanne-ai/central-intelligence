@@ -249,6 +249,31 @@ def test_map_lead_engagement() -> None:
     assert m.map_lead_engagement({"engagement_id": None}) is None
 
 
+def test_map_meta_ad_performance() -> None:
+    row = {
+        "perf_id": "PERF_001", "ad_id": "AD_001", "snapshot_date": "2026-07-20",
+        "snapshot_type": "Daily", "amount_spent": "125.50", "impressions": 10000,
+        "reach": 8000, "leads": 12, "cost_per_lead": "10.46", "booked_calls": 3,
+        "cost_per_booked_call": "41.83", "link_clicks": 210,
+        "cost_per_link_click": "0.60", "hook_rate": "31.20", "hold_rate": "12.40",
+        "ctr": "2.10", "cpm": "12.55", "frequency": "1.25",
+        "kpi_status": "On Track", "metric_notes": None, "action_taken": None,
+        "created_at": "2026-07-21T00:00:00+00:00",
+    }
+    out = m.map_meta_ad_performance(row)
+    assert out["perf_id"] == "PERF_001" and out["ad_id"] == "AD_001"
+    assert m.map_meta_ad_performance({"perf_id": None}) is None
+
+
+def test_map_meta_campaign_and_ad() -> None:
+    assert m.map_meta_campaign({"campaign_id": "CAMP_1", "name": "July",
+                                "campaign_type": "Lead Gen"})["campaign_id"] == "CAMP_1"
+    assert m.map_meta_ad({"ad_id": "AD_1", "name": "Hook A",
+                          "ad_format": "Reel"})["ad_id"] == "AD_1"
+    assert m.map_meta_campaign({"campaign_id": None}) is None
+    assert m.map_meta_ad({"ad_id": ""}) is None
+
+
 def main() -> int:
     for fn in (
         test_normalize_phone, test_test_call_filter, test_map_lead,
@@ -257,6 +282,7 @@ def main() -> int:
         test_map_attribution_row_skips_rows_without_channel,
         test_map_attribution_row_coerces_string_booleans,
         test_map_lead_engagement,
+        test_map_meta_ad_performance, test_map_meta_campaign_and_ad,
         test_map_appointment_status, test_map_lead_status,
         test_map_insight, test_map_content_idea,
         test_map_market_signal, test_map_sales_rep, test_map_closed_sale_and_activity,
