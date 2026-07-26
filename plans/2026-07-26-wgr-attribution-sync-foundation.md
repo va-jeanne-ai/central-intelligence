@@ -381,6 +381,13 @@ def test_tie_broken_by_lowest_id():
     assert build_resolver(rows).resolve("ig", "organic", None).channel == "SHOULD_WIN"
 
 
+def test_content_only_input_gets_placeholder_label():
+    # Non-empty content with null source/medium is not "all empty"; the
+    # unmapped label uses '-' placeholders, never "unmapped:/".
+    r = build_resolver(ROWS)
+    assert r.resolve(None, None, "mystery-clip").channel == "unmapped:-/-"
+
+
 def test_concrete_field_count_defines_specificity():
     # Audit finding #9: specificity is EXACTLY the count of concrete fields.
     # A content-only wildcard rule (1 concrete) loses to source+medium (2).
@@ -462,7 +469,9 @@ class Resolver:
             if best is None or key < best[0]:
                 best = (key, row)
         if best is None:
-            return Resolution(f"unmapped:{s or ''}/{m or ''}", None, True)
+            # '-' placeholder keeps content-only/partial inputs readable
+            # (audit round-2 #13: avoid "unmapped:/" style labels).
+            return Resolution(f"unmapped:{s or '-'}/{m or '-'}", None, True)
         row = best[1]
         return Resolution(
             row.canonical_channel, row.platform,
@@ -525,44 +534,56 @@ def map_attribution_row(row: dict[str, Any]) -> Optional[dict[str, Any]]:
 Sync function (`upsert.py`): import `AttributionTaxonomy` from `app.models.marketing` and add `delete` to the existing `from sqlalchemy import ...` line. Do **NOT** register in `_NATIVE_PLAN` — this table needs delete-reconciliation (upserts never delete, and a stale taxonomy rule would keep winning resolution — audit finding #2):
 
 ```python
-async def sync_attribution_taxonomy(session: AsyncSession) -> int:
+async def _sync_snapshot_reconcile(
+    session: AsyncSession, *, wgr_table: str, model, pk_attr: str,
+    map_fn: Callable[[dict], Optional[dict]],
+) -> int:
     """Full-snapshot mirror WITH delete-reconciliation.
 
-    Unlike the _NATIVE_PLAN tables, upstream deletes matter here: a removed
-    taxonomy rule that lingers in CI keeps winning channel resolution. Pull
-    the whole table (tiny), upsert, then delete CI rows absent from the pull.
-    Guard: an empty (or failed) pull skips reconciliation entirely — a
-    transient upstream failure must never wipe the mirror.
+    Unlike the _NATIVE_PLAN tables, upstream deletes matter for snapshot
+    tables (a removed taxonomy rule that lingers in CI keeps winning channel
+    resolution; a deleted ad/campaign stays "active"). Pull the whole table,
+    upsert, then delete CI rows absent from the mapped pull.
+
+    Failure semantics: a read/connection failure raises out of
+    reader.read_table, aborting the run before any reconciliation — a
+    transient upstream failure can never wipe the mirror. A SUCCESSFUL pull
+    that returns 0 mapped rows is honored: upstream legitimately emptied the
+    table (or every row became malformed), so CI empties too. Rows the mapper
+    skips (e.g. taxonomy rows whose canonical_channel went NULL) are absent
+    from the mapped set and therefore deleted — a corrupted rule stops
+    resolving instead of resolving with its stale channel.
     """
     rows: list[dict[str, Any]] = []
-    for raw in reader.read_table("attribution_taxonomy"):
-        m = mapping.map_attribution_row(raw)
+    for raw in reader.read_table(wgr_table):  # raises on failure → run aborts
+        m = map_fn(raw)
         if m is not None:
             rows.append(m)
-    if not rows:
-        logger.warning(
-            "wgr_sync attribution_taxonomy: pull returned 0 rows; "
-            "skipping delete-reconciliation"
-        )
-        return 0
-    written = await _on_conflict_upsert(session, AttributionTaxonomy, "id", rows)
-    pulled_ids = {r["id"] for r in rows}
-    await session.execute(
-        delete(AttributionTaxonomy).where(AttributionTaxonomy.id.not_in(pulled_ids))
-    )
+    written = 0
+    if rows:
+        written = await _on_conflict_upsert(session, model, pk_attr, rows)
+    pulled_ids = {r[pk_attr] for r in rows}
+    pk_col = getattr(model, pk_attr)
+    stmt = delete(model)
+    if pulled_ids:
+        stmt = stmt.where(pk_col.not_in(pulled_ids))
+    await session.execute(stmt)
     await session.commit()
-    logger.info("wgr_sync attribution_taxonomy: upserted %d, reconciled to %d",
-                written, len(pulled_ids))
+    logger.info("wgr_sync %s: upserted %d, reconciled to %d",
+                wgr_table, written, len(pulled_ids))
     return written
 ```
 
 Register it in `sync_all()` alongside the other custom-path tables (after `counts["market_signals"]`):
 
 ```python
-    counts["attribution_taxonomy"] = await sync_attribution_taxonomy(session)
+    counts["attribution_taxonomy"] = await _sync_snapshot_reconcile(
+        session, wgr_table="attribution_taxonomy", model=AttributionTaxonomy,
+        pk_attr="id", map_fn=mapping.map_attribution_row,
+    )
 ```
 
-No `reader.WATERMARK_COLUMN` entry — the reconciliation requires a full pull every run.
+No `reader.WATERMARK_COLUMN` entry — the reconciliation requires a full pull every run. (Task 5 reuses this helper for `meta_campaigns` / `meta_ads`.)
 
 Migration `z7e8f9a0b1c2_add_attribution_taxonomy.py` (`down_revision = "y6d7e8f9a0b1"`):
 
@@ -1052,21 +1073,34 @@ class MetaAdPerformance(Base):
 
 Migration `b9a0b1c2d3e4_add_meta_ads_mirror.py` (`down_revision = "a8f9a0b1c2d3"`) — `op.create_table` for the three tables mirroring the Step 4 models column-for-column, plus indexes `ix_meta_ads_campaign_id`, `ix_meta_ad_performance_ad_id`, `ix_meta_ad_performance_snapshot_date`; `downgrade()` drops the three tables in reverse order.
 
-`upsert.py` `_NATIVE_PLAN` (import the three models from `app.models.meta_ads`):
+`upsert.py` — the two config tables use the snapshot-reconcile helper from Task 3 (upstream edits AND deletions self-heal — audit round-2 finding #18); only the append-only performance table joins `_NATIVE_PLAN` (import the three models from `app.models.meta_ads`).
+
+In `_NATIVE_PLAN`:
 
 ```python
-    ("meta_campaigns", MetaCampaign, "campaign_id", mapping.map_meta_campaign),
-    ("meta_ads", MetaAd, "ad_id", mapping.map_meta_ad),
     ("meta_ad_performance", MetaAdPerformance, "perf_id", mapping.map_meta_ad_performance),
 ```
 
-`reader.py` `WATERMARK_COLUMN` — **only** the performance table gets a watermark; `meta_campaigns` / `meta_ads` are small config tables that get a full pull every run so upstream edits self-heal (audit finding #3):
+In `sync_all()`, after the attribution_taxonomy line:
+
+```python
+    counts["meta_campaigns"] = await _sync_snapshot_reconcile(
+        session, wgr_table="meta_campaigns", model=MetaCampaign,
+        pk_attr="campaign_id", map_fn=mapping.map_meta_campaign,
+    )
+    counts["meta_ads"] = await _sync_snapshot_reconcile(
+        session, wgr_table="meta_ads", model=MetaAd,
+        pk_attr="ad_id", map_fn=mapping.map_meta_ad,
+    )
+```
+
+`reader.py` `WATERMARK_COLUMN` — only the performance table:
 
 ```python
     "meta_ad_performance": "created_at",
 ```
 
-(`meta_ad_performance` has no `updated_at` upstream; post-insert edits to kpi_status/metric_notes/action_taken are missed until a full `backfill_wgr` run — documented limitation in the spec.)
+(`meta_ad_performance` has no `updated_at` upstream; post-insert edits to kpi_status/metric_notes/action_taken are missed until a full `backfill_wgr` run — documented limitation in the spec. Deletions of individual perf snapshots upstream are not propagated — same accepted property as every `_NATIVE_PLAN` table.)
 
 - [ ] **Step 6: Update INTEGRATIONS.md in this same commit** (project rule). Under the WGR database sync entry, add: mirrors now include `attribution_taxonomy`, `lead_engagements`, `meta_campaigns`, `meta_ads`, `meta_ad_performance`, plus lead UTM first/last-touch columns; canonical channel is resolved read-time via `backend/app/services/attribution.py` (never stored). Note the open RAG-policy gap: the new tables are not embedded into the vector store yet.
 
@@ -1094,10 +1128,10 @@ git commit -m "feat: mirror WGR Meta Ads tables (campaigns, ads, daily performan
 **Interfaces:**
 - Consumes: `backend/scripts/backfill_wgr.py` (existing full-pull entrypoint) and the Task 2–5 sync registrations.
 
-- [ ] **Step 1: Full backfill**
+- [ ] **Step 1: Full backfill — run it TWICE**
 
-Run: `cd backend && python -m scripts.backfill_wgr`
-Expected: log lines `wgr_sync attribution_taxonomy → attribution_taxonomy: upserted N` (N>0), `lead_engagements: upserted N` (N>0), `leads: upserted N`, and (if Task 5 ran) the three meta tables with N>0. If any expected-nonzero table reports 0, **stop and diagnose** against the Task 1 probe numbers — do not mark the ticket done on empty tables.
+Run: `cd backend && python -m scripts.backfill_wgr && python -m scripts.backfill_wgr`
+Expected: first pass logs `attribution_taxonomy: upserted N` (N>0), `lead_engagements: upserted N` (N>0), `leads: upserted N`, and (if Task 5 ran) the three meta tables with N>0. The second pass is the drift catch: LIMIT/OFFSET paging under live upstream writes can skip rows mid-pass (audit round-2 #3), and an immediate idempotent re-run sweeps up anything pass 1 missed — its counts should be ≈0 new rows. If any expected-nonzero table reports 0, **stop and diagnose** against the Task 1 probe numbers — do not mark the ticket done on empty tables.
 
 - [ ] **Step 2: Spot-check UTM landing**
 

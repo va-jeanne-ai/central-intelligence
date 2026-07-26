@@ -22,7 +22,7 @@ Strictly a read-only mirror: CI never writes to the WGR database.
 |---|---|---|
 | Channel resolution | **Python read-time resolver** (`services/attribution.py`) | Unit-testable contract; honors Greg's raw-never-rewritten / normalize-at-read rule; fits CI's Python-first analytics. SQL views (Greg's approach) rejected as untestable-in-unit and gnarly for the specificity rules; sync-time materialization rejected because taxonomy edits would leave stale channels. |
 | `commenter_lead_links` (DM identity bridge) | **Deferred** | Auto-linked commenters already carry first-touch UTMs on `leads` upstream; mirror the bridge only when a surface needs commenter-level drill-down or review-queue visibility. |
-| Taxonomy deletions | **Snapshot + delete-reconciliation** | Upserts never delete, and a stale taxonomy rule would keep winning resolution. Each run pulls the full table and deletes CI rows absent from the pull — guarded: reconciliation only runs when the pull succeeded and returned ≥1 row (audit finding #2, 2026-07-26). |
+| Snapshot-table deletions (`attribution_taxonomy`, `meta_campaigns`, `meta_ads`) | **Snapshot + delete-reconciliation** | Upserts never delete, and a stale taxonomy rule would keep winning resolution (stale ads/campaigns would look active). Each run pulls the full table and deletes CI rows absent from the **mapped** pull. Failure semantics: a read failure raises and aborts the run before reconciliation (transient failures can never wipe the mirror); a *successful* pull returning 0 mapped rows is honored — upstream legitimately emptied the table, CI empties too, and the next hourly run restores whatever reappears. Rows the mapper skips (e.g. canonical_channel gone NULL) are deleted rather than left resolving with a stale channel. (Audit findings #2 r1; #4, #5, #18 r2.) |
 | Lead joins from mirror tables | **`external_id` first, `ghl_contact_id` fallback** | The lead email-merge path (`plan_lead_writes` case 4) preserves a pre-existing lead's `source`/`external_id`, so `wgr_lead_id → leads.external_id` misses email-merged leads. `ghl_contact_id` is a data column (survives merges) and exists on both sides. A crosswalk table was considered and rejected as over-engineering (audit finding #1). |
 | Meta Ads tables | **Gated on probe** | Mirrored only if the read-only probe finds rows in `meta_ad_performance`; no speculative mirrors. |
 | FKs on mirrored tables | **None** | Mirror data tolerates orphans (WGR filters/test rows); joins go through `leads.external_id` (source='wgr'). |
@@ -45,11 +45,15 @@ Strictly a read-only mirror: CI never writes to the WGR database.
    stored as plain-text `wgr_lead_id`; watermark `created_at`. Append-mostly
    upstream; post-insert edits are missed until a full `backfill_wgr` run
    (documented limitation — no `updated_at` exists upstream).
-4. **`meta_campaigns` / `meta_ads`:** native text PKs, **full pull every run**
-   (small config tables — self-heals upstream edits; no watermark).
-   **`meta_ad_performance`:** text PK `perf_id`, watermark `created_at` (no
-   `updated_at` exists upstream); later edits to kpi_status/notes are missed
-   until a full `backfill_wgr` run (documented limitation). All gated on probe.
+4. **`meta_campaigns` / `meta_ads`:** native text PKs, **snapshot +
+   delete-reconciliation every run** (small config tables — upstream edits AND
+   deletions self-heal). **`meta_ad_performance`:** text PK `perf_id`,
+   watermark `created_at` (no `updated_at` exists upstream); later edits to
+   kpi_status/notes are missed until a full `backfill_wgr` run (documented
+   limitation). All gated on probe. **Gate re-evaluation:** the gate is not a
+   permanent off-switch — if skipped, the Ads ticket (86d3u65cc) carries the
+   re-enable recipe (re-run the probe; if rows now exist, execute plan Task 5
+   on a fresh branch). Manual re-evaluation is acceptable at this scale.
 
 **Out of scope:** `commenter_lead_links`; any channel UI (deliverable-9
 ticket); RAG/embedding hookup for the new tables (open policy gap, tracked
@@ -127,7 +131,20 @@ hardening ticket because they predate it and affect all ~20 existing mirrors:
 
 - **Email-merged leads break `external_id` joins** — mitigated by the
   `ghl_contact_id` fallback (see Decisions); residual gap only for merged
-  leads with no GHL id.
+  leads with no GHL id. Join consumers (deliverable 9) must scope the
+  `external_id` match with `source='wgr'`, prefer the wgr-sourced row when
+  both keys match different leads, and count such conflicts rather than
+  resolve them silently (r2 #7–#8 — enforcement lives in the deliverable-9
+  plan, since this feature ships no joins).
+- **Unmapped channel labels embed raw UTM values** by Greg's design (surface
+  loudly). Reporting surfaces must cap cardinality (top-N + "other unmapped")
+  — deliverable-9 concern, noted forward (r2 #12).
+- **Watermark semantics are at-least-once, not exactly-once:** reader filters
+  `>= watermark` with a 5-minute lookback (`WATERMARK_LOOKBACK`), watermark
+  persists only on clean runs, upserts are idempotent — duplicates are
+  harmless refreshes; an upstream transaction open longer than 5 minutes at
+  run time could still commit rows behind the watermark (accepted; healed by
+  full backfills; keyset pagination tracked in hardening ticket 86d3u66pj).
 - **`created_at` watermarks miss post-insert edits** on `lead_engagements` /
   `meta_ad_performance` (no upstream `updated_at`); healed by periodic full
   `backfill_wgr` runs.
@@ -152,13 +169,26 @@ hardening ticket because they predate it and affect all ~20 existing mirrors:
 WGR is the durable source of truth; CI mirrors are rebuildable by design, and
 no CI report references this data until deliverable 9 ships. Rollback path:
 
-1. Set `client_sync_enabled=false` (stops hourly + on-demand runs).
-2. Revert the feature branch (resolver + sync registrations disappear;
-   `sync_all` returns to the prior table set).
-3. `alembic downgrade` through the three migrations if schema removal is
-   wanted — safe because every mirrored value still exists upstream in WGR;
-   re-running backfill after a re-merge restores everything.
-4. Re-enable `client_sync_enabled`.
+1. Set `client_sync_enabled=false` (stops NEW hourly + on-demand runs; the
+   task checks it at start).
+2. Drain in-flight work before touching schema: `docker compose stop worker
+   beat` on the droplet (or locally, stop the celery processes). An already-
+   running sync finishes or dies with the worker; the watermark only advances
+   on clean completion, so a killed run is safe.
+3. Revert the feature branch (resolver + sync registrations disappear;
+   `sync_all` returns to the prior table set). Redeploy so workers load the
+   reverted code.
+4. `alembic downgrade` through the three migrations if schema removal is
+   wanted — safe TODAY because every mirrored value still exists upstream in
+   WGR and nothing in CI references the tables yet; **this step becomes
+   destructive to CI reporting state once deliverable 9 ships** — after that,
+   prefer stopping at step 3 and leaving the schema in place.
+5. Re-enable `client_sync_enabled` and restart workers.
+
+"Bad but successful data" (r2 #24): for a pure mirror, replaying current WGR
+IS the recovery — a mapper bug is fixed in code and the next full backfill
+overwrites every derived value. CI-side state that a backfill cannot restore
+does not exist in this feature.
 
 ## Process notes
 
