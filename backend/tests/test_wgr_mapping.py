@@ -215,11 +215,28 @@ def test_map_lead_missing_utm_columns_omits_keys_entirely() -> None:
     assert explicit_null["utm_source_first"] is None
 
 
+def test_map_attribution_row_skips_rows_without_channel() -> None:
+    assert m.map_attribution_row({"id": 1, "canonical_channel": None}) is None
+    ok = m.map_attribution_row(
+        {"id": 2, "observed_source": "ig", "canonical_channel": "instagram_organic"}
+    )
+    assert ok["id"] == 2 and ok["include_in_channel_reporting"] is True
+
+
+def test_map_attribution_row_coerces_string_booleans() -> None:
+    # r7: a drifted text "false" must not become truthy.
+    row = {"id": 3, "canonical_channel": "email",
+           "include_in_channel_reporting": "false"}
+    assert m.map_attribution_row(row)["include_in_channel_reporting"] is False
+
+
 def main() -> int:
     for fn in (
         test_normalize_phone, test_test_call_filter, test_map_lead,
         test_map_lead_carries_utm_attribution,
         test_map_lead_missing_utm_columns_omits_keys_entirely,
+        test_map_attribution_row_skips_rows_without_channel,
+        test_map_attribution_row_coerces_string_booleans,
         test_map_appointment_status, test_map_lead_status,
         test_map_insight, test_map_content_idea,
         test_map_market_signal, test_map_sales_rep, test_map_closed_sale_and_activity,

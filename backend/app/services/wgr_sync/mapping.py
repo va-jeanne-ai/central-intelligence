@@ -664,3 +664,31 @@ def map_opt_in_event(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "external_id": _clean(row.get("external_id")),
         "raw_payload": row.get("raw_payload"),
     }
+
+
+def _coerce_bool(v: Any, default: bool = True) -> bool:
+    """Strict boolean coercion: psycopg returns real bools for boolean
+    columns, but a drifted text value like "false" must not become truthy."""
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return default
+    return str(v).strip().lower() in ("t", "true", "1", "yes")
+
+
+def map_attribution_row(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    if row.get("id") is None or not _clean(row.get("canonical_channel")):
+        return None
+    return {
+        "id": row["id"],
+        "observed_source": _clean(row.get("observed_source")),
+        "observed_medium": _clean(row.get("observed_medium")),
+        "observed_content": _clean(row.get("observed_content")),
+        "canonical_channel": _clean(row.get("canonical_channel")),
+        "platform": _clean(row.get("platform")),
+        "include_in_channel_reporting": _coerce_bool(
+            row.get("include_in_channel_reporting"), default=True),
+        "notes": _clean(row.get("notes")),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }

@@ -27,13 +27,14 @@ from typing import Any, Callable, Iterable, Optional
 
 from datetime import date
 
-from sqlalchemy import func, insert, inspect, select, update
+from sqlalchemy import delete, func, insert, inspect, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.marketing import (
     EmailCampaign, InstagramPost, OptInEvent, SocialComment, WebinarEngagement,
 )
+from app.models.marketing import AttributionTaxonomy
 from app.models.intelligence import (
     BusinessProfile, InsightTag, MarketSignal, Offer, TagDictionary,
 )
@@ -42,6 +43,8 @@ from app.models.sales import (
     CallScore, ClosedSale, CoachingStrike, EodReport, SalesActivity, SalesRep,
     ScorecardCategory, StrikeAction, StrikeEvidence, StrikeRule,
 )
+from app.config import settings
+from app.models.audit import SyncLog
 from app.services.wgr_sync import mapping, reader
 
 logger = logging.getLogger(__name__)
@@ -642,6 +645,131 @@ async def _seed_tag_dictionary(session: AsyncSession) -> int:
     return len(tags)
 
 
+async def _sync_snapshot_reconcile(
+    session: AsyncSession, *, wgr_table: str, model, pk_attr: str,
+    wgr_pk: str, map_fn: Callable[[dict], Optional[dict]],
+    raw_invalid_fn: Optional[Callable[[dict], bool]] = None,
+) -> int:
+    """Full-snapshot mirror WITH delete-reconciliation, count-guarded.
+
+    Unlike the _NATIVE_PLAN tables, upstream deletes matter for snapshot
+    tables (a removed taxonomy rule that lingers in CI keeps winning channel
+    resolution; a deleted ad/campaign stays "active").
+
+    Deletion set = ids successfully read from WGR (raw AND mapped PK forms) —
+    a mapper bug or upstream type drift degrades to "row kept + loud skip
+    count", never to mass deletion. Guards, in order: page-overflow tripwire
+    (single-statement MVCC consistency only holds within one page); source
+    COUNT(*) vs rows read (advisory, separate connection — skips are the safe
+    direction); deletion circuit breaker (wipe of a populated table at any
+    size, or >10 rows AND >20%, requires the table-scoped override
+    WGR_SYNC_MASS_DELETE_TABLE). Every deletion writes a sync_log audit row
+    carrying the deleted ids — the rollback artifact for this destructive
+    step. A read failure raises out of reader/wgr_client, aborting before any
+    reconciliation. A successful, count-confirmed pull of 0 rows empties CI
+    only through the breaker override (wipe case).
+    """
+    keep_ids: set = set()   # raw AND mapped PK forms — anything here survives
+    rows: list[dict[str, Any]] = []
+    rows_read = 0            # every row seen, incl. pk-null + invalidated —
+                             # this (not keep_ids) is what COUNT(*) must match
+    skipped = 0
+    invalidated = 0
+    pk_null = 0
+    for raw in reader.read_table(wgr_table, page_size=10_000):
+        rows_read += 1
+        if raw.get(wgr_pk) is None:
+            pk_null += 1
+            continue
+        if raw_invalid_fn is not None and raw_invalid_fn(raw):
+            # Source-data statement (e.g. taxonomy canonical_channel nulled):
+            # deliberately invalid upstream → excluded from keep_ids so
+            # reconciliation DELETES it — a disabled rule must stop resolving
+            # (distinct from mapper-skip below).
+            invalidated += 1
+            continue
+        keep_ids.add(raw[wgr_pk])
+        m = map_fn(raw)
+        if m is None:
+            skipped += 1
+        else:
+            rows.append(m)
+            # Also keep the MAPPED pk form: mapping _clean()s text PKs; a
+            # padded upstream id (" X" → "X") would otherwise be upserted as
+            # "X" and deleted in the same run by not_in(raw-form ids).
+            keep_ids.add(m[pk_attr])
+    if invalidated:
+        logger.info("wgr_sync %s: %d rows invalid upstream — reconciled away",
+                    wgr_table, invalidated)
+    if skipped:
+        logger.warning("wgr_sync %s: %d rows present upstream but unmappable "
+                       "— kept in CI, NOT deleted; investigate mapper/schema",
+                       wgr_table, skipped)
+    written = 0
+    # Dedup on the MAPPED pk before upserting: two upstream rows whose text
+    # PKs differ only by padding collapse to one mapped PK, and Postgres
+    # rejects two conflicting rows in a single INSERT..ON CONFLICT statement
+    # ("cannot affect row a second time") — last wins, matching
+    # _sync_source_external's convention. Chunked per the module's
+    # statement_timeout lesson.
+    rows = list({r[pk_attr]: r for r in rows}.values())
+    for i in range(0, len(rows), BATCH):
+        written += await _on_conflict_upsert(
+            session, model, pk_attr, rows[i:i + BATCH])
+    if rows_read >= 10_000:
+        logger.error("wgr_sync %s: snapshot table hit page size — skipping "
+                     "delete-reconciliation; raise page_size or move to "
+                     "keyset pagination", wgr_table)
+        await session.commit()
+        return written
+    source_count = reader.count_table(wgr_table)
+    if source_count != rows_read:
+        logger.warning("wgr_sync %s: read %d rows but source counts %d — "
+                       "skipping delete-reconciliation this run",
+                       wgr_table, rows_read, source_count)
+        await session.commit()
+        return written
+    pk_col = getattr(model, pk_attr)
+    existing = (await session.execute(
+        select(func.count()).select_from(model)
+    )).scalar() or 0
+    doomed_q = select(pk_col)
+    if keep_ids:
+        doomed_q = doomed_q.where(pk_col.not_in(keep_ids))
+    doomed_ids = list((await session.execute(doomed_q)).scalars())
+    doomed = len(doomed_ids)
+    override = settings.wgr_sync_mass_delete_table == wgr_table
+    wipe = doomed > 0 and not keep_ids
+    if (wipe or (doomed > 10 and doomed > 0.2 * existing)) and not override:
+        logger.error("wgr_sync %s: reconciliation wants to delete %d of %d CI "
+                     "rows%s — circuit breaker OPEN, skipping deletion. Verify "
+                     "the source, then run once with "
+                     "WGR_SYNC_MASS_DELETE_TABLE=%s (via docker compose "
+                     "exec -e; never .env).",
+                     wgr_table, doomed, existing,
+                     " (FULL WIPE)" if wipe else "", wgr_table)
+        await session.commit()
+        return written
+    if doomed_ids:
+        await session.execute(delete(model).where(pk_col.in_(doomed_ids)))
+        # Audit record: the deleted ids are the rollback artifact for this
+        # destructive step — recoverable by re-inserting from WGR or, if WGR
+        # moved on, from this row's details.
+        session.add(SyncLog(
+            id=uuid.uuid4(), operation="wgr_snapshot_reconcile",
+            table_name=model.__tablename__, record_count=doomed,
+            status="ok",
+            details={"deleted_ids": [str(i) for i in doomed_ids[:1000]],
+                     "upserted": written, "rows_read": rows_read,
+                     "override_used": override},
+        ))
+    await session.commit()
+    logger.info("wgr_sync %s: upserted %d, kept %d ids "
+                "(%d unmappable kept, %d invalidated, %d deleted)",
+                wgr_table, written, len(keep_ids), skipped, invalidated, doomed)
+    return written
+
+
 async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dict[str, int]:
     """Full WGR → CI sync in dependency order. Idempotent. Returns counts."""
     counts: dict[str, int] = {}
@@ -669,6 +797,15 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
     # 4. appointments (needs leads) + market_signals.
     counts["appointments"] = await sync_appointments(session, since=since)
     counts["market_signals"] = await sync_market_signals(session)
+    # 4b. snapshot-reconciled mirrors (upstream edits AND deletions propagate).
+    counts["attribution_taxonomy"] = await _sync_snapshot_reconcile(
+        session, wgr_table="attribution_taxonomy", model=AttributionTaxonomy,
+        pk_attr="id", wgr_pk="id", map_fn=mapping.map_attribution_row,
+        # A taxonomy row whose canonical_channel is nulled upstream is a
+        # deliberate disable → reconcile it away. Other mapper skips (type
+        # drift/bugs) stay kept-and-warned.
+        raw_invalid_fn=lambda raw: not (raw.get("canonical_channel") or "").strip(),
+    )
     # 5. (source, external_id)-deduped marketing/social mirrors.
     for wgr_table, model, map_fn in _SOURCE_EXTERNAL_PLAN:
         counts[wgr_table] = await _sync_source_external(
