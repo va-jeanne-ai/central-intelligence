@@ -39,43 +39,100 @@ The plan assumes Greg's WGR DB has the new columns/tables and that they contain 
 - [ ] **Step 1: Write the probe script**
 
 ```python
-"""Read-only probe: does WGR have the attribution-era columns/tables, and are
-they populated? Run before building the attribution sync (plan 2026-07-26).
+"""Read-only probe: does WGR have the attribution-era columns/tables, are all
+columns the mappers consume present, and are the tables populated? Run before
+building the attribution sync (plan 2026-07-26, amended per audit 2026-07-26).
+
+Per table: verify readability (SELECT * LIMIT 1), diff actual columns against
+every column the sync mappers will read (missing ones are named), then print
+counts. A pass = readable + all mapped columns present. Type compatibility is
+NOT proven here — mappers pass values through; the backfill run is the type
+gate.
 
 Usage: cd backend && python -m scripts.probe_wgr_attribution
 """
 from app.services import wgr_client
 
-CHECKS = [
-    ("leads utm_*_first coverage",
-     "SELECT count(*) AS total, count(utm_source_first) AS with_first, "
-     "count(utm_source_last) AS with_last FROM leads"),
-    ("attribution_taxonomy rows",
-     "SELECT count(*) AS n, count(*) FILTER (WHERE include_in_channel_reporting) AS reportable "
-     "FROM attribution_taxonomy"),
-    ("lead_engagements rows",
-     "SELECT count(*) AS n, min(engagement_date) AS oldest, max(engagement_date) AS newest "
-     "FROM lead_engagements"),
-    ("meta_campaigns rows", "SELECT count(*) AS n FROM meta_campaigns"),
-    ("meta_ads rows", "SELECT count(*) AS n FROM meta_ads"),
-    ("meta_ad_performance rows",
-     "SELECT count(*) AS n, min(snapshot_date) AS oldest, max(snapshot_date) AS newest "
-     "FROM meta_ad_performance"),
-]
+# table → (columns the mappers consume, count SQL)
+CHECKS: dict[str, tuple[set[str], str]] = {
+    "leads": (
+        {"lead_id", "ghl_contact_id",
+         "utm_source_first", "utm_medium_first", "utm_campaign_first", "utm_content_first",
+         "utm_source_last", "utm_medium_last", "utm_campaign_last", "utm_content_last"},
+        "SELECT count(*) AS total, count(utm_source_first) AS with_first, "
+        "count(utm_source_last) AS with_last FROM leads",
+    ),
+    "attribution_taxonomy": (
+        {"id", "observed_source", "observed_medium", "observed_content",
+         "canonical_channel", "platform", "include_in_channel_reporting",
+         "notes", "created_at", "updated_at"},
+        "SELECT count(*) AS n, count(*) FILTER (WHERE include_in_channel_reporting) "
+        "AS reportable FROM attribution_taxonomy",
+    ),
+    "lead_engagements": (
+        {"engagement_id", "lead_id", "ghl_contact_id", "engagement_type",
+         "engagement_date", "utm_source", "utm_medium", "utm_campaign",
+         "utm_content", "source_type", "email_campaign_id", "email_id",
+         "offer_id", "page_url", "notes", "created_at"},
+        "SELECT count(*) AS n, min(engagement_date) AS oldest, "
+        "max(engagement_date) AS newest FROM lead_engagements",
+    ),
+    "meta_campaigns": (
+        {"campaign_id", "meta_campaign_id", "name", "campaign_type", "objective",
+         "status", "daily_budget", "lifetime_budget", "targeting_type",
+         "targeting_notes", "start_date", "end_date", "notes", "created_at",
+         "updated_at"},
+        "SELECT count(*) AS n FROM meta_campaigns",
+    ),
+    "meta_ads": (
+        {"ad_id", "campaign_id", "meta_ad_id", "name", "ad_format", "status",
+         "hook_text", "hook_type", "script_body", "script_cta", "framework_used",
+         "offer_id", "target_audience", "calendar_entry_id", "parent_ad_id",
+         "iteration_notes", "result", "launched_date", "kill_date",
+         "kill_reason", "notes", "created_at", "updated_at"},
+        "SELECT count(*) AS n FROM meta_ads",
+    ),
+    "meta_ad_performance": (
+        {"perf_id", "ad_id", "snapshot_date", "snapshot_type", "amount_spent",
+         "impressions", "reach", "leads", "cost_per_lead", "booked_calls",
+         "cost_per_booked_call", "link_clicks", "cost_per_link_click",
+         "hook_rate", "hold_rate", "ctr", "cpm", "frequency", "kpi_status",
+         "metric_notes", "action_taken", "created_at"},
+        "SELECT count(*) AS n, min(snapshot_date) AS oldest, "
+        "max(snapshot_date) AS newest FROM meta_ad_performance",
+    ),
+}
 
 
 def main() -> None:
-    for label, sql in CHECKS:
+    failed = []
+    for table, (expected_cols, count_sql) in CHECKS.items():
         try:
-            rows = list(wgr_client.query(sql))
-            print(f"{label}: {rows[0]}")
-        except Exception as exc:  # column/table missing shows up here
-            print(f"{label}: FAILED — {exc}")
+            sample = list(wgr_client.query(f"SELECT * FROM {table} LIMIT 1"))
+            actual = set(sample[0].keys()) if sample else set(
+                r["column_name"] for r in wgr_client.query(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema='public' AND table_name=%s", (table,),
+                )
+            )
+            missing = expected_cols - actual
+            if missing:
+                failed.append(table)
+                print(f"{table}: MISSING COLUMNS {sorted(missing)}")
+            counts = list(wgr_client.query(count_sql))
+            print(f"{table}: OK cols={len(actual)} {counts[0]}")
+        except Exception as exc:  # absent table / denied permission / bad query
+            failed.append(table)
+            print(f"{table}: FAILED — {exc}")
+    if failed:
+        print(f"\nGATE: failures in {failed} — see plan Task 1 Step 2 for go/no-go rules.")
 
 
 if __name__ == "__main__":
     main()
 ```
+
+(If `wgr_client.query` does not accept a `params` tuple, check its signature first — `grep -n "def query" backend/app/services/wgr_client.py` — and adapt the information_schema call to its actual interface.)
 
 - [ ] **Step 2: Run it**
 
@@ -322,6 +379,16 @@ def test_non_reportable_row_flags_reportable_false():
 def test_tie_broken_by_lowest_id():
     rows = ROWS + [_row(0, "ig", None, None, "SHOULD_WIN")]
     assert build_resolver(rows).resolve("ig", "organic", None).channel == "SHOULD_WIN"
+
+
+def test_concrete_field_count_defines_specificity():
+    # Audit finding #9: specificity is EXACTLY the count of concrete fields.
+    # A content-only wildcard rule (1 concrete) loses to source+medium (2).
+    rows = [
+        _row(1, None, None, "reel-14", "content_only"),
+        _row(2, "ig", "paid", None, "source_medium"),
+    ]
+    assert build_resolver(rows).resolve("ig", "paid", "reel-14").channel == "source_medium"
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -455,13 +522,47 @@ def map_attribution_row(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 ```
 
-Sync registration (`upsert.py`): import `AttributionTaxonomy` from `app.models.marketing`, then append to `_NATIVE_PLAN`:
+Sync function (`upsert.py`): import `AttributionTaxonomy` from `app.models.marketing` and add `delete` to the existing `from sqlalchemy import ...` line. Do **NOT** register in `_NATIVE_PLAN` — this table needs delete-reconciliation (upserts never delete, and a stale taxonomy rule would keep winning resolution — audit finding #2):
 
 ```python
-    ("attribution_taxonomy", AttributionTaxonomy, "id", mapping.map_attribution_row),
+async def sync_attribution_taxonomy(session: AsyncSession) -> int:
+    """Full-snapshot mirror WITH delete-reconciliation.
+
+    Unlike the _NATIVE_PLAN tables, upstream deletes matter here: a removed
+    taxonomy rule that lingers in CI keeps winning channel resolution. Pull
+    the whole table (tiny), upsert, then delete CI rows absent from the pull.
+    Guard: an empty (or failed) pull skips reconciliation entirely — a
+    transient upstream failure must never wipe the mirror.
+    """
+    rows: list[dict[str, Any]] = []
+    for raw in reader.read_table("attribution_taxonomy"):
+        m = mapping.map_attribution_row(raw)
+        if m is not None:
+            rows.append(m)
+    if not rows:
+        logger.warning(
+            "wgr_sync attribution_taxonomy: pull returned 0 rows; "
+            "skipping delete-reconciliation"
+        )
+        return 0
+    written = await _on_conflict_upsert(session, AttributionTaxonomy, "id", rows)
+    pulled_ids = {r["id"] for r in rows}
+    await session.execute(
+        delete(AttributionTaxonomy).where(AttributionTaxonomy.id.not_in(pulled_ids))
+    )
+    await session.commit()
+    logger.info("wgr_sync attribution_taxonomy: upserted %d, reconciled to %d",
+                written, len(pulled_ids))
+    return written
 ```
 
-No `reader.WATERMARK_COLUMN` entry — the table is tiny; full pull every run keeps deletions-by-edit simple.
+Register it in `sync_all()` alongside the other custom-path tables (after `counts["market_signals"]`):
+
+```python
+    counts["attribution_taxonomy"] = await sync_attribution_taxonomy(session)
+```
+
+No `reader.WATERMARK_COLUMN` entry — the reconciliation requires a full pull every run.
 
 Migration `z7e8f9a0b1c2_add_attribution_taxonomy.py` (`down_revision = "y6d7e8f9a0b1"`):
 
@@ -608,8 +709,10 @@ def map_lead_engagement(row: dict[str, Any]) -> Optional[dict[str, Any]]:
 ```python
 class LeadEngagement(Base):
     """Attribution touch (opt-in, email click, booking credit …) mirrored
-    read-only from WGR. wgr_lead_id is WGR's text lead id — join via
-    leads.external_id (source='wgr'); no FK on purpose (mirror data)."""
+    read-only from WGR. No FK on purpose (mirror data). Join to CI leads via
+    leads.external_id (source='wgr') FIRST, falling back to leads.ghl_contact_id
+    — email-merged leads keep their original source/external_id (see
+    plan_lead_writes case 4) and are only reachable through the GHL id."""
 
     __tablename__ = "lead_engagements"
 
@@ -957,13 +1060,13 @@ Migration `b9a0b1c2d3e4_add_meta_ads_mirror.py` (`down_revision = "a8f9a0b1c2d3"
     ("meta_ad_performance", MetaAdPerformance, "perf_id", mapping.map_meta_ad_performance),
 ```
 
-`reader.py` `WATERMARK_COLUMN`:
+`reader.py` `WATERMARK_COLUMN` — **only** the performance table gets a watermark; `meta_campaigns` / `meta_ads` are small config tables that get a full pull every run so upstream edits self-heal (audit finding #3):
 
 ```python
-    "meta_campaigns": "updated_at",
-    "meta_ads": "updated_at",
     "meta_ad_performance": "created_at",
 ```
+
+(`meta_ad_performance` has no `updated_at` upstream; post-insert edits to kpi_status/metric_notes/action_taken are missed until a full `backfill_wgr` run — documented limitation in the spec.)
 
 - [ ] **Step 6: Update INTEGRATIONS.md in this same commit** (project rule). Under the WGR database sync entry, add: mirrors now include `attribution_taxonomy`, `lead_engagements`, `meta_campaigns`, `meta_ads`, `meta_ad_performance`, plus lead UTM first/last-touch columns; canonical channel is resolved read-time via `backend/app/services/attribution.py` (never stored). Note the open RAG-policy gap: the new tables are not embedded into the vector store yet.
 
