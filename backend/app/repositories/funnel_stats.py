@@ -1,40 +1,56 @@
 """Pure funnel-stage aggregation helpers, built on ``lead_journey``.
 
 The real synced funnel (see ``GET /api/v1/funnels/overview``) is derived
-per-lead from ``lead_journey`` rows — there is no funnel_events/funnel_stats
-data (those tables are empty dead scaffolding, left alone). Six ordered
-stages, each a boolean/derived predicate over one ``lead_journey`` row:
+from ``lead_journey`` — there is no funnel_events/funnel_stats data (those
+tables are empty dead scaffolding, left alone). Six ordered stages:
 
-    leads          -> always true (every row)
-    registered     -> webinar_registered_at IS NOT NULL
-    watched        -> watched_live OR watched_replay
-    booked appt    -> appt_count > 0
-    discovery held -> discovery_held
-    closed         -> sale_id IS NOT NULL
+    leads          -> COUNT(*)
+    registered     -> COUNT(webinar_registered_at)
+    watched        -> COUNT(*) FILTER (WHERE watched_live OR watched_replay)
+    booked appt    -> COUNT(*) FILTER (WHERE appt_count > 0)
+    discovery held -> COUNT(*) FILTER (WHERE discovery_held)
+    closed         -> COUNT(sale_id)
 
-These helpers are pure (no DB) so they're unit-testable against fake
-journey-like rows — mirrors ``test_leads_channel.py``'s SimpleNamespace-fake
-style. The route layer does the DB read (``lead_journey`` scoped by
-``entry_date``, and the six-UTM-tuple GROUP BY for the channel slice) and
-hands rows/combos to these functions.
+**Perf note (2026-08-04):** this module used to expand every one of the
+12,820 ``lead_journey`` rows into a per-row ``StageFlags`` object in Python.
+The route's ``SELECT *`` (41 columns) over the Supabase transaction pooler
+took 68.4s — well past the frontend's 30s abort, so ``/marketing/funnels``
+rendered empty in production. Fixed by pushing the whole aggregation into
+ONE SQL statement: ``GROUP BY`` the 5 UTM/channel fields with the six stage
+counts as ``FILTER`` aggregates (172 combo rows, ~3.3s). These helpers now
+consume that combo-level shape directly — no per-lead-row Python loop, no
+``StageFlags`` per-row expansion. Verified stage totals are unchanged
+(12,820 / 11,557 / 6,872 / 1,289 / 183 / 83).
+
+These helpers are pure (no DB) so they're unit-testable against fake combo
+rows — mirrors ``test_leads_channel.py``'s SimpleNamespace-fake style. The
+route layer does ONE grouped SQL read (``lead_journey`` scoped by
+``entry_date``, ``GROUP BY`` the 5 UTM fields with FILTER aggregates) and
+hands the resulting combo rows straight to these functions.
 """
 
 from __future__ import annotations
 
-from typing import Any, NamedTuple, Sequence
+from typing import Any, Sequence
 
 from app.services.attribution import bucket_channel_combos, channel_for_lead
 
-# Ordered stage definitions: (key, label, predicate over a lead_journey-like row).
-# Order is the funnel order — never resort this list.
-STAGE_DEFS: tuple[tuple[str, str], ...] = (
-    ("leads", "Leads"),
-    ("registered", "Registered"),
-    ("watched", "Watched"),
-    ("booked_appt", "Booked Appt"),
-    ("discovery_held", "Discovery Held"),
-    ("closed", "Closed"),
+# Ordered stage keys — order is the funnel order — never resort this list.
+STAGE_KEYS: tuple[str, ...] = (
+    "leads", "registered", "watched", "booked_appt", "discovery_held", "closed",
 )
+
+STAGE_LABELS: dict[str, str] = {
+    "leads": "Leads",
+    "registered": "Registered",
+    "watched": "Watched",
+    "booked_appt": "Booked Appt",
+    "discovery_held": "Discovery Held",
+    "closed": "Closed",
+}
+
+# Kept for backward compat with any external caller keying off STAGE_DEFS.
+STAGE_DEFS: tuple[tuple[str, str], ...] = tuple((k, STAGE_LABELS[k]) for k in STAGE_KEYS)
 
 
 def _int(value: object) -> int:
@@ -45,46 +61,25 @@ def _int(value: object) -> int:
         return 0
 
 
-class StageFlags(NamedTuple):
-    """Precomputed stage membership for one lead_journey-like row. Every
-    later stage in the funnel is *not* implied to be a subset of the earlier
-    one at the data level (a lead could in principle have appt_count>0 but
-    no registered_at) — but the funnel presentation always walks the fixed
-    STAGE_DEFS order regardless, matching the discovery counts' semantics
-    (each stage counted independently off the row, not gated on the
-    previous stage)."""
+def combo_stage_counts(row: Any) -> dict[str, int]:
+    """Read the six pre-aggregated stage counts off one SQL combo row (or a
+    fake exposing the same attributes/keys). The row already carries COUNT/
+    COUNT-FILTER results from the GROUP BY query — this just coerces them to
+    int, never re-deriving a predicate over raw lead data (that work now
+    happens in SQL, not here).
 
-    leads: bool
-    registered: bool
-    watched: bool
-    booked_appt: bool
-    discovery_held: bool
-    closed: bool
-
-
-def stage_flags_for_row(row: Any) -> StageFlags:
-    """Compute the six stage booleans for one lead_journey row (or a fake
-    exposing the same attributes). Never raises on missing/None fields —
-    every predicate treats None as "does not qualify"."""
-    webinar_registered_at = getattr(row, "webinar_registered_at", None)
-    watched_live = bool(getattr(row, "watched_live", False))
-    watched_replay = bool(getattr(row, "watched_replay", False))
-    appt_count = _int(getattr(row, "appt_count", None))
-    discovery_held = bool(getattr(row, "discovery_held", False))
-    sale_id = getattr(row, "sale_id", None)
-
-    return StageFlags(
-        leads=True,
-        registered=webinar_registered_at is not None,
-        watched=watched_live or watched_replay,
-        booked_appt=appt_count > 0,
-        discovery_held=discovery_held,
-        closed=sale_id is not None,
-    )
+    Duck-types on ``.get`` rather than ``isinstance(row, dict)`` — a
+    SQLAlchemy ``RowMapping`` (what ``.mappings()`` returns) is dict-*like*
+    (supports ``.get``/``[]``) but is NOT a ``dict`` subclass, so an
+    isinstance check would silently fall through to attribute access and
+    return all zeros for real DB rows."""
+    getter = row.get if hasattr(row, "get") else lambda k, d=None: getattr(row, k, d)
+    return {key: _int(getter(key, 0)) for key in STAGE_KEYS}
 
 
-def aggregate_overall_stages(rows: Sequence[Any]) -> list[dict]:
-    """Aggregate a sequence of lead_journey-like rows into the ordered
+def aggregate_overall_stages(combo_rows: Sequence[Any]) -> list[dict]:
+    """Aggregate a sequence of SQL combo rows (one row per distinct 5-UTM
+    combo, each carrying pre-aggregated stage counts) into the ordered
     overall funnel: [{stage, label, count, pct_of_leads,
     conversion_from_previous}, ...].
 
@@ -93,21 +88,19 @@ def aggregate_overall_stages(rows: Sequence[Any]) -> list[dict]:
     stage's count, 1dp, None for the first stage or when the previous
     stage's count is 0 (avoid div-by-zero, not a 0.0% claim).
 
-    Pure — no DB — so this is unit-testable against fakes built with
-    SimpleNamespace exposing the lead_journey attributes stage_flags_for_row
-    reads.
+    Pure — no DB — so this is unit-testable against fakes (dicts or
+    SimpleNamespace) exposing the six stage-count fields.
     """
-    total_leads = len(rows)
-    counts: dict[str, int] = {key: 0 for key, _ in STAGE_DEFS}
-    for row in rows:
-        flags = stage_flags_for_row(row)
-        for key, _ in STAGE_DEFS:
-            if getattr(flags, key):
-                counts[key] += 1
+    counts: dict[str, int] = {key: 0 for key in STAGE_KEYS}
+    for row in combo_rows:
+        row_counts = combo_stage_counts(row)
+        for key in STAGE_KEYS:
+            counts[key] += row_counts[key]
 
+    total_leads = counts["leads"]
     stages: list[dict] = []
     prev_count: int | None = None
-    for key, label in STAGE_DEFS:
+    for key in STAGE_KEYS:
         count = counts[key]
         pct_of_leads = round((count / total_leads) * 100, 1) if total_leads > 0 else 0.0
         conversion_from_previous = (
@@ -118,7 +111,7 @@ def aggregate_overall_stages(rows: Sequence[Any]) -> list[dict]:
         stages.append(
             {
                 "stage": key,
-                "label": label,
+                "label": STAGE_LABELS[key],
                 "count": count,
                 "pct_of_leads": pct_of_leads,
                 "conversion_from_previous": conversion_from_previous,
@@ -134,40 +127,32 @@ def aggregate_by_channel(
     *,
     unmapped_top_n: int = 8,
 ) -> list[dict]:
-    """Bucket lead_journey rows by channel (via ``bucket_channel_combos``,
-    reusing the shared resolver machinery — never reimplement bucket rules)
-    and aggregate the six stage counts + lead->close rate per bucket.
+    """Bucket pre-aggregated combo rows by channel (via
+    ``bucket_channel_combos``, reusing the shared resolver machinery — never
+    reimplement bucket rules) and sum the six stage counts + lead->close
+    rate per bucket.
 
     ``combos``: iterable of (utm_source_first, utm_medium_first,
     utm_content_first, utm_source_last, utm_medium_last, utm_content_last,
-    *stage_flags_list) where stage_flags_list is a list of StageFlags (or
-    objects exposing the same fields) — one per lead_journey row sharing
-    that exact 6-tuple. This lets the route do ONE grouped read from
-    lead_journey and hand this function everything it needs without a
-    second DB round-trip.
+    stage_counts) where ``stage_counts`` is a dict with the six STAGE_KEYS
+    (as returned by ``combo_stage_counts``) — one entry per distinct 6-tuple,
+    already aggregated in SQL. ``leads`` doubles as the combo's row count,
+    matching ``bucket_channel_combos``' ``(sf, mf, cf, sl, ml, cl, count)``
+    combo contract.
 
     Returns rows ordered by leads count descending (ties broken by channel
     name ascending, for deterministic output): [{channel, platform,
     reportable, leads, registered, watched, booked_appt, discovery_held,
     closed, lead_to_close_pct}, ...].
     """
-    # Reduce each combo's row-list down to a single count vector first (one
-    # entry per distinct 6-tuple, matching bucket_channel_combos' combo
-    # contract of (sf, mf, cf, sl, ml, cl, count)).
-    combo_stage_counts: dict[tuple, dict[str, int]] = {}
-    combo_lead_counts: dict[tuple, int] = {}
-    for sf, mf, cf, sl, ml, cl, flags_list in combos:
+    combo_counts: dict[tuple, dict[str, int]] = {}
+    for sf, mf, cf, sl, ml, cl, stage_counts in combos:
         key = (sf, mf, cf, sl, ml, cl)
-        stage_counts = combo_stage_counts.setdefault(key, {k: 0 for k, _ in STAGE_DEFS})
-        for flags in flags_list:
-            for stage_key, _ in STAGE_DEFS:
-                if getattr(flags, stage_key):
-                    stage_counts[stage_key] += 1
-        combo_lead_counts[key] = combo_lead_counts.get(key, 0) + len(flags_list)
+        combo_counts[key] = stage_counts
 
     count_combos = [
-        (sf, mf, cf, sl, ml, cl, combo_lead_counts[(sf, mf, cf, sl, ml, cl)])
-        for (sf, mf, cf, sl, ml, cl) in combo_stage_counts
+        (sf, mf, cf, sl, ml, cl, stage_counts["leads"])
+        for (sf, mf, cf, sl, ml, cl), stage_counts in combo_counts.items()
     ]
     bucket_map, buckets = bucket_channel_combos(
         count_combos, resolver, unmapped_top_n=unmapped_top_n
@@ -176,14 +161,14 @@ def aggregate_by_channel(
     # Merge per-combo stage vectors into per-bucket-label stage totals.
     bucket_stage_totals: dict[str, dict[str, int]] = {}
     for key, label in bucket_map.items():
-        totals = bucket_stage_totals.setdefault(label, {k: 0 for k, _ in STAGE_DEFS})
-        for stage_key, _ in STAGE_DEFS:
-            totals[stage_key] += combo_stage_counts[key][stage_key]
+        totals = bucket_stage_totals.setdefault(label, {k: 0 for k in STAGE_KEYS})
+        for stage_key in STAGE_KEYS:
+            totals[stage_key] += combo_counts[key][stage_key]
 
     result: list[dict] = []
     for b in buckets:
         label = b["channel"]
-        totals = bucket_stage_totals.get(label, {k: 0 for k, _ in STAGE_DEFS})
+        totals = bucket_stage_totals.get(label, {k: 0 for k in STAGE_KEYS})
         leads_count = totals["leads"]
         closed_count = totals["closed"]
         lead_to_close_pct = (
@@ -208,9 +193,10 @@ def aggregate_by_channel(
 
 
 __all__ = [
+    "STAGE_KEYS",
+    "STAGE_LABELS",
     "STAGE_DEFS",
-    "StageFlags",
-    "stage_flags_for_row",
+    "combo_stage_counts",
     "aggregate_overall_stages",
     "aggregate_by_channel",
     "channel_for_lead",

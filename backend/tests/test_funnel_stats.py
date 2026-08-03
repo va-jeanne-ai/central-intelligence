@@ -1,113 +1,82 @@
 """Tests for the pure funnel-stage aggregation helpers built on lead_journey
 (app.repositories.funnel_stats). Mirrors test_leads_channel.py style:
-SimpleNamespace fakes, no DB.
+SimpleNamespace/dict fakes, no DB.
 
-Contract under test:
-- stage_flags_for_row: six stage predicates over a lead_journey-like row,
-  matching the deliverable's discovery contract exactly (registered =
-  webinar_registered_at not null; watched = watched_live OR watched_replay;
-  booked_appt = appt_count>0; discovery_held column; closed = sale_id not
-  null).
-- aggregate_overall_stages: ordered stage counts + pct_of_leads (of stage 0)
-  + conversion_from_previous (None when no previous stage or previous is 0).
-- aggregate_by_channel: per-bucket stage counts + lead->close rate, reusing
-  bucket_channel_combos so bucket rules never get reimplemented.
+Contract under test (post 2026-08-04 perf fix — combo-level, not per-row):
+- combo_stage_counts: reads the six pre-aggregated stage counts off one SQL
+  GROUP BY combo row (dict-like RowMapping OR attribute-style fake).
+- aggregate_overall_stages: sums combo-level stage counts into the ordered
+  overall funnel + pct_of_leads (of stage 0) + conversion_from_previous
+  (None when no previous stage or previous is 0).
+- aggregate_by_channel: per-bucket stage counts + lead->close rate, summed
+  from combo-level dicts, reusing bucket_channel_combos so bucket rules
+  never get reimplemented.
 """
-
-from types import SimpleNamespace
 
 from app.repositories.funnel_stats import (
     aggregate_by_channel,
     aggregate_overall_stages,
-    stage_flags_for_row,
+    combo_stage_counts,
 )
 from app.services.attribution import build_resolver
+from types import SimpleNamespace
 
 
-def _journey(
-    webinar_registered_at=None,
-    watched_live=False,
-    watched_replay=False,
-    appt_count=0,
-    discovery_held=False,
-    sale_id=None,
-):
-    return SimpleNamespace(
-        webinar_registered_at=webinar_registered_at,
-        watched_live=watched_live,
-        watched_replay=watched_replay,
-        appt_count=appt_count,
-        discovery_held=discovery_held,
-        sale_id=sale_id,
-    )
+def _combo_row(leads=0, registered=0, watched=0, booked_appt=0, discovery_held=0, closed=0):
+    """A SQL GROUP BY combo row, as a dict — same shape a RowMapping exposes
+    via .get()/[] (dict-like, but NOT a dict subclass in real SQLAlchemy;
+    a plain dict here exercises the same .get() code path)."""
+    return {
+        "leads": leads, "registered": registered, "watched": watched,
+        "booked_appt": booked_appt, "discovery_held": discovery_held, "closed": closed,
+    }
 
 
-# --- stage_flags_for_row ---
+# --- combo_stage_counts ---
 
 
-def test_stage_flags_bare_lead_only_leads_true():
-    flags = stage_flags_for_row(_journey())
-    assert flags.leads is True
-    assert flags.registered is False
-    assert flags.watched is False
-    assert flags.booked_appt is False
-    assert flags.discovery_held is False
-    assert flags.closed is False
+def test_combo_stage_counts_reads_dict_row():
+    row = _combo_row(leads=10, registered=8, watched=5, booked_appt=2, discovery_held=1, closed=1)
+    counts = combo_stage_counts(row)
+    assert counts == {
+        "leads": 10, "registered": 8, "watched": 5,
+        "booked_appt": 2, "discovery_held": 1, "closed": 1,
+    }
 
 
-def test_stage_flags_registered_requires_non_null_timestamp():
-    flags = stage_flags_for_row(_journey(webinar_registered_at="2026-01-01T00:00:00Z"))
-    assert flags.registered is True
+def test_combo_stage_counts_reads_attribute_style_fake():
+    """Non-dict fakes (e.g. SimpleNamespace) must also work via getattr —
+    covers any caller that doesn't have a RowMapping/dict on hand."""
+    row = SimpleNamespace(leads=3, registered=2, watched=1, booked_appt=0, discovery_held=0, closed=0)
+    counts = combo_stage_counts(row)
+    assert counts["leads"] == 3
+    assert counts["registered"] == 2
 
 
-def test_stage_flags_watched_true_if_either_live_or_replay():
-    assert stage_flags_for_row(_journey(watched_live=True)).watched is True
-    assert stage_flags_for_row(_journey(watched_replay=True)).watched is True
-    assert stage_flags_for_row(_journey()).watched is False
+def test_combo_stage_counts_missing_fields_default_to_zero():
+    counts = combo_stage_counts({})
+    assert all(v == 0 for v in counts.values())
 
 
-def test_stage_flags_booked_appt_requires_positive_count():
-    assert stage_flags_for_row(_journey(appt_count=0)).booked_appt is False
-    assert stage_flags_for_row(_journey(appt_count=None)).booked_appt is False
-    assert stage_flags_for_row(_journey(appt_count=2)).booked_appt is True
-
-
-def test_stage_flags_closed_requires_sale_id():
-    assert stage_flags_for_row(_journey(sale_id=None)).closed is False
-    assert stage_flags_for_row(_journey(sale_id="s-1")).closed is True
-
-
-def test_stage_flags_missing_attributes_default_safely():
-    """A fake exposing none of the attributes must not raise — every
-    predicate treats a missing/None field as 'does not qualify'."""
-    flags = stage_flags_for_row(SimpleNamespace())
-    assert flags.leads is True
-    assert flags.registered is False
-    assert flags.watched is False
-    assert flags.booked_appt is False
-    assert flags.discovery_held is False
-    assert flags.closed is False
+def test_combo_stage_counts_coerces_none_and_non_numeric_to_zero():
+    row = _combo_row()
+    row["leads"] = None
+    counts = combo_stage_counts(row)
+    assert counts["leads"] == 0
 
 
 # --- aggregate_overall_stages ---
 
 
-def test_aggregate_overall_stages_matches_discovery_shape():
-    rows = [
-        _journey(),  # lead only
-        _journey(webinar_registered_at="t"),  # registered
-        _journey(webinar_registered_at="t", watched_live=True),  # watched
-        _journey(webinar_registered_at="t", watched_live=True, appt_count=1),  # booked
-        _journey(
-            webinar_registered_at="t", watched_live=True, appt_count=1,
-            discovery_held=True,
-        ),  # discovery held
-        _journey(
-            webinar_registered_at="t", watched_live=True, appt_count=1,
-            discovery_held=True, sale_id="s-1",
-        ),  # closed
+def test_aggregate_overall_stages_sums_combo_rows():
+    """Mirrors the discovery contract via combo rows instead of per-lead
+    rows — two combos summing to the same totals a per-row expansion would
+    have produced."""
+    combos = [
+        _combo_row(leads=4, registered=3, watched=2, booked_appt=1, discovery_held=0, closed=0),
+        _combo_row(leads=2, registered=2, watched=2, booked_appt=2, discovery_held=2, closed=1),
     ]
-    stages = aggregate_overall_stages(rows)
+    stages = aggregate_overall_stages(combos)
     by_key = {s["stage"]: s for s in stages}
     assert by_key["leads"]["count"] == 6
     assert by_key["registered"]["count"] == 5
@@ -132,18 +101,33 @@ def test_aggregate_overall_stages_empty_input():
 def test_aggregate_overall_stages_conversion_none_when_previous_zero():
     # No leads registered at all -> every downstream conversion is None,
     # not a misleading 0.0%.
-    rows = [_journey(), _journey()]
-    stages = aggregate_overall_stages(rows)
+    combos = [_combo_row(leads=2, registered=0, watched=0)]
+    stages = aggregate_overall_stages(combos)
     by_key = {s["stage"]: s for s in stages}
     assert by_key["registered"]["count"] == 0
     assert by_key["watched"]["conversion_from_previous"] is None
 
 
 def test_aggregate_overall_stages_order_is_fixed():
-    stages = aggregate_overall_stages([_journey()])
+    stages = aggregate_overall_stages([_combo_row(leads=1)])
     assert [s["stage"] for s in stages] == [
         "leads", "registered", "watched", "booked_appt", "discovery_held", "closed",
     ]
+
+
+def test_aggregate_overall_stages_matches_real_discovery_numbers():
+    """A single combo row carrying the exact discovery totals must pass
+    through unchanged — sanity-checks the SQL->helper contract end to end
+    without a DB."""
+    combos = [
+        _combo_row(
+            leads=12820, registered=11557, watched=6872,
+            booked_appt=1289, discovery_held=183, closed=83,
+        )
+    ]
+    stages = aggregate_overall_stages(combos)
+    counts = [s["count"] for s in stages]
+    assert counts == [12820, 11557, 6872, 1289, 183, 83]
 
 
 # --- aggregate_by_channel ---
@@ -162,17 +146,13 @@ ROWS = [
 ]
 
 
-def _combo(sf=None, mf=None, cf=None, sl=None, ml=None, cl=None, flags_list=None):
-    return (sf, mf, cf, sl, ml, cl, flags_list or [])
+def _combo(sf=None, mf=None, cf=None, sl=None, ml=None, cl=None, **stage_kwargs):
+    return (sf, mf, cf, sl, ml, cl, _combo_row(**stage_kwargs))
 
 
 def test_aggregate_by_channel_buckets_and_sums_stage_counts():
     resolver = build_resolver(ROWS)
-    ig_flags = [
-        stage_flags_for_row(_journey()),
-        stage_flags_for_row(_journey(webinar_registered_at="t", sale_id="s-1")),
-    ]
-    combos = [_combo(sf="ig", flags_list=ig_flags)]
+    combos = [_combo(sf="ig", leads=2, registered=1, closed=1)]
     result = aggregate_by_channel(combos, resolver)
     bucket = {row["channel"]: row for row in result}
     assert bucket["instagram_organic"]["leads"] == 2
@@ -184,8 +164,8 @@ def test_aggregate_by_channel_buckets_and_sums_stage_counts():
 def test_aggregate_by_channel_merges_multiple_combos_into_same_bucket():
     resolver = build_resolver(ROWS)
     combos = [
-        _combo(sf="ig", mf="paid", flags_list=[stage_flags_for_row(_journey(sale_id="s-1"))]),
-        _combo(sl="ig", ml="paid", flags_list=[stage_flags_for_row(_journey())]),
+        _combo(sf="ig", mf="paid", leads=1, closed=1),
+        _combo(sl="ig", ml="paid", leads=1),
     ]
     result = aggregate_by_channel(combos, resolver)
     bucket = {row["channel"]: row for row in result}
@@ -196,11 +176,8 @@ def test_aggregate_by_channel_merges_multiple_combos_into_same_bucket():
 def test_aggregate_by_channel_ordered_by_leads_desc():
     resolver = build_resolver(ROWS)
     combos = [
-        _combo(sf="ig", flags_list=[stage_flags_for_row(_journey())]),
-        _combo(
-            sf="ig", mf="paid",
-            flags_list=[stage_flags_for_row(_journey()) for _ in range(5)],
-        ),
+        _combo(sf="ig", leads=1),
+        _combo(sf="ig", mf="paid", leads=5),
     ]
     result = aggregate_by_channel(combos, resolver)
     assert result[0]["channel"] == "meta_paid"
@@ -210,9 +187,25 @@ def test_aggregate_by_channel_ordered_by_leads_desc():
 
 def test_aggregate_by_channel_no_leads_zero_percent_not_none():
     resolver = build_resolver(ROWS)
-    combos = [_combo(sf="ig", flags_list=[])]
+    combos = [_combo(sf="ig", leads=0)]
     result = aggregate_by_channel(combos, resolver)
     # A bucket with zero leads (degenerate — shouldn't normally happen since
     # combos come from GROUP BY on real rows) still returns 0.0, not a crash.
     if result:
         assert result[0]["lead_to_close_pct"] == 0.0
+
+
+def test_aggregate_by_channel_sum_of_leads_equals_input_sum():
+    """Reconciliation contract: sum of every bucket's leads must equal the
+    sum of every input combo's leads — same guarantee bucket_channel_combos
+    provides at the raw-combo level, preserved through the stage-count
+    summation."""
+    resolver = build_resolver(ROWS)
+    combos = [
+        _combo(sf="ig", leads=100, closed=5),
+        _combo(sf="ig", mf="paid", leads=50, closed=2),
+        _combo(leads=25, closed=1),  # No attribution
+    ]
+    result = aggregate_by_channel(combos, resolver)
+    assert sum(row["leads"] for row in result) == 175
+    assert sum(row["closed"] for row in result) == 8

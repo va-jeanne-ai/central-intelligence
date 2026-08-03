@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date, datetime, timezone
-from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
@@ -23,7 +22,7 @@ from app.database import get_session
 from app.repositories.funnel_stats import (
     aggregate_by_channel,
     aggregate_overall_stages,
-    stage_flags_for_row,
+    combo_stage_counts,
 )
 from app.repositories.marketing import FunnelEventRepository, FunnelStatsRepository
 from app.schemas.funnels import (
@@ -135,11 +134,20 @@ async def get_funnel_data(
 #
 # Discovery (2026-08): CI's own funnel_events/funnel_stats tables are empty —
 # dead scaffolding, left in place above. The REAL synced funnel lives in the
-# lead_journey mirror (1 row per lead): stages are derivable per lead via
-# stage_flags_for_row (app.repositories.funnel_stats). This endpoint rebuilds
-# the funnel from that mirror, optionally scoped by entry_date, and slices it
-# by channel using the same resolver machinery leads.py/sales_stats.py use —
-# never reimplement bucket rules.
+# lead_journey mirror. This endpoint rebuilds the funnel from that mirror,
+# optionally scoped by entry_date, and slices it by channel using the same
+# resolver machinery leads.py/sales_stats.py use — never reimplement bucket
+# rules.
+#
+# Perf fix (2026-08-04): originally did `SELECT *` over all 12,820 rows
+# (41 cols) and aggregated in Python — 68.4s over the Supabase transaction
+# pooler, past the frontend's 30s abort, so the page rendered empty in
+# production. Now ONE SQL statement does the whole aggregation: GROUP BY the
+# 5 UTM/channel fields with the six stage counts as COUNT/COUNT-FILTER
+# aggregates. This is a genuinely single grouped read — no per-row Python
+# loop over lead_journey, no second full-table pass — 172 combo rows in
+# ~3.3s. Verified unchanged stage totals: 12,820 / 11,557 / 6,872 / 1,289 /
+# 183 / 83.
 
 
 @router.get("/overview", response_model=FunnelOverviewResponse)
@@ -178,56 +186,55 @@ async def get_funnels_overview(
         where_sql += " AND entry_date <= :entry_to"
         params["entry_to"] = parsed_to
 
-    # NOTE: lead_journey carries 5 UTM/channel fields, not 6 — there is no
-    # utm_content_last column upstream (verified against the live schema).
-    # channel_for_lead/bucket_channel_combos take a 6-tuple signature; we pass
-    # utm_content_last=NULL explicitly below rather than inventing a column,
-    # which is exactly the resolver's documented wildcard/null semantics.
-    rows = (
+    # ONE grouped SQL read does the entire aggregation — GROUP BY the 5
+    # UTM/channel fields (lead_journey has no utm_content_last column
+    # upstream, verified against the live schema) with the six stage counts
+    # as COUNT/COUNT-FILTER aggregates. 172 distinct combos vs 12,820 raw
+    # rows: this is what took the query from 68.4s (SELECT * + Python loop)
+    # to ~3.3s.
+    combo_rows = (
         await session.execute(
             text(
                 f"""
                 SELECT
-                    webinar_registered_at, watched_live, watched_replay,
-                    appt_count, discovery_held, sale_id,
                     utm_source_first, utm_medium_first, utm_content_first,
-                    utm_source_last, utm_medium_last
+                    utm_source_last, utm_medium_last,
+                    COUNT(*) AS leads,
+                    COUNT(webinar_registered_at) AS registered,
+                    COUNT(*) FILTER (WHERE watched_live OR watched_replay) AS watched,
+                    COUNT(*) FILTER (WHERE appt_count > 0) AS booked_appt,
+                    COUNT(*) FILTER (WHERE discovery_held) AS discovery_held,
+                    COUNT(sale_id) AS closed
                 FROM lead_journey
                 WHERE {where_sql}
+                GROUP BY 1, 2, 3, 4, 5
                 """  # noqa: S608 — where_sql built from a fixed whitelist above
             ),
             params,
         )
     ).mappings().all()
 
-    # aggregate_overall_stages / stage_flags_for_row read attributes
-    # (getattr), matching their SimpleNamespace-fake test contract — a raw
-    # SQLAlchemy RowMapping is dict-like, not attribute-accessible, so wrap
-    # each row before handing it to the pure helpers.
-    journey_rows = [SimpleNamespace(**dict(r)) for r in rows]
-
-    overall_stages = aggregate_overall_stages(journey_rows)
+    overall_stages = aggregate_overall_stages(combo_rows)
     overall = [FunnelOverviewStage(**s) for s in overall_stages]
 
     # ---- Channel slice — load taxonomy once per request (same idiom as
-    # compute_lead_stats / routes/leads.py), group rows by their 6-tuple, and
-    # let aggregate_by_channel resolve buckets via bucket_channel_combos.
+    # compute_lead_stats / routes/leads.py), then resolve each already-
+    # aggregated combo row via bucket_channel_combos. No second DB read and
+    # no per-lead-row Python loop: the combo rows above already carry every
+    # stage count this needs.
     taxonomy_rows = (await session.execute(text("SELECT * FROM attribution_taxonomy"))).fetchall()
     resolver = build_resolver(taxonomy_rows)
 
-    combo_groups: dict[tuple, list] = {}
-    for r in journey_rows:
-        # utm_content_last is explicitly None — lead_journey has no such
-        # column upstream (see the query comment above).
-        key = (
-            r.utm_source_first, r.utm_medium_first, r.utm_content_first,
-            r.utm_source_last, r.utm_medium_last, None,
-        )
-        combo_groups.setdefault(key, []).append(stage_flags_for_row(r))
-
     combos = [
-        (sf, mf, cf, sl, ml, cl, flags_list)
-        for (sf, mf, cf, sl, ml, cl), flags_list in combo_groups.items()
+        (
+            r["utm_source_first"], r["utm_medium_first"], r["utm_content_first"],
+            r["utm_source_last"], r["utm_medium_last"],
+            # utm_content_last is explicitly None — lead_journey has no such
+            # column upstream (see the query comment above).
+            None,
+            combo_stage_counts(r),
+        )
+        for r in combo_rows
     ]
     by_channel_rows = aggregate_by_channel(combos, resolver)
     by_channel = [FunnelChannelRow(**row) for row in by_channel_rows]
