@@ -48,6 +48,13 @@ def _channel_buckets_to_breakdown(buckets: list[dict]) -> list[dict]:
     transitional ``source`` key (see ``SourceBreakdownItem`` docstring).
 
     Pure function — no DB — so it is unit-testable with fake bucket lists.
+
+    The returned list is sorted by ``count`` descending (largest bucket
+    first), tie-broken by ``channel`` name ascending, so the order is fully
+    deterministic. ``summarize_channels`` builds its buckets via a dict/
+    hash-agg with no guaranteed iteration order — without this sort the
+    donut/legend order (and the ``/leads/stats`` + ``/sales/summary``
+    response order) could shuffle between otherwise-identical requests.
     """
     total = sum(_int(b["count"]) for b in buckets)
     breakdown: list[dict] = []
@@ -67,6 +74,7 @@ def _channel_buckets_to_breakdown(buckets: list[dict]) -> list[dict]:
                 "percentage": pct,
             }
         )
+    breakdown.sort(key=lambda item: (-item["count"], item["channel"]))
     return breakdown
 
 
@@ -98,7 +106,11 @@ async def compute_lead_stats(
         {
           "kpis": {total_leads, leads_this_week, conversion_rate, active_applications},
           "lead_volume": [{"label": str, "value": int}, ...],          # 8 points
-          "source_breakdown": [{"source": str, "count": int, "percentage": float}, ...],
+          "source_breakdown": [
+              {"source": str, "channel": str, "platform": str | None,
+               "reportable": bool, "count": int, "percentage": float}, ...
+          ],  # `source` mirrors `channel` transitionally (see
+              # _channel_buckets_to_breakdown); sorted count-desc
           "funnel": [{"stage": str, "count": int, "percentage": float}, ...],  # 4 stages
         }
     """

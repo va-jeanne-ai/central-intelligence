@@ -51,3 +51,30 @@ def test_reportable_and_platform_default_when_missing():
     out = _channel_buckets_to_breakdown(buckets)
     assert out[0]["platform"] is None
     assert out[0]["reportable"] is True
+
+
+def test_sorted_count_desc_regardless_of_input_order():
+    # summarize_channels builds buckets from a dict/hash-agg with no
+    # guaranteed iteration order — the breakdown must always come back
+    # sorted largest-first so /leads/stats + /sales/summary responses (and
+    # the frontend donut/legend order) never shuffle between requests.
+    buckets = [
+        {"channel": "small", "platform": None, "reportable": True, "count": 2},
+        {"channel": "large", "platform": None, "reportable": True, "count": 10},
+        {"channel": "medium", "platform": None, "reportable": True, "count": 5},
+    ]
+    out = _channel_buckets_to_breakdown(buckets)
+    assert [item["channel"] for item in out] == ["large", "medium", "small"]
+    assert [item["count"] for item in out] == [10, 5, 2]
+
+
+def test_sorted_count_desc_tie_broken_by_channel_name():
+    # Equal counts must resolve deterministically by channel name (ascending)
+    # rather than falling back to whatever order the input happened to be in.
+    buckets = [
+        {"channel": "zeta", "platform": None, "reportable": True, "count": 4},
+        {"channel": "alpha", "platform": None, "reportable": True, "count": 4},
+        {"channel": "mu", "platform": None, "reportable": True, "count": 4},
+    ]
+    out = _channel_buckets_to_breakdown(buckets)
+    assert [item["channel"] for item in out] == ["alpha", "mu", "zeta"]

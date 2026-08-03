@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,7 +45,7 @@ interface LeadsStatsResponse {
   source_breakdown: {
     source: string;
     channel: string;
-    platform: string;
+    platform: string | null;
     reportable: boolean;
     count: number;
     percentage: number;
@@ -1302,8 +1302,9 @@ export default function LeadsPage() {
 
   // Distinct channel values on the currently-loaded page, each with its
   // display label. "No attribution" (null channel) is represented by the
-  // sentinel value so it's selectable via a normal <option value>.
-  const channelOptions = (() => {
+  // sentinel value so it's selectable via a normal <option value>. Memoized
+  // on leadsData.leads so it isn't rebuilt (Map + sort) on every render.
+  const channelOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const lead of leadsData.leads) {
       const raw = lead.channel ?? null;
@@ -1313,7 +1314,7 @@ export default function LeadsPage() {
     return Array.from(seen.entries())
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  })();
+  }, [leadsData.leads]);
 
   // Client-side channel filter over the loaded page (server-side filtering
   // on channel is out of scope per Task 3).
