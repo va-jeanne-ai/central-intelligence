@@ -80,6 +80,23 @@ export interface Lead {
   createdAt: string;
   /** Lead quality score 0–100 */
   score?: number;
+  /**
+   * Resolved attribution channel — an open string set (canonical channels
+   * plus "No attribution", "Non-marketing", "other unmapped", and
+   * "unmapped:<src>/<med>" dialects for UTM combos the taxonomy hasn't
+   * mapped yet). Null means no attribution data was resolvable; render as
+   * "No attribution", not as this different-interface `channel` at
+   * WebSocketMessage above (conversation medium — unrelated).
+   */
+  channel?: string | null;
+  utmSourceFirst?: string | null;
+  utmMediumFirst?: string | null;
+  utmCampaignFirst?: string | null;
+  utmContentFirst?: string | null;
+  utmSourceLast?: string | null;
+  utmMediumLast?: string | null;
+  utmCampaignLast?: string | null;
+  utmContentLast?: string | null;
 }
 
 // ─── API Error ──────────────────────────────────────────────────────────────

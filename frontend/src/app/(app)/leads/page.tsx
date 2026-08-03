@@ -11,6 +11,14 @@ import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagination } from "@/hooks/use-pagination";
 import { Pagination } from "@/components/ui";
+import {
+  STATUS_CONFIG,
+  SOURCE_CONFIG,
+  resolveSource,
+  resolveStatus,
+  channelLabel,
+  channelBadgeClasses,
+} from "@/lib/lead-display";
 
 // ─── API response types ───────────────────────────────────────────────────────
 
@@ -31,7 +39,17 @@ interface LeadsStatsResponse {
     avg_deal_value: number; // avg amount_collected per closed sale (in range)
   };
   lead_volume: { label: string; value: number }[];
-  source_breakdown: { source: string; count: number; percentage: number }[];
+  // `source` is transitional (source === channel today, per Task 3/4 notes);
+  // the donut now reads `channel`, the canonical attribution bucket label.
+  // `platform`/`reportable` aren't rendered yet but are part of the contract.
+  source_breakdown: {
+    source: string;
+    channel: string;
+    platform: string;
+    reportable: boolean;
+    count: number;
+    percentage: number;
+  }[];
   funnel: { stage: string; count: number; percentage: number }[];
 }
 
@@ -110,98 +128,9 @@ const EMPTY_LEADS: LeadsListResponse = {
   per_page: 50,
 };
 
-// ─── Status / Source display config ──────────────────────────────────────────
-
-const STATUS_CONFIG: Record<
-  LeadStatus,
-  { label: string; dotColor: string; badgeClasses: string }
-> = {
-  new: {
-    label: "New",
-    dotColor: "#3B82F6",
-    badgeClasses: "bg-blue-50 text-blue-700",
-  },
-  contacted: {
-    label: "Active",
-    dotColor: "#F97316",
-    badgeClasses: "bg-orange-50 text-orange-700",
-  },
-  qualified: {
-    label: "Applied",
-    dotColor: "#8B5CF6",
-    badgeClasses: "bg-violet-50 text-violet-700",
-  },
-  appointment_set: {
-    label: "Booked",
-    dotColor: "#0D9488",
-    badgeClasses: "bg-teal-50 text-teal-700",
-  },
-  closed_won: {
-    label: "Closed Won",
-    dotColor: "#10B981",
-    badgeClasses: "bg-green-50 text-green-700",
-  },
-  closed_lost: {
-    label: "Lost",
-    dotColor: "#9CA3AF",
-    badgeClasses: "bg-gray-100 text-gray-500",
-  },
-  stale: {
-    label: "Stale",
-    dotColor: "#F59E0B",
-    badgeClasses: "bg-accent-50 text-accent-700",
-  },
-};
-
-const SOURCE_CONFIG: Record<
-  LeadSource,
-  { label: string; badgeClasses: string }
-> = {
-  webinar: { label: "Webinar", badgeClasses: "bg-accent-50 text-accent-700" },
-  vsl: { label: "VSL", badgeClasses: "bg-blue-50 text-blue-700" },
-  "opt-in": { label: "Opt-in", badgeClasses: "bg-green-50 text-green-700" },
-  ads: { label: "Ads", badgeClasses: "bg-gray-100 text-gray-600" },
-  referral: { label: "Referral", badgeClasses: "bg-violet-50 text-violet-700" },
-  other: { label: "Other", badgeClasses: "bg-gray-100 text-gray-500" },
-};
-
-// Fallback resolvers — leads now arrive from real integrations (GHL pushes
-// e.g. source='facebook_ads', 'instagram_ads', 'podcast_referral'; status
-// can be anything the upstream system uses). Looking those up in the
-// enum-keyed records above returns undefined and the row render crashes
-// on `.badgeClasses`. These helpers always return a sane shape so the
-// page renders any string the backend hands us.
-
-function _humanise(value: string | null | undefined): string {
-  // 'facebook_ads' → 'Facebook Ads'. Best-effort prettifier for unknown
-  // values; falls back to the raw string for anything weird. Real WGR leads
-  // can arrive with a null/empty source or status, so guard before .split().
-  if (!value) return "Unknown";
-  return value
-    .split(/[_\-\s]+/)
-    .filter(Boolean)
-    .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1).toLowerCase()))
-    .join(" ");
-}
-
-function resolveSource(raw: string | null | undefined) {
-  return (
-    (raw ? SOURCE_CONFIG[raw as LeadSource] : undefined) ?? {
-      label: _humanise(raw),
-      badgeClasses: "bg-gray-100 text-gray-600",
-    }
-  );
-}
-
-function resolveStatus(raw: string | null | undefined) {
-  return (
-    (raw ? STATUS_CONFIG[raw as LeadStatus] : undefined) ?? {
-      label: _humanise(raw),
-      dotColor: "#9CA3AF",
-      badgeClasses: "bg-gray-100 text-gray-600",
-    }
-  );
-}
+// Status / Source display config, and the resolveSource/resolveStatus
+// fallback resolvers, live in @/lib/lead-display.ts (shared with the lead
+// detail page — see the former TODO(v2) there).
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
@@ -454,7 +383,7 @@ function SourceDonutChart({
   segments,
   total,
 }: {
-  segments: { source: string; count: number; percentage: number }[];
+  segments: { channel: string; count: number; percentage: number }[];
   total: number;
 }) {
   const cx = 80;
@@ -465,12 +394,15 @@ function SourceDonutChart({
   const midR = (r + innerR) / 2;
   const circumference = 2 * Math.PI * midR;
 
-  // Resolve color + label once per segment (label via the shared resolver so
-  // unknown sources like 'wgr' get prettified instead of shown raw).
+  // Resolve color + label once per segment. `channel` is an open string set
+  // (canonical channels + "No attribution" + "Non-marketing" + "other
+  // unmapped" + "unmapped:<src>/<med>" dialects) — shown verbatim via
+  // channelLabel, NOT routed through the closed-enum SOURCE_CONFIG/
+  // resolveSource (those are for the legacy per-lead `source` field only).
   const items = segments.map((seg) => ({
     ...seg,
-    color: colorForSource(seg.source),
-    label: resolveSource(seg.source).label,
+    color: colorForSource(seg.channel),
+    label: channelLabel(seg.channel),
   }));
 
   // A single segment at (near) 100% can't be drawn as one SVG arc — the start
@@ -574,8 +506,8 @@ function SourceDonutChart({
           {items.length === 0 ? (
             <p className="text-xs text-gray-400">No source data.</p>
           ) : (
-            items.map((item) => (
-              <div key={item.source} className="flex items-center justify-between gap-2">
+            items.map((item, i) => (
+              <div key={`${item.channel}-${i}`} className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span
                     className="w-2.5 h-2.5 rounded-full flex-shrink-0"
@@ -756,6 +688,13 @@ function LeadTableRow({ lead }: { lead: Lead }) {
   // source='facebook_ads') get a sensible default instead of crashing.
   const status = resolveStatus(lead.status);
   const source = resolveSource(lead.source);
+  // Channel is a distinct, open string set from `source` — never routed
+  // through SOURCE_CONFIG. Colored via the same hash palette as the donut
+  // (colorForSource) keyed on `channel ?? "No attribution"`; `unmapped:*`
+  // dialects get an amber warning tint instead so they surface loudly.
+  const channelValue = lead.channel ?? null;
+  const channelText = channelLabel(channelValue);
+  const channelColor = colorForSource(channelText);
   const date = new Date(lead.createdAt);
   const formattedDate = date.toLocaleDateString("en-US", {
     month: "short",
@@ -802,6 +741,19 @@ function LeadTableRow({ lead }: { lead: Lead }) {
         </span>
       </td>
 
+      {/* Channel */}
+      <td className="px-5 py-3.5">
+        <span
+          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${channelBadgeClasses(channelValue)}`}
+        >
+          <span
+            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+            style={{ backgroundColor: channelColor }}
+          />
+          {channelText}
+        </span>
+      </td>
+
       {/* Date Added */}
       <td className="px-5 py-3.5">
         <span className="text-xs text-gray-500">{formattedDate}</span>
@@ -835,6 +787,12 @@ function LeadTableRow({ lead }: { lead: Lead }) {
 // per-lead status, so it's added on top of LeadStatus.
 type FilterStatus = "all" | LeadStatus | "applications";
 type FilterSource = "all" | LeadSource;
+// Channel is an open string set (not an enum) — "all" plus any raw channel
+// value seen on the currently-loaded page, or the sentinel below for leads
+// with no attribution. Filtering happens client-side only (Task 3 scope
+// didn't add a server-side channel filter param).
+type FilterChannel = "all" | string;
+const NO_ATTRIBUTION_FILTER_VALUE = "__no_attribution__";
 
 // ─── Column sort ──────────────────────────────────────────────────────────────
 
@@ -884,6 +842,9 @@ function FilterBar({
   onStatusChange,
   sourceFilter,
   onSourceChange,
+  channelFilter,
+  onChannelChange,
+  channelOptions,
   entryFrom,
   onEntryFromChange,
   entryTo,
@@ -897,6 +858,12 @@ function FilterBar({
   onStatusChange: (v: FilterStatus) => void;
   sourceFilter: FilterSource;
   onSourceChange: (v: FilterSource) => void;
+  channelFilter: FilterChannel;
+  onChannelChange: (v: FilterChannel) => void;
+  /** Distinct channel values present on the currently-loaded page, each
+   * paired with its display label (raw value for the select's `value`, so
+   * filtering can match `lead.channel` directly). */
+  channelOptions: { value: string; label: string }[];
   entryFrom: string;
   onEntryFromChange: (v: string) => void;
   entryTo: string;
@@ -908,6 +875,7 @@ function FilterBar({
     search !== "" ||
     statusFilter !== "all" ||
     sourceFilter !== "all" ||
+    channelFilter !== "all" ||
     entryFrom !== "" ||
     entryTo !== "";
 
@@ -947,6 +915,22 @@ function FilterBar({
         {(Object.keys(SOURCE_CONFIG) as LeadSource[]).map((key) => (
           <option key={key} value={key}>
             {SOURCE_CONFIG[key].label}
+          </option>
+        ))}
+      </select>
+
+      {/* Channel — client-side only, filters the loaded page on
+          lead.channel. Options are derived from the loaded leads since
+          channel is an open string set, not an enum. */}
+      <select
+        value={channelFilter}
+        onChange={(e) => onChannelChange(e.target.value as FilterChannel)}
+        className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
+      >
+        <option value="all">All Channels</option>
+        {channelOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
           </option>
         ))}
       </select>
@@ -1098,13 +1082,13 @@ function TableSkeleton() {
             <Skeleton className="h-2.5 w-32" />
           </div>
           <Skeleton className="h-5 w-16 rounded-full" />
+          <Skeleton className="h-5 w-20 rounded-full" />
           <Skeleton className="h-3 w-16" />
           <Skeleton className="h-5 w-20 rounded-full" />
           <div className="flex items-center gap-2">
             <Skeleton className="h-1.5 w-20 rounded-full" />
             <Skeleton className="h-3 w-6" />
           </div>
-          <Skeleton className="h-6 w-12 rounded-md" />
         </div>
       ))}
     </div>
@@ -1121,6 +1105,10 @@ export default function LeadsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [sourceFilter, setSourceFilter] = useState<FilterSource>("all");
+  // Channel filter is CLIENT-SIDE only — it narrows the already-loaded page
+  // by lead.channel and does not touch the /leads request params (no
+  // server-side channel filter exists per Task 3 scope).
+  const [channelFilter, setChannelFilter] = useState<FilterChannel>("all");
   // Entry-date range filter (YYYY-MM-DD strings from <input type="date">).
   // Defaults to the current week (Mon–Sun) so the funnel/KPIs/table open scoped
   // to "this week" rather than all-time; cleared via Clear filters.
@@ -1307,9 +1295,35 @@ export default function LeadsPage() {
     setSearch("");
     setStatusFilter("all");
     setSourceFilter("all");
+    setChannelFilter("all");
     setEntryFrom("");
     setEntryTo("");
   };
+
+  // Distinct channel values on the currently-loaded page, each with its
+  // display label. "No attribution" (null channel) is represented by the
+  // sentinel value so it's selectable via a normal <option value>.
+  const channelOptions = (() => {
+    const seen = new Map<string, string>();
+    for (const lead of leadsData.leads) {
+      const raw = lead.channel ?? null;
+      const value = raw ?? NO_ATTRIBUTION_FILTER_VALUE;
+      if (!seen.has(value)) seen.set(value, channelLabel(raw));
+    }
+    return Array.from(seen.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  })();
+
+  // Client-side channel filter over the loaded page (server-side filtering
+  // on channel is out of scope per Task 3).
+  const visibleLeads =
+    channelFilter === "all"
+      ? leadsData.leads
+      : leadsData.leads.filter((lead) => {
+          const value = lead.channel ?? NO_ATTRIBUTION_FILTER_VALUE;
+          return value === channelFilter;
+        });
 
   return (
     <>
@@ -1417,7 +1431,7 @@ export default function LeadsPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-bold text-gray-900">Lead Records</h2>
               <span className="text-xs text-gray-400">
-                Showing {leadsData.leads.length} of {leadsData.total.toLocaleString()}
+                Showing {visibleLeads.length} of {leadsData.total.toLocaleString()}
               </span>
             </div>
 
@@ -1430,6 +1444,9 @@ export default function LeadsPage() {
                 onStatusChange={setStatusFilter}
                 sourceFilter={sourceFilter}
                 onSourceChange={setSourceFilter}
+                channelFilter={channelFilter}
+                onChannelChange={setChannelFilter}
+                channelOptions={channelOptions}
                 entryFrom={entryFrom}
                 onEntryFromChange={setEntryFrom}
                 entryTo={entryTo}
@@ -1457,6 +1474,11 @@ export default function LeadsPage() {
                     sortDir={sortDir}
                     onSort={handleSort}
                   />
+                  {/* Not backend-sortable — channel filtering/sorting is
+                      client-side only per Task 3/4 scope. */}
+                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    Channel
+                  </th>
                   <SortableHeader
                     label="Date Added"
                     column="entry_date"
@@ -1477,17 +1499,17 @@ export default function LeadsPage() {
                 </tr>
               </thead>
               <tbody>
-                {leadsData.leads.length === 0 ? (
+                {visibleLeads.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="px-5 py-12 text-center text-sm text-gray-400"
                     >
                       No leads match your filters.
                     </td>
                   </tr>
                 ) : (
-                  leadsData.leads.map((lead) => (
+                  visibleLeads.map((lead) => (
                     <LeadTableRow key={lead.id} lead={lead} />
                   ))
                 )}
@@ -1507,7 +1529,7 @@ export default function LeadsPage() {
             {/* Table footer */}
             <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/50">
               <span className="text-xs text-gray-400">
-                Showing {leadsData.leads.length} of {leadsData.total.toLocaleString()} leads
+                Showing {visibleLeads.length} of {leadsData.total.toLocaleString()} leads
               </span>
               <button
                 type="button"
