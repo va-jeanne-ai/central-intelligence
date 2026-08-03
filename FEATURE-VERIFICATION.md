@@ -960,3 +960,58 @@ changes always re-fetch rather than silently reordering cached data;
 toggle; empty states are quiet. **Fail:** a momentum chip showing a raw
 percentage on a 1-to-2-mention signal, a filter option with 0 real matches,
 sort appearing to do nothing, or a raw unbounded quote dump.
+
+## Marketing — Funnels (real data, deliverable 3) (2026-08-04)
+
+**Feature:** `/marketing/funnels` no longer shows the seed-data
+`funnel_events`/`funnel_stats` funnels (`coaching-program-v2`,
+`webinar-apr-2026` — those tables are empty dead scaffolding, left in place
+untouched). The page now derives the real funnel from the `lead_journey`
+mirror (1 row per lead, 12,820 rows) via a new `GET /funnels/overview`
+endpoint: leads → registered → watched → booked appt → discovery held →
+closed, sliceable by channel using the same resolver machinery
+(`build_resolver` / `bucket_channel_combos`) the Leads and Sales pages use.
+
+**How to locate:** `/marketing/funnels` — under Marketing in the sidebar.
+
+**Before you start:** unfiltered totals as of 2026-08-04 are **12,820
+leads → 11,557 registered (90.1%) → 6,872 watched (53.6%) → 1,289 booked
+appt (10.1%) → 183 discovery held (1.4%) → 83 closed (0.6%)**. These numbers
+must match exactly (they're a direct predicate count over `lead_journey`,
+not an estimate).
+
+**Steps:**
+1. Open `/marketing/funnels`. Confirm the old two-funnel selector
+   (`coaching-program-v2` / `webinar-apr-2026`) is gone — there's a single
+   funnel visual now, no dropdown.
+2. Confirm the **Funnel Stages** card shows six horizontal bars in order
+   (Leads, Registered, Watched, Booked Appt, Discovery Held, Closed), each
+   with a count, a "% of Leads" figure, and a "step conversion" figure
+   (conversion from the immediately preceding stage). Leftmost/top bar
+   (Leads) shows 12,820 with no step-conversion figure (there's no previous
+   stage). Closed shows 83 (0.6% of leads).
+3. Confirm the **Funnel by Channel** table below lists channel chips (reusing
+   the same chip styling as `/leads` — amber tint for `unmapped:*`/"other
+   unmapped" dialects) with per-channel stage counts and a lead→close %
+   column. Rows are ordered by leads count descending. The sum of the
+   `leads` column across all rows should equal 12,820; the sum of `closed`
+   should equal 83.
+4. Use the **Entered** date-range filter (top right) to pick a narrower
+   window (e.g. 2026-01-01 to 2026-06-30). Confirm the funnel bars and
+   channel table re-fetch and show smaller, internally consistent numbers
+   (each stage's count is always ≤ the previous stage's — a 2026 H1 slice
+   was manually verified at 2,882 leads → 2,653 registered → 1,530 watched →
+   347 booked → 81 discovery held → 13 closed). Click "Clear" to return to
+   the unfiltered view.
+5. Reload the page and watch the loading state — skeleton bars/rows render
+   briefly, never a spinner-only or blank screen, never native
+   `alert()`/`confirm()` dialogs.
+
+**Pass:** the old seed-funnel selector is gone; unfiltered stage counts
+match 12,820 / 11,557 / 6,872 / 1,289 / 183 / 83 exactly; the channel table's
+`leads` and `closed` columns sum to the same unfiltered totals; the date
+filter narrows both the overall funnel and the channel table consistently;
+empty/loading states are quiet. **Fail:** any stage count off from the
+discovery numbers, a channel table that doesn't sum to the overall totals,
+the date filter affecting only one of the two sections, or a crash/blank
+page on an empty range.

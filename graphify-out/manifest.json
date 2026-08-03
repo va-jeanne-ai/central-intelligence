@@ -440,8 +440,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/ci.py": {
-    "mtime": 1785772102.487231,
-    "ast_hash": "25359c8bf48d8d3c1f08cef414e3a5ec",
+    "mtime": 1785772854.0353947,
+    "ast_hash": "e5adb599749ece19c40dd349c3507e38",
     "semantic_hash": ""
   },
   "backend/app/routes/dashboard.py": {
@@ -465,8 +465,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/funnels.py": {
-    "mtime": 1775646463.0,
-    "ast_hash": "86751fdbf9d4bff5d2e4cf57c7742aeb",
+    "mtime": 1785773483.0897684,
+    "ast_hash": "11185c4a6f989419dc7d5e49b523c1dd",
     "semantic_hash": ""
   },
   "backend/app/routes/health.py": {
@@ -555,8 +555,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/ci.py": {
-    "mtime": 1785772091.46689,
-    "ast_hash": "08ebaa750416ce5e35ddc4981b89d4cc",
+    "mtime": 1785772895.8568337,
+    "ast_hash": "ab7db11d6df6ecab9a2c340f27b6d1e3",
     "semantic_hash": ""
   },
   "backend/app/schemas/common.py": {
@@ -580,8 +580,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/funnels.py": {
-    "mtime": 1775646469.0,
-    "ast_hash": "02d529ab21dee4c8aaff3e7a60dcc56a",
+    "mtime": 1785773384.004257,
+    "ast_hash": "1eb5b88141236c14b444bf452224f9b9",
     "semantic_hash": ""
   },
   "backend/app/schemas/integrations.py": {
@@ -965,8 +965,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/funnels/page.tsx": {
-    "mtime": 1784046104.3487167,
-    "ast_hash": "5761c549e15f15fb2fdf2965a859459c",
+    "mtime": 1785773566.577032,
+    "ast_hash": "ae90fedb6d4f4ea1d3e91ffefad0861b",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/icp/page.tsx": {
@@ -1320,8 +1320,8 @@
     "semantic_hash": ""
   },
   "frontend/src/types/index.ts": {
-    "mtime": 1785772110.3401322,
-    "ast_hash": "684037d25f2a8368b0eb88667cdceeb6",
+    "mtime": 1785772912.5453084,
+    "ast_hash": "36ebb5fa5794d819792f1068eb38f08d",
     "semantic_hash": ""
   },
   "frontend/tailwind.config.ts": {
@@ -1370,8 +1370,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1785772331.8125095,
-    "ast_hash": "1357391cc145dc3b3dc9c9aa7be29b59",
+    "mtime": 1785773693.2692382,
+    "ast_hash": "625f007c1bb99de98dede61e653f2d08",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1380,13 +1380,13 @@
     "semantic_hash": ""
   },
   "FEATURE-VERIFICATION.md": {
-    "mtime": 1785772387.7970545,
-    "ast_hash": "dc24c7aedd668f9bf3bd37700242082a",
+    "mtime": 1785773673.668216,
+    "ast_hash": "88516363ac919365763e25393697c112",
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1785771618.9562392,
-    "ast_hash": "ff58f3046eee0de8203e83167d6655dc",
+    "mtime": 1785773710.0162122,
+    "ast_hash": "753d7da052fb259a366d32d2e6523a2e",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
@@ -2757,6 +2757,21 @@
   "backend/tests/test_email_campaigns.py": {
     "mtime": 1785772659.475808,
     "ast_hash": "de4f78fc016539753c104fb0085ad894",
+    "semantic_hash": ""
+  },
+  "backend/app/repositories/funnel_stats.py": {
+    "mtime": 1785773331.6776562,
+    "ast_hash": "bcf5b7367891a301dd651f620576db94",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_ci_market_signals_momentum.py": {
+    "mtime": 1785773022.3367982,
+    "ast_hash": "0b8769989c8526b524ccea600f93c508",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_funnel_stats.py": {
+    "mtime": 1785773359.4575946,
+    "ast_hash": "8530b754b1ffa1ea739d93c9d252d323",
     "semantic_hash": ""
   }
 }

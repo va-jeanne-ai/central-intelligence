@@ -53,3 +53,40 @@ class FunnelDataResponse(BaseModel):
 
     stages: list[FunnelStageStats] = []
     generated_at: str
+
+
+# ─── GET /funnels/overview — real data rebuild from lead_journey (deliverable 3) ──
+
+
+class FunnelOverviewStage(BaseModel):
+    """One stage in the overall (unsliced) funnel — ordered leads ->
+    registered -> watched -> booked appt -> discovery held -> closed."""
+
+    stage: str
+    label: str
+    count: int = 0
+    pct_of_leads: float = 0.0
+    conversion_from_previous: float | None = None
+
+
+class FunnelChannelRow(BaseModel):
+    """One channel bucket's stage counts + lead->close rate."""
+
+    channel: str
+    platform: str | None = None
+    reportable: bool = True
+    leads: int = 0
+    registered: int = 0
+    watched: int = 0
+    booked_appt: int = 0
+    discovery_held: int = 0
+    closed: int = 0
+    lead_to_close_pct: float = 0.0
+
+
+class FunnelOverviewResponse(BaseModel):
+    """Response for GET /api/v1/funnels/overview."""
+
+    overall: list[FunnelOverviewStage] = []
+    by_channel: list[FunnelChannelRow] = []
+    generated_at: str = ""

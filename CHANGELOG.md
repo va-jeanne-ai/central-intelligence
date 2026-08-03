@@ -6,6 +6,59 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Funnels from lead_journey, sliceable by channel (deliverable 3)
+
+- **Discovery:** CI's own `funnel_events`/`funnel_stats` tables are empty —
+  dead scaffolding, left in place. The real synced funnel lives in the
+  `lead_journey` mirror (1 row per lead, 12,820 rows): stages are derivable
+  per-lead — leads (all) → registered (`webinar_registered_at` not null:
+  11,557) → watched (`watched_live` OR `watched_replay`: 6,872) → booked
+  appt (`appt_count`>0: 1,289) → discovery held (`discovery_held`: 183) →
+  closed (`sale_id` not null: 83).
+- **`app/repositories/funnel_stats.py`** (new) — pure, no-DB aggregation
+  helpers: `stage_flags_for_row` (six stage predicates over a
+  `lead_journey`-like row), `aggregate_overall_stages` (ordered stage
+  counts + `pct_of_leads` + `conversion_from_previous`), `aggregate_by_channel`
+  (per-bucket stage counts + lead→close %, built on the shared
+  `bucket_channel_combos`/`build_resolver` machinery from
+  `app/services/attribution.py` — bucket rules are never reimplemented).
+  14 unit tests in `tests/test_funnel_stats.py`, SimpleNamespace-fake style
+  matching `tests/test_leads_channel.py`.
+- **`GET /funnels/overview`** (`backend/app/routes/funnels.py`, extended in
+  place — existing `POST /funnels` webhook + legacy `GET /funnels` summary
+  untouched) — optional `entry_from`/`entry_to` (scopes
+  `lead_journey.entry_date`, validated via the `_parse_date_param` idiom in
+  `routes/ads.py`, 422 on malformed input). Response: `overall` (the six
+  ordered stages) and `by_channel` (per resolved channel bucket, same six
+  stage counts + lead→close rate, ordered by leads descending). Taxonomy is
+  loaded once per request, same idiom as `compute_lead_stats`.
+  **Schema note:** `lead_journey` carries 5 UTM/channel fields upstream, not
+  6 — there is no `utm_content_last` column. The route passes `None`
+  explicitly for that slot into the 6-tuple resolver signature rather than
+  inventing a column; this is exactly the resolver's documented null/wildcard
+  semantics, not a workaround.
+- **`frontend/src/app/(app)/marketing/funnels/page.tsx`** — full rebuild
+  around `GET /funnels/overview`. The prior page (seed-data two-funnel
+  selector reading `funnel_events`/`funnel_stats`) is replaced entirely:
+  horizontal stage bars (count + % of leads + step conversion) in the
+  existing emerald visual language, no new chart libraries, plus a channel
+  breakdown table below (channel chip via the shared `channelLabel`/
+  `channelBadgeClasses` from `@/lib/lead-display` — amber tint for unmapped
+  dialects — stage counts, lead→close %). An `entry_from`/`entry_to` date
+  range filter row mirrors the `/leads` page's date-input pattern. Quiet
+  empty states + skeletons; no native `alert`/`confirm`/`prompt`.
+- **Verified:** unfiltered overall matches the discovery counts exactly —
+  12,820 / 11,557 / 6,872 / 1,289 / 183 / 83 — via a direct in-process DB
+  query against the new pure helpers. A 2026-01-01..2026-06-30 date-scoped
+  call returns 2,882 / 2,653 / 1,530 / 347 / 81 / 13, internally consistent
+  (each stage ≤ the previous). Channel breakdown sums (12,820 leads, 83
+  closed) reconcile with the overall totals.
+- Backend: 247 passing (233 baseline + 14 new). Frontend: lint clean,
+  23 tests passing, `next build` succeeds.
+- See `FEATURE-VERIFICATION.md` → "Marketing — Funnels (real data,
+  deliverable 3)" for the full verification steps, and `INTEGRATIONS.md`
+  → WGR mirror section for the `lead_journey` surface update.
+
 ### Added — CI Insights + Market Signals full filters, source attribution, informative redesign (deliverables 6+7)
 
 Extends both marketing-department CI pages (`/ci-insights`, `/ci-market-signals`) —
