@@ -78,6 +78,7 @@ from app.schemas.calendar import (
     CalendarEventRow,
     CalendarEventsResponse,
 )
+from app.services.attribution import build_resolver, channel_for_lead
 from app.services.audit import record_event
 
 logger = logging.getLogger(__name__)
@@ -231,7 +232,15 @@ async def list_leads(
             status,
             source,
             entry_date,
-            created_at
+            created_at,
+            utm_source_first,
+            utm_medium_first,
+            utm_campaign_first,
+            utm_content_first,
+            utm_source_last,
+            utm_medium_last,
+            utm_campaign_last,
+            utm_content_last
         FROM leads
         WHERE {where_sql}
         ORDER BY {sort_by} {sort_dir} NULLS LAST, id ASC
@@ -240,15 +249,31 @@ async def list_leads(
     )
     rows = (await session.execute(data_sql, params)).fetchall()
 
+    # Channel is resolved at read time (never stored) via the Task-1 helper —
+    # load the taxonomy once per request, same idiom as compute_lead_stats
+    # (app/repositories/sales_stats.py).
+    taxonomy_rows = (await session.execute(text("SELECT * FROM attribution_taxonomy"))).fetchall()
+    resolver = build_resolver(taxonomy_rows)
+
     # ---- Map rows to response models ----------------------------------------
+    # NOTE: channel filtering is intentionally client-side only (see Task 4) —
+    # channel isn't a stored column, so a server-side `channel` filter would
+    # require resolving in SQL or materializing it; the existing `source`
+    # filter above stays as-is. Revisit if server-side channel filtering is
+    # ever needed (e.g. for very large pages).
     leads: list[LeadRecord] = []
     for r in rows:
-        raw_id, name, email, phone, raw_status, source_val, entry_date, created_at = r
+        (
+            raw_id, name, email, phone, raw_status, source_val, entry_date, created_at,
+            utm_source_first, utm_medium_first, utm_campaign_first, utm_content_first,
+            utm_source_last, utm_medium_last, utm_campaign_last, utm_content_last,
+        ) = r
         api_status = _map_status(raw_status)
         score = _score_for_status(api_status)
         # The lead's date in the UI is the true funnel-entry date when known;
         # fall back to created_at (sync time) for leads with no upstream date.
         lead_date = entry_date or created_at
+        channel = channel_for_lead(resolver, r).channel
         leads.append(
             LeadRecord(
                 id=str(raw_id),
@@ -260,6 +285,15 @@ async def list_leads(
                 notes=None,
                 createdAt=lead_date.isoformat() if lead_date is not None else None,
                 score=score,
+                channel=channel,
+                utmSourceFirst=utm_source_first,
+                utmMediumFirst=utm_medium_first,
+                utmCampaignFirst=utm_campaign_first,
+                utmContentFirst=utm_content_first,
+                utmSourceLast=utm_source_last,
+                utmMediumLast=utm_medium_last,
+                utmCampaignLast=utm_campaign_last,
+                utmContentLast=utm_content_last,
             )
         )
 
@@ -353,7 +387,9 @@ async def get_lead_detail(
     lead_row = (await session.execute(
         text("""
             SELECT id::text AS id, name, email, phone, status, source,
-                   notes, external_id, entry_date, created_at
+                   notes, external_id, entry_date, created_at,
+                   utm_source_first, utm_medium_first, utm_campaign_first, utm_content_first,
+                   utm_source_last, utm_medium_last, utm_campaign_last, utm_content_last
             FROM leads
             WHERE id = :id AND deleted_at IS NULL
         """),
@@ -365,6 +401,12 @@ async def get_lead_detail(
 
     api_status = _map_status(lead_row["status"])
     score = _score_for_status(api_status)
+
+    # Channel is resolved at read time (never stored) via the Task-1 helper —
+    # per-request resolver, same idiom as list_leads / compute_lead_stats.
+    taxonomy_rows = (await session.execute(text("SELECT * FROM attribution_taxonomy"))).fetchall()
+    resolver = build_resolver(taxonomy_rows)
+    channel = channel_for_lead(resolver, lead_row).channel
 
     # 2. Calls (with insight count via correlated subquery).
     # processed_date stays NULL until the analyzer finishes — the frontend
@@ -449,6 +491,15 @@ async def get_lead_detail(
         entry_date=lead_row["entry_date"].isoformat() if lead_row["entry_date"] else None,
         created_at=lead_row["created_at"].isoformat() if lead_row["created_at"] else None,
         notes_raw=lead_row["notes"],
+        channel=channel,
+        utmSourceFirst=lead_row["utm_source_first"],
+        utmMediumFirst=lead_row["utm_medium_first"],
+        utmCampaignFirst=lead_row["utm_campaign_first"],
+        utmContentFirst=lead_row["utm_content_first"],
+        utmSourceLast=lead_row["utm_source_last"],
+        utmMediumLast=lead_row["utm_medium_last"],
+        utmCampaignLast=lead_row["utm_campaign_last"],
+        utmContentLast=lead_row["utm_content_last"],
         calls=[
             LeadCallSummary(
                 id=str(r["id"]),

@@ -23,7 +23,15 @@ from pydantic import BaseModel, Field
 
 
 class LeadRecord(BaseModel):
-    """A single lead row returned in the paginated list."""
+    """A single lead row returned in the paginated list.
+
+    ``channel`` is resolved per-request via ``channel_for_lead`` (never
+    stored — see ``app.services.attribution``); it is None when the lead
+    has no UTMs at all. The 8 ``utm*`` fields are the raw, never-rewritten
+    first/last-touch values mirrored from WGR — naming follows this
+    model's existing camelCase convention (``createdAt``) for consistency
+    within the class; all are optional since many leads have no UTMs.
+    """
 
     id: str
     name: str | None = None
@@ -34,6 +42,15 @@ class LeadRecord(BaseModel):
     notes: str | None = None
     createdAt: str | None = None  # noqa: N815 — camelCase to match frontend Lead type
     score: int = 0
+    channel: str | None = None
+    utmSourceFirst: str | None = None  # noqa: N815 — camelCase, see class docstring
+    utmMediumFirst: str | None = None  # noqa: N815
+    utmCampaignFirst: str | None = None  # noqa: N815
+    utmContentFirst: str | None = None  # noqa: N815
+    utmSourceLast: str | None = None  # noqa: N815
+    utmMediumLast: str | None = None  # noqa: N815
+    utmCampaignLast: str | None = None  # noqa: N815
+    utmContentLast: str | None = None  # noqa: N815
 
 
 class LeadListResponse(BaseModel):
@@ -176,6 +193,15 @@ class LeadDetailResponse(BaseModel):
     `notes_raw` carries the immutable upstream provider payload (e.g. the
     GHL webhook JSON) as a string — the frontend parses it for the
     "Initial Submission" card. `staff_notes` is the editable journal.
+
+    `channel` is resolved per-request via `channel_for_lead` (never
+    stored — see `app.services.attribution`); None when the lead has no
+    UTMs. The 8 `utm*` fields are the raw, never-rewritten first/last-touch
+    values mirrored from WGR, for the detail page's Attribution card —
+    camelCase, matching `LeadRecord`'s convention for the same 8 fields
+    (`LeadRecord.utmSourceFirst` etc.) so the frontend handles the shape
+    identically whether it came from the list or the detail endpoint. This
+    schema's other, pre-existing fields stay snake_case (unchanged).
     """
 
     id: str
@@ -190,6 +216,15 @@ class LeadDetailResponse(BaseModel):
     entry_date: str | None = None
     created_at: str | None = None
     notes_raw: str | None = None
+    channel: str | None = None
+    utmSourceFirst: str | None = None  # noqa: N815 — camelCase, matches LeadRecord (see docstring)
+    utmMediumFirst: str | None = None  # noqa: N815
+    utmCampaignFirst: str | None = None  # noqa: N815
+    utmContentFirst: str | None = None  # noqa: N815
+    utmSourceLast: str | None = None  # noqa: N815
+    utmMediumLast: str | None = None  # noqa: N815
+    utmCampaignLast: str | None = None  # noqa: N815
+    utmContentLast: str | None = None  # noqa: N815
     calls: list[LeadCallSummary] = Field(default_factory=list)
     goals: list[LeadGoalSummary] = Field(default_factory=list)
     pain_points: list[LeadPainPointSummary] = Field(default_factory=list)
