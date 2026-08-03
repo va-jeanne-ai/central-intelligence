@@ -115,13 +115,9 @@ These were already wired before this sprint. The seeded data from Step 1 means d
 - **Note:** this is the most complete user-facing feature in the app. Every other CRUD page should follow this page's pattern.
 
 ### F9 — Offers library (read-only)
-- **Status:** ✅ **verified-as-empty (2026-05-19)** — wiring OK, `offers` table has 0 rows
+- **Status:** ✅ **superseded (2026-08-04)** — main listing now shows the real WGR offer catalog + revenue. See **"Marketing — Offers (real WGR catalog, deliverable 5)"** near the end of this doc for current verification steps.
 - **URL:** `/marketing/offers`
-- **What was verified:**
-  - [x] Page renders cleanly with empty library + 0 KPI counts (no crash, no error)
-  - [x] `GET /api/v1/offers` returns 200 OK
-- **To unblock:** F18 (offer builder save handler) — once F18 ships, creating offers via the builder will populate this library.
-- **API:** `GET /api/v1/offers`
+- **API:** `GET /api/v1/offers/catalog` (new); legacy `GET /api/v1/offers` (app-CRUD test data) untouched, still backs the builder's create flow.
 
 ### F10 — Marketing overview hub
 - **Status:** ✅ **verified-working (2026-05-19)**
@@ -1015,3 +1011,60 @@ empty/loading states are quiet. **Fail:** any stage count off from the
 discovery numbers, a channel table that doesn't sum to the overall totals,
 the date filter affecting only one of the two sections, or a crash/blank
 page on an empty range.
+
+## Marketing — Offers (real WGR catalog, deliverable 5) (2026-08-04)
+
+**Feature:** `/marketing/offers` no longer lists CI's own `offers` table
+(18 rows of app-CRUD test data — "This is a new offer", "just checking").
+The main listing now shows the **real** WGR offer catalog (11 offers),
+mirrored 2026-08-04 into two new tables (`wgr_offers` / `wgr_offer_mappings`)
+via a new `GET /offers/catalog` endpoint, with per-offer sales count and
+revenue rolled up from `closed_sales`. The **"+ Create Offer"** button and
+its target page (`/marketing/offers/builder` — real form + real AI
+generation trigger) are unchanged and still work exactly as before; only the
+fake, non-functional "Offer Builder" sidebar stub on the main listing page
+(Save/AI Suggestions buttons with no click handlers) was removed.
+
+**How to locate:** `/marketing/offers` — under Marketing in the sidebar.
+The builder is at `/marketing/offers/builder`, reached via the "+ Create
+Offer" button.
+
+**Before you start:** live counts as of 2026-08-04: **11 real offers**
+(e.g. "Agent Infopreneur Accelerator - PIF" / Coaching / $10,000 / Active),
+**15 payment-level mapping rows**, **83 closed sales totaling $471,250**.
+Every one of the 83 sales' `offer_id` resolves to one of the 11 catalog
+offers today, so no "Unattributed" row is expected right now — that's
+correct, not a missing feature (the row appears automatically the moment a
+sale's `offer_id` is null or unrecognized).
+
+**Steps:**
+1. Open `/marketing/offers`. Confirm the KPI row shows **Active Offers**,
+   **Total Offers** (11), **Total Sales** (83), and **Total Revenue**
+   (formatted currency, $471,250) — not "—".
+2. Confirm the **Offer Catalog** table lists 11 real offer names (not
+   "This is a new offer" test rows), each with type ("Coaching"), price
+   (or "Custom" for the two offers with a null price — "…Custom" named
+   offers), a status chip ("Active"), a sales count, and a revenue figure.
+   Confirm "Agent Infopreneur Accelerator - PIF" shows the highest revenue
+   (41 sales, $320,750).
+3. Sum the **Revenue** column down the whole table (including any
+   "Unattributed" row, shown with an amber chip, if present). Confirm the
+   total equals **$471,250** — the same figure shown in the Total Revenue
+   KPI tile.
+4. Confirm the **Payment Levels** sidebar card groups rows by program
+   (accelerator / mastery / jumpstart), each showing its payment-level
+   labels (pif, monthly, 2 pay, 3 pay, etc.) and amount collected.
+5. Click **"+ Create Offer"**. Confirm it still navigates to
+   `/marketing/offers/builder` and that page's form + "Generate with AI"
+   button still work exactly as before (unchanged by this work).
+6. Reload `/marketing/offers` and watch the loading state — skeleton tiles/
+   rows render briefly, never a spinner-only or blank screen, never native
+   `alert()`/`confirm()` dialogs.
+
+**Pass:** KPI tiles + catalog table show real WGR data (11 offers, not the
+18 test rows); the Revenue column sums to $471,250; the Payment Levels card
+shows all 15 mapping rows grouped by program; the Create Offer button and
+builder page still work unchanged. **Fail:** the old test-data offer names
+("This is a new offer") still appear, the revenue sum doesn't reconcile
+with $471,250, a fabricated Unattributed figure appears despite full
+attribution, or the Create Offer / builder flow is broken.

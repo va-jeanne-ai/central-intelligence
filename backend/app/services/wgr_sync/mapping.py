@@ -771,6 +771,51 @@ def map_lead_journey(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 
 
+def map_wgr_offer(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Real WGR offer catalog (11 rows) — snapshot reconcile, small table.
+
+    Distinct from ``map_offer`` above, which feeds the app-CRUD ``offers``
+    table via the native-PK plan — that path is untouched. This mirrors WGR's
+    own ``offers`` table verbatim into ``wgr_offers``."""
+    oid = _clean(row.get("offer_id"))
+    if not oid:
+        return None
+    return {
+        "offer_id": oid,
+        "name": _clean(row.get("name")),
+        "offer_type": _clean(row.get("offer_type")),
+        "description": _clean(row.get("description")),
+        "price": row.get("price"),
+        "status": _clean(row.get("status")),
+        "url": _clean(row.get("url")),
+        "notes": _clean(row.get("notes")),
+        "created_at": row.get("created_at"),
+    }
+
+
+def map_wgr_offer_mapping(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Real WGR offer_mappings (15 rows) — per-program payment-level rows.
+
+    No upstream primary key; ``(program, payment_level, offer_id)`` is
+    verified unique across all 15 rows (probe 2026-08-04), so this builds a
+    deterministic composite ``id`` from that triple for CI's primary key."""
+    program = _clean(row.get("program"))
+    payment_level = _clean(row.get("payment_level"))
+    offer_id = _clean(row.get("offer_id"))
+    if program is None and payment_level is None and offer_id is None:
+        return None
+    composite_id = f"{program or ''}|{payment_level or ''}|{offer_id or ''}"
+    return {
+        "id": composite_id,
+        "program": program,
+        "payment_level": payment_level,
+        "offer_id": offer_id,
+        "amount_collected": row.get("amount_collected"),
+        "revenue_earned": row.get("revenue_earned"),
+        "created_at": row.get("created_at"),
+    }
+
+
 def map_meta_campaign(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     ext = _clean(row.get("campaign_id"))
     if not ext:

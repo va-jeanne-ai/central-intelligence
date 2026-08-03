@@ -6,6 +6,80 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Real WGR offers + revenue per offer (deliverable 5)
+
+- **Discovery:** CI's own `offers` table (18 rows) is app-CRUD test data
+  ("This is a new offer", "just checking") — the real offers were never
+  synced into it. WGR's real catalog: `offers` (11 rows — e.g. "Agent
+  Infopreneur Accelerator - PIF" / Coaching / $10,000 / Active) and
+  `offer_mappings` (15 rows: program/payment_level/offer_id/
+  amount_collected/revenue_earned). `closed_sales.offer_id` (83 sales,
+  $471,250 total) references WGR offer ids — revenue per offer is a join
+  away.
+- **New mirror tables `wgr_offers` + `wgr_offer_mappings`** — follows the
+  `lead_journey` snapshot-reconcile precedent exactly. The app-CRUD
+  `offers` table (and its `Offer` model / `routes/offers.py` POST/GET flow)
+  is left completely untouched — a new `WgrOffer`/`WgrOfferMapping` model
+  pair lives in `app/models/intelligence.py`, migration
+  `e79cc79ec06b_add_wgr_offers_mirror.py` (chained after
+  `c0d1e2f3a4b5`, the actual `alembic heads` at start), mapper functions
+  `map_wgr_offer`/`map_wgr_offer_mapping` in `app/services/wgr_sync/
+  mapping.py`, wired into `sync_all` via `_sync_snapshot_reconcile` (tiny
+  tables — default page_size fine).
+  - **`offer_mappings` has no upstream primary key** — `(program,
+    payment_level, offer_id)` is verified unique across all 15 rows (probe
+    2026-08-04), so `map_wgr_offer_mapping` builds a deterministic composite
+    `id` from that triple. This broke `_sync_snapshot_reconcile`'s existing
+    assumption that `wgr_pk` (used both for the null-check AND as the
+    raw-form delete-reconciliation keep-id) equals the CI `pk_attr` — true
+    for every other caller, false here since the CI pk is a 3-column
+    composite. Added an optional `raw_keep_fn` parameter (default `None`,
+    zero behavior change for existing callers) that recomputes the same
+    composite from the raw row when the 1:1 assumption doesn't hold.
+  - **Pre-existing alembic debris found and cleared:** an untracked stray
+    duplicate `c0d1e2f3a4b5_add_lead_journey_mirror 2.py` (byte-identical to
+    the tracked migration, confirmed via `diff` + `git status`) caused
+    `alembic heads`/`upgrade` to raise `CycleDetected` the moment a second
+    migration chained off `c0d1e2f3a4b5` — tolerated silently (just a
+    warning) as long as only one migration pointed at that revision.
+    Removed the untracked stray copy only; the tracked original file is
+    unmodified.
+  - Ran `alembic upgrade head` then an in-process one-off backfill (same
+    pattern as `scripts/backfill_wgr.py`) — verified 11 + 15 rows landed.
+- **`app/repositories/offer_stats.py`** (new) — pure, no-DB helpers:
+  `build_offer_catalog` (merges the real catalog with a per-offer sales/
+  revenue rollup; appends a synthetic **"Unattributed"** row for any
+  revenue whose `offer_id` is null or doesn't match a known offer, so total
+  revenue always reconciles regardless of catalog coverage gaps) and
+  `build_payment_level_rollup` (deterministic program/payment_level
+  ordering). 11 unit tests in `tests/test_offer_stats.py`.
+- **`GET /offers/catalog`** (`backend/app/routes/offers.py`, extended in
+  place — existing `GET`/`POST /offers` and `POST /offer-generate`
+  untouched) — real offers (name/type/price/status/url) LEFT JOINed with
+  `closed_sales` grouped by `offer_id`, plus `payment_levels` from
+  `wgr_offer_mappings`. All schema fields defaulted.
+- **`frontend/src/app/(app)/marketing/offers/page.tsx`** rebuilt around
+  `GET /offers/catalog`. The prior page rendered the 18 app-CRUD test rows
+  as offer cards with a fake sidebar "Offer Builder" mini-form (Save/AI
+  Suggestions buttons with no `onClick` — pure decoration duplicating the
+  real builder page) — both replaced. **CRUD affordances kept**: the
+  top-bar **"+ Create Offer"** button still links to the fully-functional
+  `/marketing/offers/builder` page (real `POST /offers` + real
+  `POST /offer-generate` AI flow) — that page and its backend routes are
+  untouched. The main listing now shows the real catalog as a table (name,
+  type, price, status chip, sales count, revenue), an "Unattributed" row
+  (amber tint, same visual language as unmapped channels elsewhere) when
+  applicable, and a Payment Levels sidebar card grouped by program.
+- **Verified:** catalog shows all 11 real offers; revenue rows sum to
+  **$471,250** exactly, matching `closed_sales`'s true total (no
+  Unattributed row needed today — every one of the 83 sales' `offer_id`
+  resolves to a known offer, confirmed via direct query).
+- Backend: 258 passing (247 after deliverable 3 + 11 new). Frontend: lint
+  clean, 23 tests passing, `next build` succeeds.
+- See `FEATURE-VERIFICATION.md` → "Marketing — Offers (real WGR catalog,
+  deliverable 5)" for the full verification steps, and `INTEGRATIONS.md`
+  → WGR mirror section for the new mirrored tables + surface update.
+
 ### Added — Funnels from lead_journey, sliceable by channel (deliverable 3)
 
 - **Discovery:** CI's own `funnel_events`/`funnel_stats` tables are empty —

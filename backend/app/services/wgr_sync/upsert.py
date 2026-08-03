@@ -38,6 +38,7 @@ from app.models.marketing import AttributionTaxonomy, LeadEngagement
 from app.models.meta_ads import MetaAd, MetaAdPerformance, MetaCampaign
 from app.models.intelligence import (
     BusinessProfile, InsightTag, MarketSignal, Offer, TagDictionary,
+    WgrOffer, WgrOfferMapping,
 )
 from app.models.operational import Appointment, ContentIdea, Insight, Lead, LeadJourney, Call
 from app.models.sales import (
@@ -670,6 +671,7 @@ async def _sync_snapshot_reconcile(
     session: AsyncSession, *, wgr_table: str, model, pk_attr: str,
     wgr_pk: str, map_fn: Callable[[dict], Optional[dict]],
     raw_invalid_fn: Optional[Callable[[dict], bool]] = None,
+    raw_keep_fn: Optional[Callable[[dict], Any]] = None,
     page_size: int = 10_000,
 ) -> int:
     """Full-snapshot mirror WITH delete-reconciliation, count-guarded.
@@ -690,6 +692,15 @@ async def _sync_snapshot_reconcile(
     step. A read failure raises out of reader/wgr_client, aborting before any
     reconciliation. A successful, count-confirmed pull of 0 rows empties CI
     only through the breaker override (wipe case).
+
+    ``wgr_pk`` doubles as (a) the column checked for null (skip that row) and
+    (b) — by default — the raw-form value added to ``keep_ids``. Every caller
+    except ``wgr_offer_mappings`` has ``wgr_pk == pk_attr`` (a true 1:1
+    upstream/CI key), so the raw value IS the keep-id. ``offer_mappings`` has
+    no single-column upstream PK — its CI ``pk_attr`` (``id``) is a composite
+    of three columns. ``raw_keep_fn``, when given, computes the raw-form
+    keep-id from the whole row instead of ``raw[wgr_pk]`` — everything else
+    (null-check column, mapper skip/invalidate accounting) is unchanged.
     """
     keep_ids: set = set()   # raw AND mapped PK forms — anything here survives
     rows: list[dict[str, Any]] = []
@@ -710,7 +721,7 @@ async def _sync_snapshot_reconcile(
             # (distinct from mapper-skip below).
             invalidated += 1
             continue
-        keep_ids.add(raw[wgr_pk])
+        keep_ids.add(raw_keep_fn(raw) if raw_keep_fn is not None else raw[wgr_pk])
         m = map_fn(raw)
         if m is None:
             skipped += 1
@@ -845,6 +856,30 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
         session, wgr_table="lead_journey", model=LeadJourney,
         pk_attr="lead_id", wgr_pk="lead_id", map_fn=mapping.map_lead_journey,
         page_size=50_000,
+    )
+    # 4c. wgr_offers / wgr_offer_mappings (deliverable 5) — the real WGR
+    # product catalog, distinct from the app-CRUD `offers` table (test data,
+    # untouched). Tiny tables (11 + 15 rows) — default page_size is fine.
+    # offer_mappings has no upstream PK, so map_wgr_offer_mapping builds a
+    # deterministic composite id from (program, payment_level, offer_id),
+    # verified unique across all 15 rows.
+    counts["wgr_offers"] = await _sync_snapshot_reconcile(
+        session, wgr_table="offers", model=WgrOffer,
+        pk_attr="offer_id", wgr_pk="offer_id", map_fn=mapping.map_wgr_offer,
+    )
+    counts["wgr_offer_mappings"] = await _sync_snapshot_reconcile(
+        session, wgr_table="offer_mappings", model=WgrOfferMapping,
+        pk_attr="id", wgr_pk="offer_id", map_fn=mapping.map_wgr_offer_mapping,
+        # offer_mappings has no single-column upstream PK; wgr_pk="offer_id"
+        # only serves the null-check (a row with no offer_id is unusable).
+        # raw_keep_fn recomputes the SAME composite key map_wgr_offer_mapping
+        # builds, from the raw row — keeping deletion in sync with the
+        # mapper's actual CI identity instead of the (colliding) raw offer_id.
+        raw_keep_fn=lambda raw: (
+            f"{(raw.get('program') or '').strip()}|"
+            f"{(raw.get('payment_level') or '').strip()}|"
+            f"{(raw.get('offer_id') or '').strip()}"
+        ),
     )
     # 5. (source, external_id)-deduped marketing/social mirrors.
     for wgr_table, model, map_fn in _SOURCE_EXTERNAL_PLAN:

@@ -86,3 +86,43 @@ class OfferTaskStatusResponse(BaseModel):
     task_id: str
     status: str
     result: Optional[Any] = None
+
+
+# ---------------------------------------------------------------------------
+# GET /offers/catalog — real WGR offer catalog + revenue (deliverable 5)
+# ---------------------------------------------------------------------------
+
+
+class OfferCatalogItem(BaseModel):
+    """One real offer (or the synthetic 'Unattributed' row) with its
+    closed-sales rollup."""
+
+    offer_id: Optional[str] = None
+    name: Optional[str] = None
+    offer_type: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    status: Optional[str] = None
+    url: Optional[str] = None
+    sales_count: int = 0
+    revenue: float = 0.0
+
+
+class OfferPaymentLevelRow(BaseModel):
+    """One (program, payment_level) row from wgr_offer_mappings."""
+
+    program: Optional[str] = None
+    payment_level: Optional[str] = None
+    offer_id: Optional[str] = None
+    amount_collected: float = 0.0
+    revenue_earned: float = 0.0
+
+
+class OfferCatalogResponse(BaseModel):
+    """Response for GET /api/v1/offers/catalog."""
+
+    offers: list[OfferCatalogItem] = []
+    payment_levels: list[OfferPaymentLevelRow] = []
+    total_revenue: float = 0.0
+    total_sales_count: int = 0
+    generated_at: str = ""

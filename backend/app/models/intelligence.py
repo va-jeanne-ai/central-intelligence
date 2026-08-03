@@ -107,7 +107,14 @@ class MarketSignal(Base):
 
 
 class Offer(Base):
-    """Product or service offer available in the business catalog."""
+    """Product or service offer available in the business catalog.
+
+    NOTE: this table is the app's own CRUD catalog (see
+    ``backend/app/routes/offers.py`` — POST creates rows here) and today
+    holds 18 rows of test data ("This is a new offer", "just checking") —
+    the real WGR offers were never synced into it. Deliberately left alone
+    (never clobbered) so the create/edit CRUD flow keeps working; the real
+    synced catalog lives in ``WgrOffer``/``WgrOfferMapping`` below."""
 
     __tablename__ = "offers"
 
@@ -124,6 +131,47 @@ class Offer(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class WgrOffer(Base):
+    """Mirror of WGR's real `offers` table (11 rows: e.g. "Agent Infopreneur
+    Accelerator - PIF" / Coaching / $10,000 / Active). Distinct from the
+    app-CRUD `Offer` above — this is the real product catalog, synced
+    read-only via snapshot reconcile (same precedent as `LeadJourney` /
+    `MetaCampaign`: upstream is small and can be fully re-read each run).
+    `closed_sales.offer_id` references this table's `offer_id` (plain string
+    join, no FK — mirror data, consistent with the rest of the WGR mirrors)."""
+
+    __tablename__ = "wgr_offers"
+
+    offer_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    offer_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WgrOfferMapping(Base):
+    """Mirror of WGR's `offer_mappings` (15 rows): per-program payment-level
+    rows (e.g. program='accelerator', payment_level='pif') pointing at a
+    `WgrOffer.offer_id`, carrying the per-payment-level amount_collected /
+    revenue_earned. No upstream primary key — `(program, payment_level,
+    offer_id)` is verified unique across all 15 rows (probe 2026-08-04), so
+    that composite is used as the CI primary key for snapshot reconcile."""
+
+    __tablename__ = "wgr_offer_mappings"
+
+    id: Mapped[str] = mapped_column(String(384), primary_key=True)
+    program: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payment_level: Mapped[str | None] = mapped_column(Text, nullable=True)
+    offer_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    amount_collected: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    revenue_earned: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class BusinessProfile(Base):

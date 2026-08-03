@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/intelligence.py": {
-    "mtime": 1781097170.7880065,
-    "ast_hash": "cddfb606b710f005cfac354866ea215f",
+    "mtime": 1785773842.0125604,
+    "ast_hash": "130b9dd4df51200354f4d7f96e7dc4de",
     "semantic_hash": ""
   },
   "backend/app/models/marketing.py": {
@@ -500,8 +500,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/offers.py": {
-    "mtime": 1775888180.0,
-    "ast_hash": "276238ff5843382f341a31340f8697af",
+    "mtime": 1785774217.7180226,
+    "ast_hash": "3eb44772315c318a501d18943df2b3de",
     "semantic_hash": ""
   },
   "backend/app/routes/promo_calendar.py": {
@@ -595,8 +595,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/offers.py": {
-    "mtime": 1779281814.205593,
-    "ast_hash": "631af525cbcb9cbf2c62f0c81a32f887",
+    "mtime": 1785774188.0538857,
+    "ast_hash": "707dd0d349a33b9ccab4ddc1871bd42a",
     "semantic_hash": ""
   },
   "backend/app/schemas/promo_calendar.py": {
@@ -980,8 +980,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/offers/page.tsx": {
-    "mtime": 1784046104.3501549,
-    "ast_hash": "30c5e7c7a3f5646d06d0f839d12ec842",
+    "mtime": 1785774302.0694175,
+    "ast_hash": "c369f29859d8e2628a104cbe16b9afed",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/page.tsx": {
@@ -1370,8 +1370,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1785773693.2692382,
-    "ast_hash": "625f007c1bb99de98dede61e653f2d08",
+    "mtime": 1785774381.8230383,
+    "ast_hash": "443d2ab85173bfc6bf23a825ca62e4c3",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1380,13 +1380,13 @@
     "semantic_hash": ""
   },
   "FEATURE-VERIFICATION.md": {
-    "mtime": 1785773673.668216,
-    "ast_hash": "88516363ac919365763e25393697c112",
+    "mtime": 1785774424.9608111,
+    "ast_hash": "ffd97f431a9f039edfde7ead1c43e4ca",
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1785773710.0162122,
-    "ast_hash": "753d7da052fb259a366d32d2e6523a2e",
+    "mtime": 1785774450.828181,
+    "ast_hash": "14f9b94bf69fb38b50b741f822f1201f",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
@@ -1960,8 +1960,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/mapping.py": {
-    "mtime": 1785768061.7070668,
-    "ast_hash": "0d84eee76afa2195ad3f71272c599136",
+    "mtime": 1785773957.1746624,
+    "ast_hash": "71d1ea37e1528e65f2c9a0f792ca1816",
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/reader.py": {
@@ -1970,8 +1970,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/upsert.py": {
-    "mtime": 1785768061.7072945,
-    "ast_hash": "d9ba0645388f370ba0d1a85d6c6fdbf1",
+    "mtime": 1785774047.9889593,
+    "ast_hash": "3cb8ac21031710be935b748bb7773052",
     "semantic_hash": ""
   },
   "backend/app/tasks/metric_snapshots.py": {
@@ -2744,11 +2744,6 @@
     "ast_hash": "7c981453a11fcf57d2290f6897dea784",
     "semantic_hash": ""
   },
-  "backend/alembic/versions/c0d1e2f3a4b5_add_lead_journey_mirror 2.py": {
-    "mtime": 1785766783.0,
-    "ast_hash": "7c981453a11fcf57d2290f6897dea784",
-    "semantic_hash": ""
-  },
   "backend/tests/test_revenue_by_channel_breakdown.py": {
     "mtime": 1785770437.860492,
     "ast_hash": "6d00eb9b4f0bd56acad14ed97ca60024",
@@ -2772,6 +2767,21 @@
   "backend/tests/test_funnel_stats.py": {
     "mtime": 1785773359.4575946,
     "ast_hash": "8530b754b1ffa1ea739d93c9d252d323",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/e79cc79ec06b_add_wgr_offers_mirror.py": {
+    "mtime": 1785773921.9654624,
+    "ast_hash": "94fc16adf092ea479279074bdd41df06",
+    "semantic_hash": ""
+  },
+  "backend/app/repositories/offer_stats.py": {
+    "mtime": 1785774150.2634535,
+    "ast_hash": "befc2dc92ebcb531fc1549fa9d5f828f",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_offer_stats.py": {
+    "mtime": 1785774171.5228174,
+    "ast_hash": "aaef7b925c3eefacb32602246acceca0",
     "semantic_hash": ""
   }
 }
