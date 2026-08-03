@@ -18,6 +18,7 @@ from app.database import get_session
 from app.repositories.appointment_stats import compute_appointment_stats
 from app.repositories.sales_stats import (
     compute_lead_stats,
+    compute_revenue_by_channel,
     get_recent_insights,
     get_top_pain_points,
 )
@@ -42,6 +43,7 @@ async def get_sales_summary(
     """Aggregate and return sales department metrics."""
 
     stats = await compute_lead_stats(session)
+    revenue_by_channel = await compute_revenue_by_channel(session)
     pain_points = await get_top_pain_points(session, limit=10)
     recent_insights = await get_recent_insights(session, limit=10)
     appt = await compute_appointment_stats(session)
@@ -53,6 +55,11 @@ async def get_sales_summary(
         "lead_volume": stats["lead_volume"],
         "source_breakdown": stats["source_breakdown"],
         "funnel": stats["funnel"],
+        # Revenue-by-channel (deliverable 9b) — closed_sales revenue attributed
+        # to marketing channel, scoped by close_date. Unscoped here (matches
+        # the rest of this summary, which reports all-time); raw dict list,
+        # same passthrough idiom as the other stats keys above.
+        "revenue_by_channel": revenue_by_channel,
         "pain_points": pain_points,
         "recent_insights": recent_insights,
         # Real booked-appointment counts (the funnel's "Appointments" stage

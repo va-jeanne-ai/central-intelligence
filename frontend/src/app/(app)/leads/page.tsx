@@ -49,6 +49,20 @@ interface LeadsStatsResponse {
     percentage: number;
   }[];
   funnel: { stage: string; count: number; percentage: number }[];
+  // Revenue-by-channel (deliverable 9b) — closed_sales revenue attributed to
+  // marketing channel, scoped by close_date via the SAME entry_from/entry_to
+  // params this page already sends (see backend get_leads_stats docstring
+  // for why: one coherent date filter for both the lead funnel and revenue).
+  // Same bucket labels as source_breakdown.channel, different axis (revenue
+  // + sales_count, not lead count).
+  revenue_by_channel: {
+    channel: string;
+    platform: string | null;
+    reportable: boolean;
+    sales_count: number;
+    revenue: number;
+    revenue_percentage: number;
+  }[];
   // Distinct provenance `source` values present in the DB (lowercased,
   // count-desc). Part of the API contract; the list UI no longer renders a
   // Source filter (Channel is the meaningful axis), so this is currently
@@ -122,6 +136,7 @@ const EMPTY_STATS: LeadsStatsResponse = {
   lead_volume: [],
   source_breakdown: [],
   funnel: [],
+  revenue_by_channel: [],
   available_sources: [],
 };
 
@@ -531,6 +546,91 @@ function SourceDonutChart({
             ))
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Revenue by Channel ───────────────────────────────────────────────────────
+
+function formatRevenue(n: number): string {
+  return `$${Math.round(n).toLocaleString("en-US")}`;
+}
+
+function RevenueByChannelCard({
+  rows,
+}: {
+  rows: {
+    channel: string;
+    platform: string | null;
+    reportable: boolean;
+    sales_count: number;
+    revenue: number;
+    revenue_percentage: number;
+  }[];
+}) {
+  const totalRevenue = rows.reduce((sum, r) => sum + r.revenue, 0);
+  const totalSales = rows.reduce((sum, r) => sum + r.sales_count, 0);
+
+  // Hidden/quiet empty state — no sales in the selected range is a normal,
+  // expected outcome (not an error), so this renders a muted one-liner
+  // rather than a loud "no data" block matching the donut's empty pattern.
+  if (rows.length === 0) {
+    return (
+      <div
+        className="bg-white rounded-xl border border-gray-200 shadow-sm p-5"
+        aria-label="Revenue by channel"
+      >
+        <h2 className="text-sm font-bold text-gray-900 mb-1">Revenue by Channel</h2>
+        <p className="text-xs text-gray-400">No closed sales in this range.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="bg-white rounded-xl border border-gray-200 shadow-sm p-5"
+      aria-label="Revenue by channel breakdown"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-bold text-gray-900">Revenue by Channel</h2>
+        <span className="text-xs text-gray-400">
+          {formatRevenue(totalRevenue)} · {totalSales.toLocaleString()} sales
+        </span>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {rows.map((row, i) => {
+          const label = channelLabel(row.channel);
+          const color = colorForSource(label);
+          return (
+            <div key={`${row.channel}-${i}`} className="flex items-center gap-3">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 min-w-0 max-w-[40%] ${channelBadgeClasses(row.channel)}`}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="truncate">{label}</span>
+              </span>
+              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden min-w-[40px]">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${row.revenue_percentage}%`, backgroundColor: color }}
+                />
+              </div>
+              <span className="text-xs text-gray-400 tabular-nums w-14 text-right flex-shrink-0">
+                {row.sales_count} {row.sales_count === 1 ? "sale" : "sales"}
+              </span>
+              <span className="text-xs font-bold text-gray-900 tabular-nums w-20 text-right flex-shrink-0">
+                {formatRevenue(row.revenue)}
+              </span>
+              <span className="text-xs text-gray-400 tabular-nums w-10 text-right flex-shrink-0">
+                {row.revenue_percentage.toFixed(1)}%
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1371,6 +1471,12 @@ export default function LeadsPage() {
             />
           </div>
         )}
+
+        {/* Revenue by Channel — closed-sales revenue attributed to marketing
+            channel (deliverable 9b), scoped by the same date range as the
+            charts above. Its own full-width row below the donut/volume
+            charts keeps each channel row legible (chip + bar + counts). */}
+        {!isLoading && <RevenueByChannelCard rows={stats.revenue_by_channel} />}
 
         {/* Sales Funnel */}
         {isLoading ? (

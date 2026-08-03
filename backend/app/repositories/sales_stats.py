@@ -22,7 +22,7 @@ from datetime import date
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.attribution import build_resolver, summarize_channels
+from app.services.attribution import bucket_channel_combos, build_resolver, summarize_channels
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,179 @@ def _channel_buckets_to_breakdown(buckets: list[dict]) -> list[dict]:
         )
     breakdown.sort(key=lambda item: (-item["count"], item["channel"]))
     return breakdown
+
+
+# ---------------------------------------------------------------------------
+# Revenue-by-channel aggregation (deliverable 9b — sales half of Source
+# Attribution; the leads half already lives in _channel_buckets_to_breakdown)
+# ---------------------------------------------------------------------------
+
+
+def _float(value: object) -> float:
+    """Return value as float, falling back to 0.0 for None or non-numeric values."""
+    try:
+        return float(value) if value is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _revenue_buckets_to_breakdown(buckets: list[dict]) -> list[dict]:
+    """Turn revenue-scoped channel buckets into the response dicts
+    ``compute_revenue_by_channel`` returns.
+
+    Mirrors ``_channel_buckets_to_breakdown``'s shape/ordering contract but
+    aggregates ``revenue`` (sum of ``amount_collected``) and ``sales_count``
+    instead of a plain lead count — the two surfaces intentionally diverge
+    here since a "count" of leads and a "count" of sales are different axes.
+
+    Pure function — no DB — so it is unit-testable with fake bucket lists.
+    Input buckets: list of dicts with channel/platform/reportable/revenue/
+    sales_count. Percentages are 1-dp shares of total revenue (not sales
+    count) since this is a revenue breakdown. Sorted revenue desc, tie-broken
+    by channel name ascending, for the same shuffle-avoidance reason
+    documented on ``_channel_buckets_to_breakdown``.
+    """
+    total_revenue = sum(_float(b.get("revenue")) for b in buckets)
+    breakdown: list[dict] = []
+    for b in buckets:
+        revenue = round(_float(b.get("revenue")), 2)
+        pct = round((revenue / total_revenue * 100), 1) if total_revenue > 0 else 0.0
+        breakdown.append(
+            {
+                "channel": b["channel"],
+                "platform": b.get("platform"),
+                "reportable": b.get("reportable", True),
+                "sales_count": _int(b.get("sales_count")),
+                "revenue": revenue,
+                "revenue_percentage": pct,
+            }
+        )
+    breakdown.sort(key=lambda item: (-item["revenue"], item["channel"]))
+    return breakdown
+
+
+async def compute_revenue_by_channel(
+    session: AsyncSession,
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict]:
+    """Aggregate closed-sales revenue into the same channel buckets the lead
+    source_breakdown uses, scoped by ``closed_sales.close_date`` (NOT
+    ``leads.entry_date`` — a different axis: when the deal closed, not when
+    the lead entered the funnel).
+
+    ``closed_sales`` (not ``lead_journey``, which mirrors a disagreeing
+    total) is the revenue source of truth — same table the existing avg
+    deal value KPI reads. Joins to ``leads`` via ``external_id`` first (the
+    join that covers all 83 closed sales today), falling back to
+    ``ghl_contact_id`` for email-merged leads (same join contract as
+    lead_engagements/lead_journey — see their docstrings). A closed sale
+    whose lead row can't be found at all (neither join hits) still counts
+    toward revenue — it just carries all-null UTMs, which
+    ``bucket_channel_combos`` buckets as "No attribution".
+
+    Returns a list of dicts (mirrors ``source_breakdown``'s plain-dict
+    contract so both the /sales/summary and /leads/stats routes can consume
+    it directly):
+
+        [{"channel": str, "platform": str | None, "reportable": bool,
+          "sales_count": int, "revenue": float, "revenue_percentage": float}, ...]
+
+    Sorted revenue desc, channel name asc as tiebreak (see
+    ``_revenue_buckets_to_breakdown``).
+    """
+    range_sql = ""
+    params: dict[str, object] = {}
+
+    def _as_date(v: str | None) -> date | None:
+        if not v:
+            return None
+        try:
+            return date.fromisoformat(v)
+        except ValueError:
+            return None
+
+    d_from, d_to = _as_date(date_from), _as_date(date_to)
+    if d_from is not None:
+        range_sql += " AND cs.close_date >= :date_from"
+        params["date_from"] = d_from
+    if d_to is not None:
+        range_sql += " AND cs.close_date <= :date_to"
+        params["date_to"] = d_to
+
+    # Two LEFT JOINs (external_id preferred, ghl_contact_id fallback) +
+    # COALESCE so every closed sale is represented exactly once even if
+    # only the fallback join hits, and still represented (with all-null
+    # UTMs) if neither join hits. Soft-deleted leads are excluded from
+    # both join targets so a deleted lead's row can't smuggle in real UTMs
+    # — it degrades to the same all-null "No attribution" treatment as a
+    # missing lead, which is the intended behavior (a deleted lead is not
+    # a reportable attribution source).
+    row = await session.execute(
+        text(
+            f"""
+            SELECT
+                COALESCE(l_ext.utm_source_first,  l_ghl.utm_source_first)  AS utm_source_first,
+                COALESCE(l_ext.utm_medium_first,  l_ghl.utm_medium_first)  AS utm_medium_first,
+                COALESCE(l_ext.utm_content_first, l_ghl.utm_content_first) AS utm_content_first,
+                COALESCE(l_ext.utm_source_last,   l_ghl.utm_source_last)   AS utm_source_last,
+                COALESCE(l_ext.utm_medium_last,   l_ghl.utm_medium_last)   AS utm_medium_last,
+                COALESCE(l_ext.utm_content_last,  l_ghl.utm_content_last)  AS utm_content_last,
+                SUM(cs.amount_collected) AS revenue,
+                COUNT(*) AS sales_count
+            FROM closed_sales cs
+            LEFT JOIN leads l_ext
+                   ON l_ext.external_id = cs.lead_id
+                  AND l_ext.deleted_at IS NULL
+            LEFT JOIN leads l_ghl
+                   ON l_ghl.ghl_contact_id = cs.ghl_contact_id
+                  AND l_ghl.deleted_at IS NULL
+                  AND cs.ghl_contact_id IS NOT NULL
+            WHERE 1=1{range_sql}
+            GROUP BY 1, 2, 3, 4, 5, 6
+            """
+        ),
+        params,
+    )
+    combo_rows = row.fetchall()
+
+    taxonomy_rows = (await session.execute(text("SELECT * FROM attribution_taxonomy"))).fetchall()
+    resolver = build_resolver(taxonomy_rows)
+
+    combos = [
+        (r[0], r[1], r[2], r[3], r[4], r[5], _int(r[7])) for r in combo_rows
+    ]
+    mapping, _buckets = bucket_channel_combos(combos, resolver)
+
+    # bucket_channel_combos aggregates a plain lead/row *count* per bucket —
+    # for revenue we need to re-aggregate ourselves using the returned
+    # combo->label mapping so we sum amount_collected (not sales_count) per
+    # bucket, while still reusing the exact same bucketing rules/labels.
+    revenue_buckets: dict[str, dict] = {}
+    for r in combo_rows:
+        key = (r[0], r[1], r[2], r[3], r[4], r[5])
+        label = mapping.get(key, "No attribution")
+        revenue = _float(r[6])
+        sales_count = _int(r[7])
+        if label in revenue_buckets:
+            revenue_buckets[label]["revenue"] += revenue
+            revenue_buckets[label]["sales_count"] += sales_count
+        else:
+            # platform/reportable for a bucket are constant across every
+            # combo that maps to it (bucket_channel_combos resolves a single
+            # channel/platform/reportable triple per bucket label), so it's
+            # safe to look them up from the count-bucket for this label.
+            src_bucket = next((b for b in _buckets if b["channel"] == label), {})
+            revenue_buckets[label] = {
+                "channel": label,
+                "platform": src_bucket.get("platform"),
+                "reportable": src_bucket.get("reportable", True),
+                "revenue": revenue,
+                "sales_count": sales_count,
+            }
+
+    return _revenue_buckets_to_breakdown(list(revenue_buckets.values()))
 
 
 # ---------------------------------------------------------------------------

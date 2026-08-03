@@ -578,6 +578,12 @@ lead detail showing raw first/last-touch UTMs. `/sales/summary` inherits the
 same breakdown since it shares `compute_lead_stats` with `/leads/stats`.
 Channel is computed per-request, never stored.
 
+**Sales half (deliverable 9b, added 2026-08-03):** `/leads` also gains a
+**Revenue by Channel** card — `closed_sales.amount_collected` attributed to
+the same canonical channel buckets, scoped by `close_date` via the page's
+existing date-range filter. `GET /sales/summary` gains an unscoped
+`revenue_by_channel` key with the same shape.
+
 **How to locate:**
 - **`/leads`** — the main Leads Dashboard.
 - **`/leads/{lead_id}`** — click any row from the leads list to open detail.
@@ -647,16 +653,44 @@ behavior, not a bug.
    its breakdown list uses the same channel buckets as `/leads/stats` —
    canonical channels, `"No attribution"`, `"Non-marketing"`, and
    `unmapped:*` — with counts summing to the endpoint's total.
+8. **Revenue by Channel (deliverable 9b).** On `/leads`, scroll below the
+   Source Breakdown donut and confirm a **Revenue by Channel** card renders:
+   each row shows a channel chip (same styling as the table's Channel
+   column — amber for `unmapped:*`/`"other unmapped"`), a sales count, a
+   dollar revenue figure (no decimals), and a % share of the range's total
+   revenue. The card header shows the total revenue + sales count for the
+   selected date range.
+9. Clear all filters/date range (or set the range to "All time") and
+   confirm the card's total revenue reads **$471,250** across **83 sales**
+   — this is `closed_sales.amount_collected` summed across every closed
+   sale, the revenue source of truth (the `lead_journey` mirror disagrees
+   at $422,750; that's a known, un-reconciled discrepancy — `closed_sales`
+   is authoritative). Confirm `"No attribution"` is the largest bucket by
+   revenue (only 11 of the 83 buying leads carry any UTMs) — that is
+   expected, not a bug.
+10. Narrow the date range to a smaller window (e.g. one month) and confirm
+   the card's total revenue and sales count both drop to a subset of the
+   all-time figures, and the row set only shows channels with sales in that
+   window (or the card shows its quiet "No closed sales in this range"
+   empty state if none fall inside it).
+11. Call `GET /api/v1/leads/stats` directly and confirm the JSON includes a
+   `revenue_by_channel` array with `channel`, `platform`, `reportable`,
+   `sales_count`, `revenue`, and `revenue_percentage` keys per bucket, and
+   that `GET /sales/summary`'s `revenue_by_channel` (unscoped) sums to the
+   same $471,250 / 83 sales as step 9.
 
 **Pass:** Channel column + chips render on `/leads` with amber tint on
 unmapped entries; donut segments are canonical channels summing to the
 total; Channel filter narrows the loaded rows; Attribution card shows raw
 UTMs + channel on leads with data and is absent (not empty) on leads
 without; `/sales` still redirects to `/leads`; `/sales/summary` and
-`/leads/stats` share the same bucket set. **Fail:** any of the above missing,
-chip colors not distinguishing unmapped from mapped channels, donut/filter
-counts not summing to the total, or `/sales/summary` diverging from
-`/leads/stats`'s bucket shape.
+`/leads/stats` share the same bucket set; Revenue by Channel card renders
+with all-time totals of $471,250 / 83 sales, "No attribution" dominant, and
+a scoped date range narrows both figures to a subset. **Fail:** any of the
+above missing, chip colors not distinguishing unmapped from mapped
+channels, donut/filter counts not summing to the total, `/sales/summary`
+diverging from `/leads/stats`'s bucket shape, or the Revenue by Channel
+totals not matching $471,250 / 83 sales unscoped.
 
 ## Marketing — Ads (real data) (2026-08-03)
 

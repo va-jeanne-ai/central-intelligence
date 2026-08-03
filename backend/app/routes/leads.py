@@ -42,7 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.repositories.list_filters import API_TO_DB_STATUSES, build_lead_where
-from app.repositories.sales_stats import compute_lead_stats
+from app.repositories.sales_stats import compute_lead_stats, compute_revenue_by_channel
 from app.schemas.appointments import AppointmentRecord, LeadAppointmentsResponse
 from app.schemas.leads import (
     ConversationMessageRow,
@@ -71,6 +71,7 @@ from app.schemas.leads import (
     LeadTagsResponse,
     LeadVolumePoint,
     NoteRow,
+    RevenueByChannelItem,
     SourceBreakdownItem,
     UpdateLeadRequest,
 )
@@ -381,13 +382,27 @@ async def get_leads_stats(
     KPI / volume / source / funnel aggregation has a single source of truth
     shared with the Sales department surfaces. This route just adapts the
     plain dict into the ``LeadsStatsResponse`` schema the frontend expects.
+
+    ``revenue_by_channel`` (deliverable 9b) is computed separately via
+    ``compute_revenue_by_channel`` — deliberately NOT folded into
+    ``compute_lead_stats``, because it scopes on a different date axis
+    (``closed_sales.close_date``, not ``leads.entry_date``). We reuse this
+    route's ``entry_from``/``entry_to`` params as the close_date range so the
+    page's single date filter coherently scopes both the lead funnel/KPIs
+    AND the revenue breakdown at once — the alternative (two independent
+    date filters on one page) would be confusing UX for a marginal semantic
+    gain, and Greg's brief explicitly calls for this scoping choice.
     """
     data = await compute_lead_stats(session, date_from=entry_from, date_to=entry_to)
+    revenue_by_channel = await compute_revenue_by_channel(
+        session, date_from=entry_from, date_to=entry_to
+    )
 
     kpis = LeadsKpiResponse(**data["kpis"])
     lead_volume = [LeadVolumePoint(**p) for p in data["lead_volume"]]
     source_breakdown = [SourceBreakdownItem(**s) for s in data["source_breakdown"]]
     funnel = [FunnelStage(**f) for f in data["funnel"]]
+    revenue_by_channel_items = [RevenueByChannelItem(**r) for r in revenue_by_channel]
 
     # Distinct provenance sources actually present — feeds the Source filter
     # dropdown. Deliberately NOT scoped by entry_from/entry_to: applying a date
@@ -409,6 +424,7 @@ async def get_leads_stats(
         lead_volume=lead_volume,
         source_breakdown=source_breakdown,
         funnel=funnel,
+        revenue_by_channel=revenue_by_channel_items,
         available_sources=available_sources,
     )
 

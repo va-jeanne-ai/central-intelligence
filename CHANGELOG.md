@@ -6,6 +6,46 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Revenue by channel for closed sales (deliverable 9b — sales half of Source Attribution)
+
+Completes the "Leads & Sales — Source Attribution" deliverable: leads got
+channel attribution 2026-08-03 (see the read-time channel entries below);
+this adds the SALES half — revenue attributed to marketing channel.
+
+- **New `compute_revenue_by_channel`** (`backend/app/repositories/sales_stats.py`)
+  — aggregates `closed_sales.amount_collected` (the revenue source of truth;
+  existing sales KPIs already read it) into the same canonical channel
+  buckets `bucket_channel_combos` produces for leads, scoped by
+  `close_date` (optional `date_from`/`date_to`). Joins `closed_sales` to
+  `leads` via `external_id` first (covers all 83 closed sales today), with
+  a `ghl_contact_id` fallback for email-merged leads — same join contract
+  as `lead_engagements`/`lead_journey`. A closed sale whose lead row can't
+  be found at all still counts toward revenue, bucketed as `"No
+  attribution"`. Verified read-only against the live DB: unscoped buckets
+  sum to **$471,250 across 83 sales**; only 11 of those 83 buying leads
+  carry any UTMs, so `"No attribution"` is the dominant bucket (~79% of
+  revenue) by design, not a bug — `closed_sales` disagrees with the
+  `lead_journey` mirror's total ($422,750); per the discovery brief we do
+  not reconcile that here and treat `closed_sales` as authoritative.
+- **New `GET /sales/summary`** key `revenue_by_channel` (unscoped) and new
+  `GET /leads/stats` field `revenue_by_channel` (`RevenueByChannelItem` in
+  `backend/app/schemas/leads.py`), scoped by the route's existing
+  `entry_from`/`entry_to` params applied to `close_date` — a deliberate
+  choice (documented in `get_leads_stats`) so the page's one date filter
+  coherently scopes both the lead funnel and the revenue breakdown, even
+  though revenue's real date axis is `close_date`, not `entry_date`.
+- **Frontend** (`frontend/src/app/(app)/leads/page.tsx`) — new "Revenue by
+  Channel" card below the Source Breakdown donut: channel chip (reusing
+  `channelLabel`/`channelBadgeClasses`, amber for unmapped dialects), sales
+  count, revenue (formatted, no decimals), and a % bar. Header shows total
+  revenue + sales count for the selected range. Quiet empty state when no
+  sales fall in range.
+- **Tests:** `backend/tests/test_revenue_by_channel_breakdown.py` — pure
+  no-DB tests for `_revenue_buckets_to_breakdown` (bucket merge, revenue
+  sums preserved, deterministic ordering) plus an integration-lite test
+  exercising the real `bucket_channel_combos` mapping re-aggregation,
+  including the missing-lead → `"No attribution"` case.
+
 ### Changed — Ads page rebuilt from real Meta Ads mirror data (deliverable 4)
 
 `/marketing/ads` no longer shows the hardcoded platform-breakdown widget

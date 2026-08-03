@@ -125,6 +125,32 @@ class FunnelStage(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Stats — Revenue by channel (deliverable 9b — sales half of Source Attribution)
+# ---------------------------------------------------------------------------
+
+
+class RevenueByChannelItem(BaseModel):
+    """Closed-sales revenue attributed to a single canonical channel bucket.
+
+    Same bucket labels as ``SourceBreakdownItem.channel`` (canonical
+    channels, "No attribution", "Non-marketing", "unmapped:<src>/<med>",
+    "other unmapped") but a different axis: this aggregates
+    ``closed_sales.amount_collected``, not lead counts, and is scoped by
+    ``close_date`` rather than ``entry_date`` — see
+    ``compute_revenue_by_channel`` (app.repositories.sales_stats) for the
+    join contract and date-axis rationale. Defaults keep this field
+    Pydantic-safe if a caller ever constructs one from a sparse dict.
+    """
+
+    channel: str = ""
+    platform: str | None = None
+    reportable: bool = True
+    sales_count: int = 0
+    revenue: float = 0.0
+    revenue_percentage: float = 0.0
+
+
+# ---------------------------------------------------------------------------
 # Composite stats response
 # ---------------------------------------------------------------------------
 
@@ -136,6 +162,11 @@ class LeadsStatsResponse(BaseModel):
     lead_volume: list[LeadVolumePoint] = Field(default_factory=list)
     source_breakdown: list[SourceBreakdownItem] = Field(default_factory=list)
     funnel: list[FunnelStage] = Field(default_factory=list)
+    # Revenue-by-channel (deliverable 9b). Scoped by the SAME entry_from/
+    # entry_to params as close_date (not entry_date) — see get_leads_stats
+    # for why this is a deliberate choice, not a bug. Defaults to [] so this
+    # field is never absent even if compute_revenue_by_channel returns early.
+    revenue_by_channel: list[RevenueByChannelItem] = Field(default_factory=list)
     # Distinct provenance `leads.source` values present in the table (lowercased,
     # count-desc). Drives the frontend Source filter dropdown so its options
     # always reflect real data (e.g. 'wgr') instead of a hardcoded enum. NOT
