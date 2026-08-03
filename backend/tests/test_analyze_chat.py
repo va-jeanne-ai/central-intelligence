@@ -9,13 +9,22 @@ Anthropic calls — covers only:
 2. Prompt assembly (narrative.build_chat_system_prompt) — a pure function, so
    we can assert the aggregates JSON and filters echo actually land in the
    system prompt without calling the LLM.
+3. chat_view_analysis error branches (503/400/502) — no network; the
+   Anthropic client is monkeypatched to raise the SDK exception types
+   _call_claude_chat actually catches.
 """
 
 from __future__ import annotations
 
+import asyncio
+
+import httpx
+from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.analytics.view_analysis.narrative import build_chat_system_prompt
+import anthropic
+from app.analytics.view_analysis.narrative import build_chat_system_prompt, chat_view_analysis
+from app.config import settings
 from app.schemas.analyze import (
     MAX_CHAT_CONTENT_LEN,
     MAX_CHAT_MESSAGES,
@@ -142,6 +151,141 @@ def test_prompt_is_deterministic_pure_function() -> None:
     check("same inputs produce identical prompt", p1 == p2)
 
 
+def _run(coro):
+    return asyncio.run(coro)
+
+
+def test_chat_no_api_key_raises_503() -> None:
+    original = settings.anthropic_api_key
+    settings.anthropic_api_key = ""
+    try:
+        try:
+            _run(chat_view_analysis(
+                label="leads", filters_echo="none", aggregates={"row_count": 1},
+                messages=[{"role": "user", "content": "hi"}],
+            ))
+            check("missing API key raises", False)
+        except HTTPException as exc:
+            check("missing API key raises 503", exc.status_code == 503)
+    finally:
+        settings.anthropic_api_key = original
+
+
+def test_chat_empty_messages_raises_400() -> None:
+    original = settings.anthropic_api_key
+    settings.anthropic_api_key = "test-key"
+    try:
+        try:
+            _run(chat_view_analysis(
+                label="leads", filters_echo="none", aggregates={"row_count": 1},
+                messages=[],
+            ))
+            check("empty messages raises", False)
+        except HTTPException as exc:
+            check("empty messages raises 400", exc.status_code == 400)
+    finally:
+        settings.anthropic_api_key = original
+
+
+class _FakeMessages:
+    def __init__(self, exc: Exception | None = None, text: str = ""):
+        self._exc = exc
+        self._text = text
+
+    def create(self, **kwargs):
+        if self._exc is not None:
+            raise self._exc
+
+        class _Block:
+            def __init__(self, text):
+                self.text = text
+
+        class _Resp:
+            def __init__(self, text):
+                self.content = [_Block(text)]
+
+        return _Resp(self._text)
+
+
+class _FakeAnthropicClient:
+    def __init__(self, messages: _FakeMessages):
+        self.messages = messages
+
+
+def _patch_anthropic_client(exc: Exception | None = None, text: str = ""):
+    """Monkeypatch anthropic.Anthropic so _call_claude_chat's own `import
+    anthropic; anthropic.Anthropic(...)` returns a fake client — no network,
+    but the real except clauses in _call_claude_chat run against a real SDK
+    exception instance."""
+    fake_messages = _FakeMessages(exc=exc, text=text)
+    original_cls = anthropic.Anthropic
+    anthropic.Anthropic = lambda api_key=None: _FakeAnthropicClient(fake_messages)
+    return original_cls
+
+
+def _unpatch_anthropic_client(original_cls) -> None:
+    anthropic.Anthropic = original_cls
+
+
+def test_chat_connection_error_raises_502() -> None:
+    original_key = settings.anthropic_api_key
+    settings.anthropic_api_key = "test-key"
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    original_cls = _patch_anthropic_client(exc=anthropic.APIConnectionError(request=req))
+    try:
+        try:
+            _run(chat_view_analysis(
+                label="leads", filters_echo="none", aggregates={"row_count": 1},
+                messages=[{"role": "user", "content": "hi"}],
+            ))
+            check("APIConnectionError raises", False)
+        except HTTPException as exc:
+            check("APIConnectionError maps to 502", exc.status_code == 502)
+    finally:
+        _unpatch_anthropic_client(original_cls)
+        settings.anthropic_api_key = original_key
+
+
+def test_chat_api_status_error_raises_502() -> None:
+    original_key = settings.anthropic_api_key
+    settings.anthropic_api_key = "test-key"
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    resp = httpx.Response(500, request=req)
+    original_cls = _patch_anthropic_client(
+        exc=anthropic.APIStatusError("upstream error", response=resp, body=None)
+    )
+    try:
+        try:
+            _run(chat_view_analysis(
+                label="leads", filters_echo="none", aggregates={"row_count": 1},
+                messages=[{"role": "user", "content": "hi"}],
+            ))
+            check("APIStatusError raises", False)
+        except HTTPException as exc:
+            check("APIStatusError maps to 502", exc.status_code == 502)
+    finally:
+        _unpatch_anthropic_client(original_cls)
+        settings.anthropic_api_key = original_key
+
+
+def test_chat_empty_reply_raises_502() -> None:
+    original_key = settings.anthropic_api_key
+    settings.anthropic_api_key = "test-key"
+    original_cls = _patch_anthropic_client(text="   ")  # blank after strip()
+    try:
+        try:
+            _run(chat_view_analysis(
+                label="leads", filters_echo="none", aggregates={"row_count": 1},
+                messages=[{"role": "user", "content": "hi"}],
+            ))
+            check("empty reply raises", False)
+        except HTTPException as exc:
+            check("empty reply maps to 502", exc.status_code == 502)
+    finally:
+        _unpatch_anthropic_client(original_cls)
+        settings.anthropic_api_key = original_key
+
+
 def main() -> int:
     for fn in (
         test_valid_messages_pass_through,
@@ -157,6 +301,11 @@ def main() -> int:
         test_prompt_contains_surface_label,
         test_prompt_instructs_grounding_only,
         test_prompt_is_deterministic_pure_function,
+        test_chat_no_api_key_raises_503,
+        test_chat_empty_messages_raises_400,
+        test_chat_connection_error_raises_502,
+        test_chat_api_status_error_raises_502,
+        test_chat_empty_reply_raises_502,
     ):
         print(fn.__name__)
         fn()

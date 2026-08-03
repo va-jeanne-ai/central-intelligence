@@ -880,6 +880,22 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
             f"{(raw.get('payment_level') or '').strip()}|"
             f"{(raw.get('offer_id') or '').strip()}"
         ),
+        # raw_invalid_fn mirrors map_wgr_offer_mapping's actual invalid rule
+        # (all three of program/payment_level/offer_id null) so the two
+        # agree wherever raw_invalid_fn is reached. NOTE: the generic
+        # `raw.get(wgr_pk) is None` null-check above (wgr_pk="offer_id")
+        # still runs first and `continue`s before raw_invalid_fn is checked
+        # — so a row with offer_id=None but program/payment_level set would
+        # still be dropped here even though the mapper would accept it. No
+        # real row hits this today (probe 2026-08-04); documented rather than
+        # silently left to diverge, since fixing it needs a per-row null-key
+        # column this table doesn't have (see _sync_snapshot_reconcile's
+        # wgr_pk docstring) — restructuring that is out of scope here.
+        raw_invalid_fn=lambda raw: (
+            not (raw.get("program") or "").strip()
+            and not (raw.get("payment_level") or "").strip()
+            and not (raw.get("offer_id") or "").strip()
+        ),
     )
     # 5. (source, external_id)-deduped marketing/social mirrors.
     for wgr_table, model, map_fn in _SOURCE_EXTERNAL_PLAN:

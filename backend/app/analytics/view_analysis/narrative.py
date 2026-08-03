@@ -116,16 +116,30 @@ def build_chat_system_prompt(*, label: str, filters_echo: str, aggregates: dict)
 
 
 def _call_claude_chat(system_prompt: str, messages: list[dict], *, max_tokens: int) -> str:
-    """Sync Anthropic call for free-text chat replies (no JSON extraction)."""
+    """Sync Anthropic call for free-text chat replies (no JSON extraction).
+
+    Maps the SDK's own exception types to a 502 (upstream failure) — never lets
+    a raw APIConnectionError/APIStatusError escape as an unhandled 500, and
+    never swallows them into a misleading empty reply.
+    """
     import anthropic  # lazy import — large module, same convention as call_claude_for_json
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    response = client.messages.create(
-        model=settings.anthropic_model_default,
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=messages,
-    )
+    try:
+        response = client.messages.create(
+            model=settings.anthropic_model_default,
+            max_tokens=max_tokens,
+            system=system_prompt,
+            messages=messages,
+        )
+    except anthropic.APIConnectionError as exc:
+        raise HTTPException(
+            status_code=502, detail="Could not reach Anthropic — try again.",
+        ) from exc
+    except anthropic.APIStatusError as exc:
+        raise HTTPException(
+            status_code=502, detail="Analysis request failed upstream — try again.",
+        ) from exc
     return response.content[0].text
 
 

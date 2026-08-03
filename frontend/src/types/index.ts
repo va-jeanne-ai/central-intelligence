@@ -414,23 +414,6 @@ export interface SocialAnalyzeResponse {
 
 // ─── Offers ──────────────────────────────────────────────────────────────────
 
-export interface OfferItem {
-  offer_id: string;
-  name: string;
-  offer_type: string;
-  description: string | null;
-  /** null for custom-priced offers (e.g. "… - Custom" synced from WGR). */
-  price: number | null;
-  status: string;
-  url: string | null;
-  notes: string | null;
-}
-
-export interface OfferListResponse {
-  offers: OfferItem[];
-  total: number;
-}
-
 export interface OfferGenerateResponse {
   task_id: string;
   status: string;
