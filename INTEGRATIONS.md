@@ -158,6 +158,24 @@ Connection runs as the dedicated SELECT-only `ci_reader` Postgres role
 client). Open policy gap: these new tables are not yet embedded into the RAG
 vector store.
 
+**Read-time channel now surfaces in the UI (2026-08-03, ClickUp 86d3u65cb).**
+Channel is resolved per-request from `attribution_taxonomy` via
+[`backend/app/services/attribution.py`](backend/app/services/attribution.py)
+— never stored, so taxonomy edits retroactively change every surface below
+on the next page load:
+
+| Surface | What it shows |
+|---|---|
+| [`/leads`](frontend/src/app/(app)/leads/page.tsx) | New **Channel** column (hash-colored chip per canonical channel; amber tint for `unmapped:*`/"other unmapped") on every row; the source/channel breakdown donut now groups by resolved channel instead of raw `leads.source`; a client-side Channel filter in the FilterBar (channel isn't a stored column, so filtering can't push to the server). |
+| [`/leads/{id}`](frontend/src/app/(app)/leads/[lead_id]/page.tsx) | New full-width **Attribution** card showing first-touch and last-touch raw UTM rows plus the resolved channel chip; hidden entirely when all 8 UTM fields are null (most historical/pre-attribution leads). |
+| `GET /leads` + `GET /leads/{id}` | Response gains `channel` and 8 camelCase UTM fields (`utmSourceFirst` … `utmContentLast`). |
+| `GET /leads/stats` | Breakdown buckets are now canonical channels + `"No attribution"` + `"Non-marketing"` + `unmapped:*` (top-8, then `"other unmapped"`) instead of raw `leads.source` values; counts still sum to `total_leads`. |
+| [`/sales`](frontend/src/app/(app)/sales/page.tsx) → `GET /sales/summary` | `/sales` is a redirect to `/leads` (pre-existing); `/sales/summary` shares `compute_lead_stats` with `/leads/stats`, so it inherits the same channel breakdown automatically — this is a lead-count distribution ("lead channel mix"), not a revenue-by-channel breakdown (that's out of scope, tracked separately). |
+
+Coverage reality at ship time: of 12,656 `source='wgr'` leads, only ~87 have
+first-touch UTMs and ~2,447 have last-touch UTMs (~20%) — `"No attribution"`
+is expected to be the largest bucket by design, not a bug.
+
 ## Google Workspace (Gmail + Drive + Calendar + RAG) ✅
 
 **What it does today**

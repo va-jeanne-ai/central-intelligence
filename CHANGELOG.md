@@ -6,6 +6,47 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Lead & sales channel attribution UI (ClickUp 86d3u65cb)
+
+The Leads and Sales surfaces now show Greg's canonical marketing channel,
+resolved read-time from the WGR attribution mirror (previous entry) — no new
+tables, no stored derived state.
+
+- **`backend/app/services/attribution.py`** — pure `channel_for_lead` (per-row
+  resolution) and `summarize_channels` (breakdown bucketing with a top-8
+  `unmapped:*` cap + `"other unmapped"` overflow, so an unbounded UTM dialect
+  can't blow up the donut).
+- **`compute_lead_stats` breakdown** — groups the six UTM fields and resolves
+  canonical channel via the taxonomy; buckets are canonical channels,
+  `"No attribution"`, `"Non-marketing"` (rows with
+  `include_in_channel_reporting=false`), and `unmapped:*`. Each item carries
+  `{source, channel, platform, reportable, count, percentage}` (`source ===
+  channel` transitionally, for frontend compatibility). Counts sum to
+  `total_leads` (verified live: 12656 == 12656 across 14 buckets). **Both**
+  `GET /leads/stats` and `GET /sales/summary` inherit this breakdown, since
+  both read `compute_lead_stats`.
+- **`GET /leads` + `GET /leads/{id}`** — responses gain `channel` and 8
+  camelCase UTM fields (`utmSourceFirst` … `utmContentLast`). The taxonomy
+  resolver loads once per request. No server-side channel filter (channel
+  isn't a stored column) — filtering by channel is client-side by design.
+- **Leads page (`/leads`)** — new Channel column (hash-colored chips, amber
+  tint for `unmapped:*`/"other unmapped"), the breakdown donut now reads
+  `.channel` instead of raw `leads.source`, and a client-side Channel filter
+  in the FilterBar. Shared display helpers hoisted to
+  `frontend/src/lib/lead-display.ts`.
+- **Lead detail page** — new full-width Attribution card (First touch / Last
+  touch raw UTM rows + resolved channel chip), hidden entirely when all 8
+  UTM fields are null. Migrated to the shared `lead-display.ts` helpers.
+- **Data reality (preflight, 2026-08-03):** taxonomy has 27 rows; of 12,656
+  `source='wgr'` leads, only 87 have first-touch and 2,447 have last-touch
+  UTMs (~20% coverage) — `"No attribution"` is the largest bucket **by
+  design**, not a bug.
+- `/sales` remains a frontend redirect to `/leads` — no distinct Sales
+  surface was built; `/sales/summary` gets the new channel breakdown purely
+  by sharing `compute_lead_stats` with `/leads/stats`.
+
+Test doc: see "Lead & Sales Source Attribution" in `FEATURE-VERIFICATION.md`.
+
 ### Added — WGR attribution data sync (foundation, 2026-07-26)
 
 Mirrors Greg's attribution-era data into CI (spec:

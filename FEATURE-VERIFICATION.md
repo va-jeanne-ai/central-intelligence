@@ -568,3 +568,69 @@ next ticket, ClickUp 86d3u65cb). Verify via DB or API.
 runs skip cleanly. **Fail:** any mirrored table empty while WGR has rows
 (except lead_engagements), sync errors in sync_log, or probe reports a role
 other than ci_reader.
+
+## Lead & Sales Source Attribution (2026-08-03)
+
+**Feature:** The Leads UI now surfaces the read-time canonical channel from
+the WGR attribution sync (previous section): a Channel column + filter and
+channel breakdown donut on `/leads`, and a full-width Attribution card on
+lead detail showing raw first/last-touch UTMs. `/sales/summary` inherits the
+same breakdown since it shares `compute_lead_stats` with `/leads/stats`.
+Channel is computed per-request, never stored.
+
+**How to locate:**
+- **`/leads`** — the main Leads Dashboard.
+- **`/leads/{lead_id}`** — click any row from the leads list to open detail.
+- **`/sales`** — redirects straight to `/leads`; there is no separate Sales
+  page to check. Verify the channel breakdown via `GET /sales/summary`
+  directly (or trust `/leads/stats`, since both endpoints share the same
+  `compute_lead_stats` breakdown code).
+
+**Before you start:** with real data, expect `"No attribution"` to be the
+*largest* bucket on both `/leads` and `/sales/summary` — only ~87 of 12,656
+`source='wgr'` leads have first-touch UTMs and ~2,447 have last-touch UTMs
+(~20% coverage). A dashboard mostly showing "No attribution" is correct
+behavior, not a bug.
+
+**Steps:**
+1. Open `/leads`. Confirm a new **Channel** column appears in the table,
+   right of the existing source column. Each row shows a colored chip (e.g.
+   "Facebook Ads", "Email", "No attribution"). Any chip reading
+   `unmapped:<source>/<medium>` or `"other unmapped"` renders with an amber
+   warning tint, not the normal chip color — that's the taxonomy
+   surface-loudly contract working as intended.
+2. Look at the source/channel breakdown donut on `/leads`. Confirm its
+   segments are now canonical channel names (not raw `leads.source` values
+   like `wgr`/`ghl`), and that segment counts sum to the total lead count
+   shown elsewhere on the page.
+3. In the FilterBar, open the **Channel** filter and pick one value (e.g.
+   "No attribution" or an `unmapped:*` entry). Confirm the table narrows to
+   only rows whose Channel chip matches — this filter runs client-side (not
+   a query param), so it only affects rows already loaded on the current
+   page/pagination window.
+4. Pick a lead you can identify as having attribution data (from step 1's
+   chips, choose a row NOT showing "No attribution") and open its detail
+   page (`/leads/{lead_id}`). Confirm a full-width **Attribution** card
+   appears showing a First touch row and a Last touch row of raw UTM values
+   (source/medium/campaign/content) plus the resolved channel chip.
+5. Pick a different lead whose list-page Channel chip read "No attribution"
+   and open its detail page. Confirm the Attribution card does **not**
+   render at all (hidden, not shown empty) — all 8 UTM fields are null for
+   that lead.
+6. Navigate to `/sales`. Confirm it redirects immediately to `/leads` (no
+   separate Sales page renders).
+7. Call `GET /api/v1/sales/summary` directly (e.g. via the browser devtools
+   Network tab while on `/leads`, or curl with an auth token) and confirm
+   its breakdown list uses the same channel buckets as `/leads/stats` —
+   canonical channels, `"No attribution"`, `"Non-marketing"`, and
+   `unmapped:*` — with counts summing to the endpoint's total.
+
+**Pass:** Channel column + chips render on `/leads` with amber tint on
+unmapped entries; donut segments are canonical channels summing to the
+total; Channel filter narrows the loaded rows; Attribution card shows raw
+UTMs + channel on leads with data and is absent (not empty) on leads
+without; `/sales` still redirects to `/leads`; `/sales/summary` and
+`/leads/stats` share the same bucket set. **Fail:** any of the above missing,
+chip colors not distinguishing unmapped from mapped channels, donut/filter
+counts not summing to the total, or `/sales/summary` diverging from
+`/leads/stats`'s bucket shape.
