@@ -292,7 +292,10 @@ export interface CIMarketSignal {
   notes: string | null;
   updated_at: string | null;
   /** 7d mention rate vs. the prior-23d average rate within the 30d window.
-   * >0 = accelerating, <0 = cooling off, null = not enough volume to judge. */
+   * >0 = accelerating, <0 = cooling off, null only when there was zero
+   * activity in the 30d window at all. Live data caps last_30_days at 2, so
+   * this is a coarse directional signal — render as a plain-language chip,
+   * never as a literal percentage. */
   momentum: number | null;
 }
 

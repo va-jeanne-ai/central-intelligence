@@ -483,8 +483,12 @@ class MarketSignalItem(BaseModel):
     notes: str | None = None
     updated_at: datetime | None = None
     # Momentum = recent 7d rate vs. the prior-23d average within the 30d window
-    # (last_30_days - last_7_days spread over 23 days). None when there isn't
-    # enough of a 30d base to compare against (avoids a divide-by-zero "spike").
+    # (last_30_days - last_7_days spread over 23 days). None only when
+    # last_30_days is 0 (no activity at all in the window — nothing to
+    # compare). See `_momentum()` in routes/ci.py: live data caps
+    # last_30_days at 2, so this is a coarse directional read, not a precise
+    # rate — the frontend renders it as a "picking up / steady / cooling
+    # off" chip, never a literal percentage.
     momentum: float | None = None
 
 

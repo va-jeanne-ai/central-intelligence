@@ -901,41 +901,56 @@ rather than raw aggregate output.
 `market_signals` has **1,961 rows**. `insight_type`: Pain 963, Goal 517,
 Objection 278, Trigger 195, Win 3, Belief 2, Identity 2, Buying Signal 1 (8
 distinct). `signal_family`: 30 distinct values (matches `insights`).
-`total_mentions` ranges **0 to 3** across all 1,961 rows (avg ≈ 1) — this
-is a genuinely low-volume dataset today, which is why the page treats
-momentum as a directional read ("picking up" / "steady" / "cooling off"),
-never a literal percentage that would overstate a 1-to-2-mention jump as
-"+100%". There is **no `created_at`** on this table (it's a rolling
-aggregate keyed on `(signal_family, signal)`, recomputed in place) — the
-date-range filter here scopes `updated_at` instead.
+`total_mentions` ranges **0 to 3** across all 1,961 rows (avg ≈ 1).
+`last_30_days` ranges **0 to 2** (1,083 rows at 0, 877 at 1, 1 at 2);
+`last_7_days` is always 0 or 1. This is a genuinely low-volume, near-binary
+dataset today, which is why momentum is computed with a plain "was there any
+activity in the 30d window" guard (`last_30_days > 0`, not a minimum-sample
+threshold — an earlier draft gated on `total_mentions < 3` and returned
+`None`/"Not enough data" for every single row; verified fixed below) and the
+page renders it as a directional chip ("picking up" / "steady" / "cooling
+off"), never a literal percentage that would overstate a 1-to-2-mention jump
+as "+100%". **878 of 1,961 rows (44.8%) get a real momentum value** on live
+data as of this fix. There is **no `created_at`** on this table (it's a
+rolling aggregate keyed on `(signal_family, signal)`, recomputed in place) —
+the date-range filter here scopes `updated_at` instead.
 
 **Steps:**
 1. Open `/ci-market-signals`. Confirm the page subtitle and layout read as
    a "trending" view, not a raw list — each card should lead with a
    **momentum chip** ("↑ Picking up" / "→ Steady" / "↓ Cooling off" / "Not
    enough data"), not just a bare mention count.
-2. Confirm the filter row has: **Search**, **Insight Type**, **Signal
+2. Sort by Momentum (the default) and scan the first couple pages — confirm
+   you see a genuine **mix** of "↑ Picking up" and "↓ Cooling off" chips, not
+   "Not enough data" on every single card (that was the pre-fix bug: the
+   guard checked `total_mentions < 3`, which is never satisfied by real data,
+   so every card showed "Not enough data" and the stat strip always read
+   0 picking up / 0 cooling off). With the corrected guard, ~45% of all
+   signals get a real chip.
+3. Confirm the filter row has: **Search**, **Insight Type**, **Signal
    Family** dropdowns (real distinct values only), a **Min Mentions**
    number input, an **Updated** date-range pair, and a **Sort By** select
    whose default is **Momentum**.
-3. Confirm a stat strip appears between the filter row and the card grid
+4. Confirm a stat strip appears between the filter row and the card grid
    showing total signals tracked, how many are picking up, and how many are
-   cooling off (on the current page).
-4. Set Min Mentions = `2` — confirm the shown count narrows (audit found
+   cooling off (on the current page) — these should be non-zero now.
+5. Set Min Mentions = `2` — confirm the shown count narrows (audit found
    **6** signals with `total_mentions >= 2`) and every visible card's total
    mentions is ≥ 2.
-5. Switch Sort By to **Last 7 Days**, then **Last 30 Days**, then back to
+6. Switch Sort By to **Last 7 Days**, then **Last 30 Days**, then back to
    **Momentum** — confirm the card order changes each time via a fresh
-   server call (not a client-side re-sort of stale data).
-6. Confirm `best_marketing_angle` renders as a highlighted callout (💡
+   server call (not a client-side re-sort of stale data), and confirm
+   Momentum sort still responds quickly (it's a single indexed `ORDER BY` in
+   SQL now, not a fetch-everything-then-sort-in-Python pass).
+7. Confirm `best_marketing_angle` renders as a highlighted callout (💡
    marker) above the example quote, not buried below it.
-7. Find a card whose `example_quote` is long — confirm it's truncated with
+8. Find a card whose `example_quote` is long — confirm it's truncated with
    a "Read more" toggle rather than dumped in full; click it and confirm it
    expands in place (no modal, no native dialog).
-8. Clear all filters — confirm the page returns to the unfiltered set
+9. Clear all filters — confirm the page returns to the unfiltered set
    (**1,961** total) and Sort By resets to Momentum.
-9. With a filter combination that matches nothing, confirm the empty state
-   is quiet (icon + one short message), not a jarring blank page or error.
+10. With a filter combination that matches nothing, confirm the empty state
+    is quiet (icon + one short message), not a jarring blank page or error.
 
 **Pass:** momentum reads as plain language, never a bare/misleading
 percentage; filters (search, insight type, signal family, min mentions,

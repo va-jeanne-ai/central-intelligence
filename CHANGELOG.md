@@ -51,11 +51,24 @@ metrics/recommendations engine) that this work does **not** touch.
   `limit`-only list). Added a `momentum` sort option and a computed
   `momentum` field per row: 7-day mention rate vs. the prior-23-day average
   rate within the 30-day window (`(recent_rate - prior_rate) / prior_rate`);
-  returns `null` when `total_mentions < 3` rather than a noisy "infinite
-  spike" reading off one or two mentions (most signals in this dataset sit at
-  1-3 total mentions — `max(total_mentions) = 3` across all 1,961 rows today,
-  so the UI treats "momentum" as a directional signal, not a percentage to
-  take literally). `GET /ci/market-signals/facets` unchanged in shape.
+  returns `null` only when `last_30_days` is 0 — no activity in the window at
+  all, nothing to compare against. Live data audit found `last_30_days` caps
+  at **2** across all 1,961 rows (1,083 rows at 0, 877 at 1, 1 at 2) and
+  `last_7_days` is always 0 or 1 — a low-volume, near-binary dataset, so the
+  guard is deliberately just "was there any activity in the window", not a
+  minimum-sample-size threshold (an earlier draft gated on
+  `total_mentions < 3`, which — since `total_mentions` isn't even an input to
+  the momentum calculation — returned `None` for every row; caught before
+  ship and rewritten). With the corrected guard, **878 of 1,961 rows (44.8%)**
+  get a real momentum value on live data; momentum itself is coarse
+  (effectively ±1.0 given the data's ceiling) so the frontend renders it as a
+  directional chip, never a literal percentage. Momentum sorting runs as a
+  single `ORDER BY`/`LIMIT`/`OFFSET` in SQL via a new `_momentum_sql_expr()`
+  (a SQL twin of the Python `_momentum()`, kept in lockstep and covered by
+  the same test cases) — not an unbounded fetch-then-sort-in-Python, which an
+  earlier draft did (comment claimed it was "bounded"; it wasn't — every
+  default-sort page load would have pulled every filtered row). `GET
+  /ci/market-signals/facets` unchanged in shape.
 - **Frontend types** (`frontend/src/types/index.ts`): `CIInsight` gained
   `pain_layer`, `created_at`, `call_date`, `call_type`, `lead_id`,
   `lead_name`, `tags`; `CIInsightFacets` gained `pain_layer`;

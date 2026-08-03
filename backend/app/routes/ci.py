@@ -14,7 +14,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response
-from sqlalchemy import asc, desc, func, or_, select
+from sqlalchemy import asc, case, desc, func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analytics.team import RepRow, call_owner_match_values, resolve_rep
@@ -1493,18 +1493,45 @@ def _momentum(last_7_days: int, last_30_days: int) -> float | None:
     """7-day mention rate vs. the prior-23-day average rate within the 30d window.
 
     >0 means the signal is accelerating (mentioned more often lately than its
-    own recent baseline); <0 means it's cooling off. None when last_30_days is
-    too small to form a meaningful baseline (avoids a noisy "infinite spike"
-    reading off one or two mentions).
+    own recent baseline); <0 means it's cooling off. None only for a genuinely
+    all-zero row (no activity in the 30d window at all — nothing to compare).
+
+    Live data note (audited 2026-08-03): `last_30_days` maxes at 2 across all
+    1,961 rows (1,083 rows are 0, 877 are 1, 1 is 2) and `last_7_days` is
+    always 0 or 1 — this is a low-volume, mostly-binary dataset, not a
+    high-frequency time series. A guard like "need >=3 mentions" would (and
+    did, in an earlier version of this function) return None for every row.
+    The guard here is deliberately just "was there any activity in the 30d
+    window" (`last_30_days > 0`), so momentum is directional and coarse by
+    necessity, not a precise rate — the UI renders it as a plain-language
+    chip ("picking up" / "steady" / "cooling off"), never a literal percent.
     """
-    prior_mentions = max(0, last_30_days - last_7_days)
-    if last_30_days < 3:
+    if last_30_days <= 0:
         return None
+    prior_mentions = max(0, last_30_days - last_7_days)
     prior_rate = prior_mentions / _MOMENTUM_PRIOR_DAYS
     recent_rate = last_7_days / 7
     if prior_rate == 0:
         return None if recent_rate == 0 else 1.0  # went from nothing to something
     return (recent_rate - prior_rate) / prior_rate
+
+
+def _momentum_sql_expr():
+    """SQL twin of `_momentum()`, for ORDER BY — sorting momentum in the
+    database instead of fetching every filtered row into Python.
+
+    Must stay in lockstep with `_momentum()`'s arithmetic; the two are
+    exercised against the same cases in
+    `tests/test_ci_market_signals_momentum.py` to catch drift.
+    """
+    prior_mentions = func.greatest(0, MarketSignal.last_30_days - MarketSignal.last_7_days)
+    prior_rate = prior_mentions / float(_MOMENTUM_PRIOR_DAYS)
+    recent_rate = MarketSignal.last_7_days / 7.0
+    return case(
+        (MarketSignal.last_30_days <= 0, literal_column("NULL")),
+        (prior_rate == 0, case((recent_rate == 0, literal_column("NULL")), else_=1.0)),
+        else_=(recent_rate - prior_rate) / prior_rate,
+    )
 
 
 @router.get("/market-signals", response_model=MarketSignalListResponse)
@@ -1549,18 +1576,21 @@ async def list_market_signals(
 
     stmt = select(MarketSignal).where(*clauses)
 
-    # "momentum" isn't a DB column — it's computed in Python from last_7_days/
-    # last_30_days — so that sort happens after fetch, over the full filtered
-    # set (bounded, matches the page's max limit=500), rather than in SQL.
+    # "momentum" isn't a stored column, but `_momentum_sql_expr()` computes the
+    # exact same arithmetic as `_momentum()` in SQL, so the sort — like every
+    # other sort_by option — runs as a single ORDER BY + LIMIT/OFFSET in the
+    # database. No unbounded fetch: this branch pulls exactly one page, same
+    # as the else branch below, regardless of how many rows match the filter.
     if sort_by == "momentum":
-        result = await session.execute(stmt)
-        signals = result.scalars().all()
-        signals = sorted(
-            signals,
-            key=lambda s: (_momentum(s.last_7_days, s.last_30_days) if _momentum(s.last_7_days, s.last_30_days) is not None else float("-inf")),
-            reverse=(sort_dir == "desc"),
+        momentum_expr = _momentum_sql_expr()
+        direction = asc if sort_dir == "asc" else desc
+        # NULLS LAST in both directions — "not enough data" rows sink to the
+        # bottom of the page instead of dominating an ascending sort.
+        stmt = (
+            stmt.order_by(direction(momentum_expr).nullslast(), MarketSignal.id.asc())
+            .offset((page - 1) * limit)
+            .limit(limit)
         )
-        signals = signals[(page - 1) * limit : (page - 1) * limit + limit]
     else:
         sort_col = {
             "total_mentions": MarketSignal.total_mentions,
@@ -1573,8 +1603,8 @@ async def list_market_signals(
             .offset((page - 1) * limit)
             .limit(limit)
         )
-        result = await session.execute(stmt)
-        signals = result.scalars().all()
+    result = await session.execute(stmt)
+    signals = result.scalars().all()
 
     return MarketSignalListResponse(
         data=[
