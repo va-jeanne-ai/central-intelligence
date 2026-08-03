@@ -44,7 +44,10 @@ run_prefixed() {
 
 echo ">>> backend dev stack starting (Ctrl+C to stop all)"
 
-run_prefixed "backend" .venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# --reload-dir app: without it the watcher covers all of backend/ including
+# .venv — a fresh venv writes __pycache__ bytecode on first imports, each
+# write retriggers the watcher, and uvicorn restart-loops indefinitely.
+run_prefixed "backend" .venv/bin/uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8000
 # --concurrency=2 matches prod (docker-compose.yml). Unbounded, celery forks one
 # child per CPU core and each child opens its own DB pool — enough to exhaust the
 # Supabase session pooler's 15-client cap alongside the production droplet
