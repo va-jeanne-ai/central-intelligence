@@ -151,7 +151,14 @@ The hourly read-only WGR→CI sync now also mirrors Greg's attribution-era data
   fills when Greg's email-attribution flow produces.
 - **`meta_campaigns` / `meta_ads`** (snapshot-reconciled) and
   **`meta_ad_performance`** (watermarked) — real Meta Ads data for the Ads
-  surface (probe 2026-07-26: 29/472/635 rows).
+  surface (probe 2026-07-26: 29/472/635 rows). **Live since 2026-08-03:**
+  `GET /ads/overview` renders these three tables directly on
+  `/marketing/ads` — KPIs, a per-campaign spend/leads/CPL rollup, and the
+  top 15 ads by spend. The hardcoded platform-breakdown widget it replaced
+  is gone. `meta_ad_performance.snapshot_type` is uniformly `"Daily"`, so
+  spend/impressions/leads sum across snapshots; `kpi_status`/`ctr` use each
+  ad's latest snapshot instead (not summable). See `CHANGELOG.md` for the
+  full aggregation rationale.
 - **`lead_journey`** (snapshot-reconciled, added 2026-08-03) — WGR's
   per-lead journey summary (one row per lead: webinar registration/watch
   behavior, appointment history + qualification, call counts, discovery,

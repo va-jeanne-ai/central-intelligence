@@ -240,7 +240,7 @@
     "semantic_hash": ""
   },
   "backend/app/models/__init__.py": {
-    "mtime": 1785766759.834923,
+    "mtime": 1785768061.7058806,
     "ast_hash": "803a249310ce38d7c0fd581f20ec3150",
     "semantic_hash": ""
   },
@@ -280,7 +280,7 @@
     "semantic_hash": ""
   },
   "backend/app/models/operational.py": {
-    "mtime": 1785766728.9047105,
+    "mtime": 1785768061.706098,
     "ast_hash": "27ebbd9b040b8597d298d191fc8fb550",
     "semantic_hash": ""
   },
@@ -415,8 +415,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/ads.py": {
-    "mtime": 1779260427.383306,
-    "ast_hash": "f98d3a0df6e146dfee4cf786c9cb357a",
+    "mtime": 1785769653.8567255,
+    "ast_hash": "85d81926bd5b80430098a10dfdb7eab2",
     "semantic_hash": ""
   },
   "backend/app/routes/auth.py": {
@@ -485,7 +485,7 @@
     "semantic_hash": ""
   },
   "backend/app/routes/leads.py": {
-    "mtime": 1785767598.5040526,
+    "mtime": 1785768061.7064013,
     "ast_hash": "8baa2d81696aadad90719d0173c99b18",
     "semantic_hash": ""
   },
@@ -535,8 +535,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/ads.py": {
-    "mtime": 1775643490.0,
-    "ast_hash": "815b0ee68ebbe52496fe8db0d1a6d30d",
+    "mtime": 1785769610.1327426,
+    "ast_hash": "7cac90f448216cadde36371f8ce18b05",
     "semantic_hash": ""
   },
   "backend/app/schemas/auth.py": {
@@ -590,7 +590,7 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/leads.py": {
-    "mtime": 1785767549.9801939,
+    "mtime": 1785768061.706823,
     "ast_hash": "1f0a98ab86d330313e7d6a7a514a0daa",
     "semantic_hash": ""
   },
@@ -925,7 +925,7 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/leads/[lead_id]/page.tsx": {
-    "mtime": 1785767747.9882624,
+    "mtime": 1785768061.7076228,
     "ast_hash": "ab61dc08418e41011eb0c5e33b9cb165",
     "semantic_hash": ""
   },
@@ -945,8 +945,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/ads/page.tsx": {
-    "mtime": 1775885082.0,
-    "ast_hash": "58a4c30968d832c663a50a8d5cc7d904",
+    "mtime": 1785769759.228827,
+    "ast_hash": "3f2c2225904b7553adc95d1db635da51",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/dm/page.tsx": {
@@ -1375,8 +1375,8 @@
     "semantic_hash": ""
   },
   "frontend/src/types/index.ts": {
-    "mtime": 1785758259.1672866,
-    "ast_hash": "8c77112f50ad8b1e829bf02db4f9d31e",
+    "mtime": 1785769695.9957926,
+    "ast_hash": "c7b1d4c6e5fdb4235f5db7a8f511bfc0",
     "semantic_hash": ""
   },
   "frontend/tailwind.config.ts": {
@@ -1425,8 +1425,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1785767847.8915625,
-    "ast_hash": "f7a4d5724958ec4f2e98acfbc8184cd7",
+    "mtime": 1785769799.708891,
+    "ast_hash": "eb284969f60d40e7768c9726bc241d42",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1435,13 +1435,13 @@
     "semantic_hash": ""
   },
   "FEATURE-VERIFICATION.md": {
-    "mtime": 1785767861.9556754,
-    "ast_hash": "24d5820bd9d79499b01c87cdf0dd1779",
+    "mtime": 1785769837.661085,
+    "ast_hash": "cd515c187cfbfc08bc0247a2c7dd1676",
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1785767831.9983122,
-    "ast_hash": "f7a5f3fac65f69953fbc6d031f9dae3d",
+    "mtime": 1785769806.586394,
+    "ast_hash": "fba74206c80673c95396f41b08ea3357",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
@@ -2015,7 +2015,7 @@
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/mapping.py": {
-    "mtime": 1785766814.8418405,
+    "mtime": 1785768061.7070668,
     "ast_hash": "0d84eee76afa2195ad3f71272c599136",
     "semantic_hash": ""
   },
@@ -2025,7 +2025,7 @@
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/upsert.py": {
-    "mtime": 1785767075.0221474,
+    "mtime": 1785768061.7072945,
     "ast_hash": "d9ba0645388f370ba0d1a85d6c6fdbf1",
     "semantic_hash": ""
   },
@@ -2795,7 +2795,12 @@
     "semantic_hash": ""
   },
   "backend/alembic/versions/c0d1e2f3a4b5_add_lead_journey_mirror.py": {
-    "mtime": 1785766783.9740067,
+    "mtime": 1785768061.7056563,
+    "ast_hash": "7c981453a11fcf57d2290f6897dea784",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/c0d1e2f3a4b5_add_lead_journey_mirror 2.py": {
+    "mtime": 1785766783.0,
     "ast_hash": "7c981453a11fcf57d2290f6897dea784",
     "semantic_hash": ""
   }

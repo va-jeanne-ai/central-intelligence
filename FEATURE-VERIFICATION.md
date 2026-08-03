@@ -657,3 +657,63 @@ without; `/sales` still redirects to `/leads`; `/sales/summary` and
 chip colors not distinguishing unmapped from mapped channels, donut/filter
 counts not summing to the total, or `/sales/summary` diverging from
 `/leads/stats`'s bucket shape.
+
+## Marketing — Ads (real data) (2026-08-03)
+
+**Feature:** `/marketing/ads` no longer shows a hardcoded platform-breakdown
+widget (Google/Facebook/Instagram/TikTok rows that always read "—"). The
+page now renders straight from the WGR Meta Ads mirror — real campaigns, ads,
+and daily performance snapshots — via a new `GET /ads/overview` endpoint. The
+legacy `GET /ads` (ads_stats summary) and the `POST /ads` Analyze-with-AI /
+ad-copy-generator flow are unchanged.
+
+**How to locate:** `/marketing/ads` — the main Ads page under Marketing in
+the sidebar.
+
+**Before you start:** live counts as of 2026-08-03 are 29 campaigns, 472
+ads, 647 performance snapshot rows — but only **7 of the 472 ads** currently
+carry any performance data (the rest are identity-only: name, format,
+status, hook, no spend yet). A Top Ads table showing exactly 7 rows (not 15)
+is correct, not a bug. Most campaigns will show $0 spend / 0 leads for the
+same reason — that's real data, not a rendering error.
+
+**Steps:**
+1. Open `/marketing/ads`. Confirm the **Platform Breakdown** card (rows for
+   Google Ads / Facebook Ads / Instagram Ads / TikTok Ads, all showing "—")
+   is gone entirely — there is no per-platform table at all now.
+2. Confirm the KPI row shows four tiles with real numbers, not "—":
+   **Active Campaigns** (14 of 29 total), **Total Spend** (~$17,006 as of
+   2026-08-03 — will grow as sync continues), **Cost / Lead**, and **CTR**
+   with an impressions sub-label. All four carry the marketing green
+   (`#10B981`) top border.
+3. Look at the **Campaigns** table. Confirm it lists real campaign names
+   (e.g. "AK - new webinar", "WFM - Originals") — not placeholders — each
+   with a status chip (Active/Paused), objective, budget (daily or
+   lifetime, whichever the campaign has set), spend, leads, cost-per-lead,
+   and an ads count. Rows are sorted by spend descending; the top row should
+   be "AK - new webinar" (~$17,006 spend, 62 ads) at time of writing.
+4. Look at the **Top Ads by Spend** table. Confirm each row shows a real ad
+   name, its parent campaign name, ad format (e.g. "Video_Reel"), a status
+   chip, a KPI-status chip (Scale/Watch/Kill — some cells legitimately blank
+   since `kpi_status` is null on ~60% of performance rows), spend, leads,
+   and cost-per-lead. Hover a hook-text cell that's truncated — the full
+   hook shows in the tooltip. Hover a row for an ad with a `kill_date` set —
+   the kill reason (e.g. "$80.94 spent, 0 leads ever — >3x kill threshold...")
+   shows in the tooltip.
+5. Confirm the **Generate Ad Copy** CTA card (right column, row 2) is still
+   present and its "Generate Copy" button still links to
+   `/marketing/ads/generator` — this is the preserved Analyze-with-AI
+   affordance, untouched by this change.
+6. Reload the page and watch the loading state — skeleton tiles/rows should
+   render briefly, never a spinner-only or blank screen, and never native
+   `alert()`/`confirm()` dialogs.
+
+**Pass:** Platform Breakdown widget is gone; KPI tiles show real (non-"—")
+numbers matching the DB; Campaigns table lists real campaign identity +
+rollup data sorted by spend; Top Ads table shows up to 15 real ads with
+spend-derived metrics and working hover tooltips for hook text and kill
+reasons; the Ad Copy Generator CTA still works. **Fail:** Platform
+Breakdown widget still present, any KPI/table showing fabricated or
+placeholder values instead of real DB-backed numbers, the Ads generator CTA
+missing or broken, or an empty table rendering as if it were an error
+instead of a quiet "no data yet" placeholder.

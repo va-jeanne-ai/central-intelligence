@@ -6,6 +6,37 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Ads page rebuilt from real Meta Ads mirror data (deliverable 4)
+
+`/marketing/ads` no longer shows the hardcoded platform-breakdown widget
+(Google/Facebook/Instagram/TikTok rows that were always "—") — it now
+renders directly from the WGR Meta Ads mirror (`meta_campaigns` /
+`meta_ads` / `meta_ad_performance`; 29 / 472 / 647 rows live).
+
+- **New `GET /ads/overview`** (`backend/app/routes/ads.py`, schemas in
+  `backend/app/schemas/ads.py`) — KPIs (spend, impressions, leads, booked
+  calls, cost/lead, CTR, active/total campaigns, total ads), a per-campaign
+  rollup (`campaigns`), and the top 15 ads by spend (`top_ads`). Optional
+  `snapshot_from`/`snapshot_to` scope the performance aggregates;
+  campaign/ad identity lists stay unfiltered. The legacy `GET /ads` (backed
+  by `ads_stats`) and `POST /ads` (analyze/ad-copy) are unchanged.
+- **Aggregation choice, verified read-only against the live DB:**
+  `meta_ad_performance.snapshot_type` is uniformly `"Daily"` and each ad's
+  spend/impressions genuinely vary day to day (not a restated cumulative
+  total), so spend/impressions/leads/booked_calls are **summed** across the
+  snapshot range. `kpi_status` and `ctr` are point-in-time quality signals
+  and are NOT summable — those come from each ad's **latest** snapshot in
+  range instead. Only 7 of 472 ads currently carry any performance rows
+  (647 rows total); the other 465 show identity-only with zero performance.
+- **Frontend** (`frontend/src/app/(app)/marketing/ads/page.tsx`) —
+  `PlatformBreakdownCard` and the hardcoded `AD_PLATFORMS` constant are
+  deleted. New KPI row (marketing green `#10B981`), a Campaigns table
+  (status chip, objective, budget, spend, leads, CPL, ads count), and a Top
+  Ads table (hook text truncated with a tooltip, KPI-status chip, killed
+  ads surface `kill_reason` in the row tooltip). The Analyze-with-AI CTA
+  (`POST /ads` → ad-copy generator) is preserved unchanged. Empty states are
+  quiet placeholders, not fake data.
+
 ### Added — Lead Journey card (WGR lead_journey mirror)
 
 The lead detail page gains a **Journey** card: webinar registration/watch

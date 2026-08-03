@@ -312,6 +312,60 @@ export interface AdsAnalyzeResponse {
   data_used: Record<string, unknown>;
 }
 
+// ─── Ads overview (real data — GET /ads/overview) ───────────────────────────
+
+export interface AdsOverviewKpis {
+  total_spend: number;
+  total_impressions: number;
+  total_leads: number;
+  total_booked_calls: number;
+  avg_cost_per_lead: number;
+  avg_ctr: number;
+  active_campaigns: number;
+  total_campaigns: number;
+  total_ads: number;
+}
+
+export interface AdsOverviewCampaign {
+  campaign_id: string;
+  name: string | null;
+  status: string | null;
+  objective: string | null;
+  campaign_type: string | null;
+  daily_budget: number | null;
+  lifetime_budget: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  ads_count: number;
+  spend: number;
+  leads: number;
+  booked_calls: number;
+  cost_per_lead: number;
+}
+
+export interface AdsOverviewTopAd {
+  ad_id: string;
+  name: string | null;
+  campaign_name: string | null;
+  ad_format: string | null;
+  status: string | null;
+  hook_text: string | null;
+  kpi_status: string | null;
+  spend: number;
+  leads: number;
+  cost_per_lead: number;
+  ctr: number | null;
+  launched_date: string | null;
+  kill_date: string | null;
+  kill_reason: string | null;
+}
+
+export interface AdsOverviewResponse {
+  kpis: AdsOverviewKpis;
+  campaigns: AdsOverviewCampaign[];
+  top_ads: AdsOverviewTopAd[];
+}
+
 // ─── DM ──────────────────────────────────────────────────────────────────────
 
 export interface DmData {
