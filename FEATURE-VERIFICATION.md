@@ -751,3 +751,86 @@ Breakdown widget still present, any KPI/table showing fabricated or
 placeholder values instead of real DB-backed numbers, the Ads generator CTA
 missing or broken, or an empty table rendering as if it were an error
 instead of a quiet "no data yet" placeholder.
+
+## Marketing — Email Campaigns (2026-08-03)
+
+**Feature:** `/marketing/email` overhaul (deliverable 2). The Compose Email
+feature (page-builder UI at `/marketing/email/compose`) is removed. The page
+now shows a filterable, sortable campaigns table backed by a new
+`GET /email/campaigns` endpoint, plus a per-row visual performance indicator
+(ScoreBar + Top/Mid/Low tercile chip on open_rate) and a "Top campaigns"
+ranking card. `POST /email` (Analyze with AI) and `POST /email/draft` are
+unchanged; the legacy `GET /email` summary endpoint is unchanged (still used
+internally, no longer called by this page).
+
+**How to locate:** `/marketing/email` — under Marketing in the sidebar.
+
+**Before you start — audit numbers as of 2026-08-03 (read-only, live DB):**
+`email_campaigns` has **2,426 rows**, all `deleted_at IS NULL`. **`status`
+has exactly one distinct value: `sent`** — every row. There are **zero**
+drafts and **zero** archived campaigns in the real database (those only
+ever existed via the now-removed Compose flow), which is why the old
+Drafts/Archived sections are gone rather than kept empty. `campaign_type`
+has **12 distinct values**: Value/Education (648), Weekly Nurture (441),
+Story-led (366), Launch (312), Transactional (307), Promotional Offer
+(160), Client Win (94), Welcome/Onboarding (41), Re-engagement (35),
+Unclassifiable (17), `regular` (2), and 3 rows with `campaign_type = NULL`.
+`sent_at` ranges from 2016-07-25 to 2026-08-02. `bounce_count` is 0 on
+every row today (column is real, just nothing to show yet).
+
+**Steps:**
+1. Open `/marketing/email`. Confirm there is **no Compose Email card and no
+   "+ New Campaign" / "+ New Draft" button anywhere on the page** — the
+   feature is fully removed, not just hidden.
+2. Confirm the KPI row shows four tiles — **Campaigns**, **Avg Open Rate**,
+   **Avg Click Rate**, **Total Recipients** — all with real numbers (not
+   "—"), scoped to whatever filter is currently applied (unfiltered on
+   first load, so **Campaigns = 2,426**).
+3. In the filter row, confirm: a search box (name/subject), a **Campaign
+   type** select whose options are exactly the 12 real distinct values
+   above (never a fabricated option, never an option with 0 matches), a
+   **Status** select (will show only **"sent"** — correct, since that's
+   the only real value), a **Sent** date-range pair, and a **Sort by**
+   metric select (Date sent, Sent/Recipients, Opens, Clicks, Open rate,
+   Click rate, Unsubscribes, Bounces).
+4. Type a campaign name fragment into search (e.g. "webinar") — confirm the
+   table narrows to matching rows within ~300ms (debounced) and the KPI
+   row's counts shrink to match the filtered set, not the full unfiltered
+   total.
+5. Set the Sent date range to a narrow recent window (e.g. 2026-07-01 to
+   2026-08-02) — confirm the table and KPI row rescope to that window only,
+   and the **Top campaigns** card (left column) re-ranks using only
+   campaigns sent in that window.
+6. Click a sortable column header (Recipients, Opens, Clicks, Unsubs,
+   Bounces, or the Sent date header) — confirm it toggles ascending/
+   descending (▲/▼ indicator) and the table re-sorts via a fresh server
+   call (`sort_by`/`sort_dir` params), matching the leads table's
+   click-to-sort behavior.
+7. Confirm every row shows a **ScoreBar** in the rightmost "Performance"
+   column, filled proportional to that row's open_rate relative to the
+   filtered set's max open_rate, plus a small **Top / Mid / Low** chip.
+   Sort by Open rate descending — confirm the top rows carry "Top" chips
+   and the bottom rows carry "Low" chips (tercile split within the
+   currently filtered set, not a fixed global threshold).
+8. Confirm the **"Top campaigns"** card shows exactly 5 rows (or fewer if
+   the filtered set has under 5), ranked #1–#5 by whichever metric is
+   selected in "Sort by", each with a name, the metric's formatted value,
+   and a ScoreBar — and that changing "Sort by" re-ranks this card using
+   the SAME already-fetched data (no extra network call).
+9. Clear all filters (via "Clear filters") — confirm the table returns to
+   all 2,426 rows and the KPI row returns to the unfiltered totals.
+10. Reload the page and watch the loading state — skeleton tiles/rows
+    should render briefly, never a blank screen or native
+    `alert()`/`confirm()` dialog.
+
+**Pass:** Compose Email is fully gone (no card, no CTA, no route reachable);
+filter dropdowns only ever show real, non-empty options; search/date-range/
+type/status filters narrow both the table and the KPI row together; sort
+toggles work via server round-trip and match the leads-table interaction
+pattern; every row shows a ScoreBar + tercile chip that visibly correlates
+with relative open_rate; the Top-campaigns card re-ranks correctly off the
+selected metric within the current filtered range. **Fail:** any Compose
+Email UI remnant reachable, a filter option that matches 0 rows, KPI row
+not rescoping with filters, sort clicks doing nothing or hitting the wrong
+column, or the performance indicator showing a fixed/fake value unrelated
+to the row's real open_rate.

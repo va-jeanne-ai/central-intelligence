@@ -1,8 +1,9 @@
 """Email marketing endpoints.
 
-POST /api/v1/email        — analyze email campaigns and return recommendations
-POST /api/v1/email/draft  — generate a structured draft (subject + body + cta)
-GET  /api/v1/email        — retrieve email performance data summary
+POST /api/v1/email            — analyze email campaigns and return recommendations
+POST /api/v1/email/draft      — generate a structured draft (subject + body + cta)
+GET  /api/v1/email            — retrieve email performance data summary (legacy)
+GET  /api/v1/email/campaigns  — filterable/sortable campaign list (deliverable 2)
 
 Sprint 3a / CI-MKT-EMAIL
 """
@@ -12,9 +13,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser, get_current_user
@@ -26,7 +29,11 @@ from app.schemas.email import (
     CreateCampaignDraftResponse,
     EmailAnalyzeRequest,
     EmailAnalyzeResponse,
+    EmailCampaignListRow,
     EmailCampaignRow,
+    EmailCampaignsFilterOptions,
+    EmailCampaignsResponse,
+    EmailCampaignsSummary,
     EmailDataResponse,
     EmailDraftRequest,
     EmailDraftResponse,
@@ -36,6 +43,22 @@ from app.schemas.email import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/email", tags=["email"])
+
+
+def _int(value: object) -> int:
+    """Return value as int, falling back to 0 for None or non-numeric values."""
+    try:
+        return int(value) if value is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _float(value: object) -> float:
+    """Return value as float, falling back to 0.0 for None or non-numeric values."""
+    try:
+        return float(value) if value is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
 
 
 @router.post("", response_model=EmailAnalyzeResponse)
@@ -234,6 +257,197 @@ async def get_email_data(
         recent_campaigns=[_to_row(r) for r in sent_rows],
         drafts=[_to_row(r) for r in draft_rows],
         archived=[_to_row(r) for r in archived_rows],
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/email/campaigns — filterable/sortable campaign list (deliverable 2)
+# ---------------------------------------------------------------------------
+#
+# Audit (verified read-only, 2026-08-03): 2,426 rows in email_campaigns, all
+# deleted_at IS NULL. status has exactly ONE distinct value ("sent") across
+# every row — no drafts/archived exist outside the (removed) compose flow —
+# so the status filter is still exposed data-driven (per filter_options) but
+# will only ever offer one option today. campaign_type has 12 distinct
+# non-degenerate values (Value/Education, Weekly Nurture, Story-led, Launch,
+# Transactional, Promotional Offer, Client Win, Welcome/Onboarding,
+# Re-engagement, Unclassifiable, 'regular', plus a few NULLs) — a real filter.
+# sent_at spans 2016-07-25 to 2026-08-02 — a real date-range filter.
+# bounce_count is always 0 today but is a real column, kept in the row shape.
+
+_CAMPAIGNS_SORTABLE_COLUMNS: frozenset[str] = frozenset(
+    {
+        "sent_at",
+        "recipients_count",
+        "open_count",
+        "click_count",
+        "open_rate",
+        "click_rate",
+        "unsubscribe_count",
+        "bounce_count",
+    }
+)
+
+
+def _parse_campaigns_date_param(value: str | None, *, param_name: str) -> date | None:
+    """Parse a query param as a strict ISO ``YYYY-MM-DD`` date.
+
+    Mirrors ``ads._parse_date_param``: fail loudly with a 422 rather than let
+    a malformed string reach a ``Date``-typed bind and surface as an opaque
+    500 from the asyncpg driver.
+    """
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid {param_name}: {value!r} — expected ISO format YYYY-MM-DD",
+        ) from exc
+
+
+@router.get("/campaigns", response_model=EmailCampaignsResponse)
+async def get_email_campaigns(
+    sent_from: str | None = Query(
+        default=None, description="Filter sent_at on/after this date (YYYY-MM-DD)"
+    ),
+    sent_to: str | None = Query(
+        default=None, description="Filter sent_at on/before this date (YYYY-MM-DD)"
+    ),
+    campaign_type: str | None = Query(default=None, description="Filter by exact campaign_type"),
+    status: str | None = Query(default=None, description="Filter by exact status"),
+    search: str | None = Query(default=None, description="Search name or subject (ILIKE)"),
+    sort_by: str = Query(default="sent_at", description="Column to sort by"),
+    sort_dir: Literal["asc", "desc"] = Query(default="desc", description="Sort direction"),
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> EmailCampaignsResponse:
+    """Return campaigns with metric filters, a date range, and server sort.
+
+    Powers the rebuilt /marketing/email page: filter row (search, date range,
+    campaign type, status, sort-by-metric), the sortable campaigns table, the
+    per-row visual performance indicator (ScoreBar + tercile chip, computed
+    client-side against this filtered set's max open_rate), and the "Top
+    campaigns" ranking card (client-side top-5 slice of the same response).
+    """
+    logger.info(
+        "get_email_campaigns called — user=%s sent_from=%s sent_to=%s "
+        "campaign_type=%s status=%s search=%s sort_by=%s sort_dir=%s",
+        current_user.id, sent_from, sent_to, campaign_type, status, search, sort_by, sort_dir,
+    )
+
+    # ---- Validate / sanitise params (all bind-safe or whitelisted) --------
+    parsed_from = _parse_campaigns_date_param(sent_from, param_name="sent_from")
+    parsed_to = _parse_campaigns_date_param(sent_to, param_name="sent_to")
+    if sort_by not in _CAMPAIGNS_SORTABLE_COLUMNS:
+        sort_by = "sent_at"
+    # sort_dir is already constrained to the Literal by FastAPI/Pydantic.
+
+    where_sql = "deleted_at IS NULL"
+    params: dict[str, object] = {}
+    if parsed_from is not None:
+        where_sql += " AND sent_at >= :sent_from"
+        params["sent_from"] = parsed_from
+    if parsed_to is not None:
+        where_sql += " AND sent_at <= :sent_to"
+        params["sent_to"] = parsed_to
+    if campaign_type:
+        where_sql += " AND campaign_type = :campaign_type"
+        params["campaign_type"] = campaign_type
+    if status:
+        where_sql += " AND status = :status"
+        params["status"] = status
+    if search:
+        where_sql += " AND (name ILIKE :search OR subject ILIKE :search)"
+        params["search"] = f"%{search}%"
+
+    # ---- Filtered rows ------------------------------------------------------
+    rows = (
+        await session.execute(
+            text(
+                f"""
+                SELECT
+                    id, name, subject, campaign_type, status, sent_at,
+                    audience_name, recipients_count, open_count, click_count,
+                    unsubscribe_count, bounce_count, open_rate, click_rate,
+                    archive_url
+                FROM email_campaigns
+                WHERE {where_sql}
+                ORDER BY {sort_by} {sort_dir} NULLS LAST, id ASC
+                """  # noqa: S608 — where_sql/sort_by built from fixed whitelists above
+            ),
+            params,
+        )
+    ).mappings().all()
+
+    campaigns = [
+        EmailCampaignListRow(
+            id=str(r["id"]),
+            name=r["name"],
+            subject=r["subject"],
+            campaign_type=r["campaign_type"],
+            status=r["status"],
+            sent_at=r["sent_at"].isoformat() if r["sent_at"] else None,
+            audience_name=r["audience_name"],
+            recipients_count=_int(r["recipients_count"]),
+            open_count=_int(r["open_count"]),
+            click_count=_int(r["click_count"]),
+            unsubscribe_count=_int(r["unsubscribe_count"]),
+            bounce_count=_int(r["bounce_count"]),
+            open_rate=_float(r["open_rate"]) if r["open_rate"] is not None else None,
+            click_rate=_float(r["click_rate"]) if r["click_rate"] is not None else None,
+            archive_url=r["archive_url"],
+        )
+        for r in rows
+    ]
+
+    # ---- Summary over the FILTERED set --------------------------------------
+    count = len(campaigns)
+    total_recipients = sum(c.recipients_count for c in campaigns)
+    total_opens = sum(c.open_count for c in campaigns)
+    total_clicks = sum(c.click_count for c in campaigns)
+    open_rates = [c.open_rate for c in campaigns if c.open_rate is not None]
+    click_rates = [c.click_rate for c in campaigns if c.click_rate is not None]
+    summary = EmailCampaignsSummary(
+        count=count,
+        total_recipients=total_recipients,
+        total_opens=total_opens,
+        total_clicks=total_clicks,
+        avg_open_rate=round(sum(open_rates) / len(open_rates), 2) if open_rates else 0.0,
+        avg_click_rate=round(sum(click_rates) / len(click_rates), 2) if click_rates else 0.0,
+    )
+
+    # ---- Filter options — distinct values actually present (unfiltered) ---
+    # Data-driven per the leads page philosophy: never offer a dropdown
+    # option with zero matching rows.
+    type_rows = (
+        await session.execute(
+            text(
+                "SELECT DISTINCT campaign_type FROM email_campaigns "
+                "WHERE deleted_at IS NULL AND campaign_type IS NOT NULL "
+                "ORDER BY campaign_type"
+            )
+        )
+    ).scalars().all()
+    status_rows = (
+        await session.execute(
+            text(
+                "SELECT DISTINCT status FROM email_campaigns "
+                "WHERE deleted_at IS NULL AND status IS NOT NULL "
+                "ORDER BY status"
+            )
+        )
+    ).scalars().all()
+    filter_options = EmailCampaignsFilterOptions(
+        campaign_types=list(type_rows),
+        statuses=list(status_rows),
+    )
+
+    return EmailCampaignsResponse(
+        campaigns=campaigns,
+        summary=summary,
+        filter_options=filter_options,
     )
 
 

@@ -35,8 +35,7 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 
 | Surface | What it shows |
 |---|---|
-| [`/marketing/email`](frontend/src/app/(app)/marketing/email/page.tsx) | KPI cards (avg open/click rate) + the list of recent campaigns with per-row metrics, provenance badge, and click-to-expand showing subject / audience / segment / rendered body (sandboxed iframe) / Open-in-Mailchimp link |
-| [`/marketing/email/compose`](frontend/src/app/(app)/marketing/email/compose/page.tsx) | Mailchimp-style **page-builder** compose flow: pick campaign type (Regular/Plain text/Template) → pick one of 3 starter templates (Newsletter, Promo, Welcome) → three-column page builder: **left palette** of 6 block types (Hero, Heading, Paragraph, Image, Button, Divider), **center canvas** showing the email faithfully with click-to-select + per-block ↑/↓/✕ toolbar, **right edit panel** with typed form controls per block. AI Fill rewrites the block list as `[heading, ...paragraphs, button]`. Save Draft writes the deterministic HTML output (via `renderBlocksToHtml`) to `email_campaigns` (source='manual', status='draft'). Sending via Mailchimp deferred. |
+| [`/marketing/email`](frontend/src/app/(app)/marketing/email/page.tsx) | Rebuilt 2026-08-03 (deliverable 2): filter row (search, sent-date range, campaign type, status, sort-by-metric — all data-driven off `GET /email/campaigns`'s `filter_options`), a sortable campaigns table (name/subject, type, sent date, recipients, opens+open_rate, clicks+click_rate, unsubs, bounces) with a per-row `ScoreBar` + Top/Mid/Low tercile chip as the at-a-glance performance indicator, and a "Top campaigns" ranking card showing the top 5 by the selected sort metric within the current filtered range. The Compose Email feature (page-builder UI) was removed per client request; the 0-row drafts/archived sections (only ever populated by that flow) were removed with it. |
 | [`/marketing`](frontend/src/app/(app)/marketing/page.tsx) | Marketing overview hub — pulls aggregate email KPIs |
 | [`/integrations/mailchimp`](frontend/src/app/(app)/integrations/[slug]/page.tsx) | "Last synced" timestamp + last sync error if any |
 
@@ -46,11 +45,9 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 - **Marketing Director chat awareness** — `/marketing-director` chat could reference real campaign performance ("Last week's newsletter pulled 38% opens — keep doing X").
 - **Lead-level email engagement** — Mailchimp returns per-recipient open/click data via `/reports/{id}/email-activity`. Joining that to `leads.email` would surface "Lead X opened 3 of your last 5 emails" on the lead detail page.
 - **Cohort analysis** — newsletter vs broadcast vs sequence performance over time. Schema supports it via `campaign_type`; needs a chart.
-- **Re-send / variant suggestions** — the email compose page (`/marketing/email/compose`) could draft a follow-up specifically tuned for non-openers of a prior campaign.
 - **Anomaly alerts** — when open rate on a new campaign is materially lower than the rolling baseline, surface a warning ("This send is tracking 12% below your 30-day average").
-- **Send manual drafts via Mailchimp** — `/marketing/email/compose` writes drafts locally today (source='manual'). Wiring `POST /3.0/campaigns` + `/actions/send` (with a "send test only" guardrail + confirm dialog) would let Greg compose AND send from CI instead of bouncing to Mailchimp's UI.
-- **User-saved templates** — the 3 starter templates are hardcoded in `frontend/src/lib/email-templates.ts`. A future `email_templates` table + CRUD would let Greg save his own.
-- **Image upload to storage** — compose currently accepts image URLs only. Adding S3 / Supabase Storage uploads is its own task.
+- **Marketing Director chat awareness** — `/marketing-director` chat could reference the new filtered/ranked view directly instead of just the free-form `POST /email` analysis.
+- **Compose** — removed 2026-08-03 per client request (deliverable 2). The backend CRUD endpoints (`POST/GET/PATCH/DELETE /email/campaigns/{id}`, duplicate, archive/unarchive) are left intact but unused by any UI; re-adding a compose surface would need a new frontend page pointed at them.
 
 **Operational notes**
 

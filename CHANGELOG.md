@@ -6,6 +6,72 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Email campaigns page overhaul (deliverable 2)
+
+Rebuilds `/marketing/email` around real metrics instead of the Compose flow.
+
+- **Removed the Compose Email feature** per client request: deleted
+  `frontend/src/app/(app)/marketing/email/compose/`, its exclusive support
+  code (`frontend/src/components/email/` — the page-builder + block
+  components, `frontend/src/lib/email-templates.ts`), and every link/CTA
+  pointing at it. Backend CRUD endpoints for campaign drafts
+  (`POST/GET/PATCH/DELETE /email/campaigns/{id}`, duplicate, archive,
+  unarchive) are left intact (not asked to be removed) but are now unused
+  by any UI.
+- **Audited `email_campaigns` read-only** before building filters (asyncpg,
+  `statement_cache_size=0`, mirroring the repo's existing proof-script
+  idiom): **2,426 rows**, all `deleted_at IS NULL`. `status` has exactly
+  **one** distinct value (`sent`) across every row — no drafts/archived
+  campaigns exist outside the (now-removed) compose flow, which is why
+  those two sections are gone from the rebuilt page rather than kept.
+  `campaign_type` has **12 distinct, well-distributed values** (Value/
+  Education 648, Weekly Nurture 441, Story-led 366, Launch 312,
+  Transactional 307, Promotional Offer 160, Client Win 94, Welcome/
+  Onboarding 41, Re-engagement 35, Unclassifiable 17, `regular` 2, plus 3
+  NULLs) — a real filter. `sent_at` spans 2016-07-25 to 2026-08-02 — a
+  real date-range filter. `bounce_count` is always 0 today (kept in the
+  row shape as a real column; just nothing to show yet).
+- **New `GET /email/campaigns`** (`backend/app/routes/email.py`) — raw-SQL,
+  auth-gated like its siblings. Params: `sent_from`/`sent_to` (ISO dates,
+  `_parse_campaigns_date_param` mirrors `ads._parse_date_param` — 422 on a
+  malformed date instead of an opaque 500 from the asyncpg driver),
+  `campaign_type`, `status`, `search` (name/subject ILIKE), `sort_by`
+  (whitelisted against `_CAMPAIGNS_SORTABLE_COLUMNS` — sent_at,
+  recipients_count, open_count, click_count, open_rate, click_rate,
+  unsubscribe_count, bounce_count — same injection-safe idiom as
+  `leads._SORTABLE_COLUMNS`), `sort_dir`. Returns `campaigns` (id, name,
+  subject, campaign_type, status, sent_at, audience_name, recipient/open/
+  click/unsub/bounce counts, open_rate, click_rate, archive_url),
+  `summary` (count, total_recipients, total_opens, total_clicks,
+  avg_open_rate, avg_click_rate — computed over the **filtered** set, not
+  the whole table), and `filter_options` (distinct campaign_types/statuses
+  actually present — same data-driven-filter philosophy as the leads
+  page). New Pydantic schemas in `backend/app/schemas/email.py`
+  (`EmailCampaignListRow`, `EmailCampaignsSummary`,
+  `EmailCampaignsFilterOptions`, `EmailCampaignsResponse`), everything
+  defaulted. Fixed a latent bug as a byproduct: `HTTPException` was used
+  by five existing routes in this file (404s on campaign CRUD) but was
+  never imported — now imported alongside the new endpoint's needs.
+- **Frontend** (`frontend/src/app/(app)/marketing/email/page.tsx`,
+  rebuilt): FilterBar-style row (search, sent-date range, campaign type
+  select, status select, and a "Sort by" metric select — the metric-filter
+  ask — all server-driven via the new endpoint); a sortable campaigns
+  table with clickable metric headers (click toggles server-side sort
+  direction, same idiom as the leads table); a per-row **visual
+  performance indicator** — the shared `ScoreBar` atom on open_rate
+  normalized against the filtered set's max, plus a Top/Mid/Low tercile
+  chip computed client-side against the same filtered set (no fabricated
+  scores); and a **"Top campaigns" ranking card** showing the top 5 by
+  whichever metric is currently selected, within the current date range —
+  satisfies the ranking ask by re-slicing the same fetched response
+  rather than a second query. KPI row now reflects the filtered set
+  (campaigns / avg open rate / avg click rate / total recipients) instead
+  of the old all-time totals.
+- **Docs:** `FEATURE-VERIFICATION.md` gained a "Marketing — Email
+  Campaigns" section with concrete manual-test steps against the real
+  audit numbers above; `INTEGRATIONS.md`'s Mailchimp entry updated to
+  describe the new surface and mark Compose as removed.
+
 ### Added — Revenue by channel for closed sales (deliverable 9b — sales half of Source Attribution)
 
 Completes the "Leads & Sales — Source Attribution" deliverable: leads got

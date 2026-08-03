@@ -460,8 +460,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/email.py": {
-    "mtime": 1779363640.378916,
-    "ast_hash": "4f1df380180fb20ec9f23e3ca5bde615",
+    "mtime": 1785771002.11793,
+    "ast_hash": "439297a8c59fb0180dbedb51155ceb00",
     "semantic_hash": ""
   },
   "backend/app/routes/funnels.py": {
@@ -575,8 +575,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/email.py": {
-    "mtime": 1779363622.3755922,
-    "ast_hash": "99ffa8f2e731ca50e1f92e77ac79d32d",
+    "mtime": 1785770942.0771613,
+    "ast_hash": "1473f135066520e90053dff1054e4bfb",
     "semantic_hash": ""
   },
   "backend/app/schemas/funnels.py": {
@@ -959,14 +959,9 @@
     "ast_hash": "9289bd83f1f34f7432c3c38fcb587ca9",
     "semantic_hash": ""
   },
-  "frontend/src/app/(app)/marketing/email/compose/page.tsx": {
-    "mtime": 1782640772.1656299,
-    "ast_hash": "ad95c79df7bc507ed18c36f65f8661ca",
-    "semantic_hash": ""
-  },
   "frontend/src/app/(app)/marketing/email/page.tsx": {
-    "mtime": 1782640772.1661694,
-    "ast_hash": "5a6e6db5bdb04c0579673555d01beff4",
+    "mtime": 1785771286.8333733,
+    "ast_hash": "ea1b668cd73095bc19a27d5e2f4f30c3",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/funnels/page.tsx": {
@@ -1134,51 +1129,6 @@
     "ast_hash": "c9d6a41f46862f25da62a15d14c1c409",
     "semantic_hash": ""
   },
-  "frontend/src/components/email/PageBuilder.tsx": {
-    "mtime": 1784046104.3524125,
-    "ast_hash": "265a344a1fe7909ac9f1d93533d77df2",
-    "semantic_hash": ""
-  },
-  "frontend/src/components/email/blocks/ButtonBlock.tsx": {
-    "mtime": 1779360299.494375,
-    "ast_hash": "c997fa02d49acd22413c74e5baf54371",
-    "semantic_hash": ""
-  },
-  "frontend/src/components/email/blocks/DividerBlock.tsx": {
-    "mtime": 1779360308.8802233,
-    "ast_hash": "8de3eae4060be11b1cece3d9d3d4667c",
-    "semantic_hash": ""
-  },
-  "frontend/src/components/email/blocks/HeadingBlock.tsx": {
-    "mtime": 1779360261.1686976,
-    "ast_hash": "d5acde2fb4bd9a434569515343418275",
-    "semantic_hash": ""
-  },
-  "frontend/src/components/email/blocks/HeroBlock.tsx": {
-    "mtime": 1779360248.0263433,
-    "ast_hash": "9c0d276f8bf7c22e3bb1a517aab962b7",
-    "semantic_hash": ""
-  },
-  "frontend/src/components/email/blocks/ImageBlock.tsx": {
-    "mtime": 1779360285.8430643,
-    "ast_hash": "37865db456984025c413a15c89becec4",
-    "semantic_hash": ""
-  },
-  "frontend/src/components/email/blocks/ParagraphBlock.tsx": {
-    "mtime": 1779360272.9254737,
-    "ast_hash": "2e8a6de5034fb85c0b8e1a858630f7d6",
-    "semantic_hash": ""
-  },
-  "frontend/src/components/email/blocks/render.ts": {
-    "mtime": 1779362553.8209329,
-    "ast_hash": "c94e47db9cca87c491a6a23f6cb03772",
-    "semantic_hash": ""
-  },
-  "frontend/src/components/email/blocks/types.ts": {
-    "mtime": 1779360165.976444,
-    "ast_hash": "52062f044570175f8ac420d347c5f3db",
-    "semantic_hash": ""
-  },
   "frontend/src/components/error-boundary.tsx": {
     "mtime": 1782640772.174996,
     "ast_hash": "2e720d120455c73ed3e5405c0265423c",
@@ -1344,11 +1294,6 @@
     "ast_hash": "ffac0a0376dcfe7548f3e2c41b070a40",
     "semantic_hash": ""
   },
-  "frontend/src/lib/email-templates.ts": {
-    "mtime": 1779360407.3342588,
-    "ast_hash": "1691d208d09971279ab447e1304a6bf9",
-    "semantic_hash": ""
-  },
   "frontend/src/lib/supabase/client.ts": {
     "mtime": 1779455336.2213247,
     "ast_hash": "8f41ad1b18757dd0372012f974045f9b",
@@ -1425,8 +1370,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1785770587.1508179,
-    "ast_hash": "5be42341eabcdc2dfed4f2508926e9f8",
+    "mtime": 1785771206.5594077,
+    "ast_hash": "71e565bed5ca88726f4126d35534647f",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1435,13 +1380,13 @@
     "semantic_hash": ""
   },
   "FEATURE-VERIFICATION.md": {
-    "mtime": 1785770616.5100265,
-    "ast_hash": "10693e0ac5578221d98d58b9a971811b",
+    "mtime": 1785771261.770178,
+    "ast_hash": "1602f7c693ce7b53a82540046c8ef6eb",
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1785770572.6144648,
-    "ast_hash": "ab358c6fff3c8b88d1bb661477aa4934",
+    "mtime": 1785771179.2769923,
+    "ast_hash": "45ef15c5c429d66d92b7b2133cd071ec",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
