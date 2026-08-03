@@ -29,6 +29,7 @@ from app.repositories.social_stats import (
     build_leads_by_day,
     build_summary_stats,
     filter_posts,
+    paginate_posts,
     sort_posts,
 )
 from app.services.integrations_registry import get_provider
@@ -45,6 +46,17 @@ from app.schemas.social import (
 
 # Platforms shown in the per-platform breakdown, in display order.
 _BREAKDOWN_PLATFORMS = ["instagram", "facebook", "tiktok", "linkedin"]
+
+# Columns the Posts table can sort by — matches sort_posts()'s "timestamp"
+# alias for posted_at plus every sortable column exposed in the frontend
+# (frontend/.../marketing/social/page.tsx's SortCol union). Whitelisted so
+# an unrecognized value fails loudly (422) instead of silently degrading
+# sort_posts() to an unsorted pass-through.
+_SORT_COLUMNS = {
+    "timestamp", "likes_count", "comments_count", "views",
+    "avg_watch_time_sec", "reach", "saves_count", "shares_count",
+    "engagement_rate",
+}
 
 # Documented gaps between Greg's live-Graph-API tracking page and this
 # DB-backed rebuild — surfaced in every /overview response so the frontend
@@ -83,6 +95,26 @@ def _parse_date_param(value: str | None, *, param_name: str) -> date | None:
             status_code=422,
             detail=f"Invalid {param_name}: {value!r} — expected ISO format YYYY-MM-DD",
         ) from exc
+
+
+def _validate_sort_col(value: str) -> str:
+    """Validate ``sort_col`` against the Posts table's whitelist.
+
+    Unlike ``routes/email.py._resolve_campaigns_sort_by`` (which silently
+    falls back to a default on an unrecognized column — safe for a route
+    where the sort is a nice-to-have), an unrecognized ``sort_col`` here
+    fails loudly with a 422: silently degrading to "unsorted" would look
+    like a working sort that quietly stopped ordering results, which is
+    worse than an explicit error for a page whose whole point is a
+    sortable table. Also the injection guard: sort_posts() never sees a
+    value outside this whitelist.
+    """
+    if value not in _SORT_COLUMNS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid sort_col: {value!r} — expected one of {sorted(_SORT_COLUMNS)}",
+        )
+    return value
 
 
 @router.post("", response_model=SocialAnalyzeResponse)
@@ -289,6 +321,8 @@ async def get_social_overview(
         current_user.id, date_from, date_to, media_type,
     )
 
+    sort_col = _validate_sort_col(sort_col)
+
     parsed_from = _parse_date_param(date_from, param_name="date_from")
     parsed_to = _parse_date_param(date_to, param_name="date_to")
 
@@ -329,7 +363,7 @@ async def get_social_overview(
 
     posts_with_leads = attach_post_lead_counts(filtered_posts, lead_rows)
     sorted_posts = sort_posts(posts_with_leads, sort_col=sort_col, sort_dir=sort_dir)
-    page = sorted_posts[offset:offset + limit]
+    page, posts_total = paginate_posts(sorted_posts, limit=limit, offset=offset)
 
     # ---- Leads by Day — comment-event frame (WGR comment_leads_by_day()
     # RPC equivalent), scoped by the same date range as the Posts table. ----
@@ -376,7 +410,7 @@ async def get_social_overview(
     return SocialOverviewResponse(
         summary=SocialOverviewSummary(**summary),
         posts=posts_out,
-        posts_total=len(sorted_posts),
+        posts_total=posts_total,
         leads_by_day=leads_by_day,
         keywords=lbd["keywords"] or kw_totals["keywords"],
         date_from=date_from,

@@ -196,6 +196,24 @@ def sort_posts(posts: Sequence[dict], *, sort_col: str, sort_dir: str = "desc") 
     return non_null + null
 
 
+def paginate_posts(
+    posts: Sequence[dict], *, limit: int, offset: int,
+) -> tuple[list[dict], int]:
+    """Slice an already-sorted post list for the Posts table's pagination.
+
+    Returns ``(page, total)`` where ``total`` is the PRE-slice count (the
+    full filtered/sorted set, not the page length) — the frontend's
+    ``Pagination`` component needs the true total to compute page count and
+    the "X-Y of N" label. A negative or zero ``limit``/``offset`` is not
+    expected here (the route's ``Query(ge=...)`` bounds already reject
+    those before this is called) — this function trusts its inputs and
+    just slices.
+    """
+    total = len(posts)
+    page = posts[offset:offset + limit]
+    return page, total
+
+
 def build_leads_by_day(
     events: Sequence[dict],
     *,

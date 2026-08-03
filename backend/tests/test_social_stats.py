@@ -15,9 +15,14 @@ Contract under test — reproducing Greg's own tracking page semantics
 - sort_posts: nulls-always-last sort by any sortable column, both directions.
 - build_leads_by_day: buckets comment events by day (UTC), scoped by the
   same date range, keyword-generic (never hardcodes keyword names).
+- paginate_posts: pre-slice total (not page length) + correct page
+  boundaries, matching the frontend Pagination component's contract.
 """
 
 from datetime import date, datetime, timezone
+
+import pytest
+from fastapi import HTTPException
 
 from app.repositories.social_stats import (
     attach_post_lead_counts,
@@ -25,8 +30,10 @@ from app.repositories.social_stats import (
     build_leads_by_day,
     build_summary_stats,
     filter_posts,
+    paginate_posts,
     sort_posts,
 )
+from app.routes.social import _SORT_COLUMNS, _validate_sort_col
 
 
 def _post(
@@ -240,3 +247,94 @@ def test_build_leads_by_day_empty_events():
     result = build_leads_by_day([])
     assert result["days"] == []
     assert result["keywords"] == []
+
+
+# --- paginate_posts ---
+
+
+def test_paginate_posts_returns_pre_slice_total_not_page_length():
+    posts = [_post(str(i)) for i in range(25)]
+    page, total = paginate_posts(posts, limit=10, offset=0)
+    assert total == 25
+    assert len(page) == 10
+
+
+def test_paginate_posts_first_page():
+    posts = [_post(str(i)) for i in range(25)]
+    page, total = paginate_posts(posts, limit=10, offset=0)
+    assert [p["ig_media_id"] for p in page] == [str(i) for i in range(10)]
+    assert total == 25
+
+
+def test_paginate_posts_middle_page():
+    posts = [_post(str(i)) for i in range(25)]
+    page, _ = paginate_posts(posts, limit=10, offset=10)
+    assert [p["ig_media_id"] for p in page] == [str(i) for i in range(10, 20)]
+
+
+def test_paginate_posts_last_partial_page():
+    posts = [_post(str(i)) for i in range(25)]
+    page, total = paginate_posts(posts, limit=10, offset=20)
+    assert [p["ig_media_id"] for p in page] == [str(i) for i in range(20, 25)]
+    assert len(page) == 5
+    assert total == 25
+
+
+def test_paginate_posts_offset_past_end_returns_empty_page_but_true_total():
+    posts = [_post(str(i)) for i in range(5)]
+    page, total = paginate_posts(posts, limit=10, offset=100)
+    assert page == []
+    assert total == 5
+
+
+def test_paginate_posts_empty_input():
+    page, total = paginate_posts([], limit=10, offset=0)
+    assert page == []
+    assert total == 0
+
+
+def test_paginate_posts_exact_page_boundary():
+    # 20 posts, page size 10 → two full pages, no partial third page.
+    posts = [_post(str(i)) for i in range(20)]
+    page1, total1 = paginate_posts(posts, limit=10, offset=0)
+    page2, total2 = paginate_posts(posts, limit=10, offset=10)
+    assert len(page1) == 10
+    assert len(page2) == 10
+    assert total1 == total2 == 20
+
+
+# --- _validate_sort_col (routes/social.py) ---
+
+
+def test_validate_sort_col_accepts_every_whitelisted_column():
+    for column in _SORT_COLUMNS:
+        assert _validate_sort_col(column) == column
+
+
+def test_validate_sort_col_invalid_value_raises_422():
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_sort_col("nonexistent_column")
+    assert exc_info.value.status_code == 422
+    assert "nonexistent_column" in exc_info.value.detail
+
+
+def test_validate_sort_col_sql_injection_attempt_raises_422():
+    # The whitelist is the injection guard — anything not in it must fail
+    # loudly (422), never silently pass through to sort_posts()/SQL.
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_sort_col("id; DROP TABLE instagram_posts;--")
+    assert exc_info.value.status_code == 422
+
+
+def test_validate_sort_col_empty_string_raises_422():
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_sort_col("")
+    assert exc_info.value.status_code == 422
+
+
+def test_validate_sort_col_case_sensitive_rejects_mismatched_case():
+    # "Timestamp" is not "timestamp" — no case-insensitive matching, matches
+    # the same strictness as the rest of the whitelist.
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_sort_col("Timestamp")
+    assert exc_info.value.status_code == 422
