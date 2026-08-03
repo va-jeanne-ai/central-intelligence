@@ -129,6 +129,40 @@ CONTENT_IDEA_VALID_TRANSITIONS: dict[str, list[str]] = {
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _parse_datetime_param(
+    value: str | None, *, param_name: str, end_of_day: bool = False
+) -> datetime | None:
+    """Parse a query param into a timezone-aware datetime for a DateTime column.
+
+    Mirrors the `_parse_date_param` idiom in routes/ads.py: fail loudly (422)
+    on a malformed value rather than letting an opaque asyncpg bind error
+    surface as a 500. Accepts a bare 'YYYY-MM-DD' or a full ISO datetime; a
+    bare date's `end_of_day` boundary is pushed to 23:59:59.999999 so the
+    whole day is included in a `<=` comparison.
+    """
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": f"Invalid {param_name}: {value!r} is not a valid ISO date/datetime.",
+                    "field": param_name,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            },
+        ) from exc
+    if end_of_day and len(value) <= 10:  # bare 'YYYY-MM-DD', no time component
+        dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _pagination(page: int, limit: int, total: int) -> PaginationMeta:
     total_pages = max(1, math.ceil(total / limit))
     return PaginationMeta(
@@ -898,72 +932,155 @@ async def update_call(
 # 5. GET /ci/insights
 # ===================================================================
 
+def _build_insight_filters(
+    *,
+    call_id: str | None,
+    insight_type: str | None,
+    signal_family: str | None,
+    signal_strength: str | None,
+    pain_layer: str | None,
+    tag: str | None,
+    search: str | None,
+    date_from: str | None,
+    date_to: str | None,
+) -> list:
+    """Injection-safe filter clauses for the insights list — bind params only,
+    whitelisted columns only. Shared by list_insights and insight_summary so
+    the charts always reflect exactly what the table shows."""
+    clauses: list = []
+    if call_id:
+        clauses.append(Insight.call_id == call_id)
+    if insight_type:
+        clauses.append(Insight.insight_type == insight_type)
+    if signal_family:
+        clauses.append(Insight.signal_family == signal_family)
+    if signal_strength:
+        clauses.append(Insight.signal_strength == signal_strength)
+    if pain_layer:
+        clauses.append(Insight.pain_layer == pain_layer)
+    if tag:
+        tag_match = select(InsightTag.insight_id).where(InsightTag.tag == tag)
+        clauses.append(Insight.id.in_(tag_match))
+    if search:
+        like = f"%{search.strip()}%"
+        clauses.append(or_(Insight.signal.ilike(like), Insight.raw_quote.ilike(like)))
+    if date_from:
+        dt_from = _parse_datetime_param(date_from, param_name="created_from")
+        clauses.append(Insight.created_at >= dt_from)
+    if date_to:
+        dt_to = _parse_datetime_param(date_to, param_name="created_to", end_of_day=True)
+        clauses.append(Insight.created_at <= dt_to)
+    return clauses
+
+
 @router.get("/insights", response_model=InsightListResponse)
 async def list_insights(
     call_id: str | None = Query(None),
-    insight_type: str | None = Query(None),
-    signal_family: str | None = Query(None),
-    signal_strength: str | None = Query(None),
-    date_from: str | None = Query(None),
-    date_to: str | None = Query(None),
+    insight_type: str | None = Query(None, description="Exact match on insight_type."),
+    signal_family: str | None = Query(None, description="Exact match on signal_family."),
+    signal_strength: str | None = Query(None, description="Exact match on signal_strength."),
+    pain_layer: str | None = Query(None, description="Exact match on pain_layer."),
+    tag: str | None = Query(None, description="Exact match on an insight_tags.tag joined to the insight."),
+    search: str | None = Query(None, description="Case-insensitive match on signal or raw_quote."),
+    created_from: str | None = Query(None, description="Insight created_at >= (ISO date/datetime)."),
+    created_to: str | None = Query(None, description="Insight created_at <= (ISO date/datetime)."),
+    date_from: str | None = Query(None, description="Deprecated alias for created_from."),
+    date_to: str | None = Query(None, description="Deprecated alias for created_to."),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ):
-    """Query insights with filters (CI-MKT-01)."""
-    stmt = select(Insight)
-    count_stmt = select(func.count()).select_from(Insight)
+    """Query insights with full filters + pagination + source attribution (CI-MKT-01).
 
-    if call_id:
-        stmt = stmt.where(Insight.call_id == call_id)
-        count_stmt = count_stmt.where(Insight.call_id == call_id)
-    if insight_type:
-        stmt = stmt.where(Insight.insight_type == insight_type)
-        count_stmt = count_stmt.where(Insight.insight_type == insight_type)
-    if signal_family:
-        stmt = stmt.where(Insight.signal_family == signal_family)
-        count_stmt = count_stmt.where(Insight.signal_family == signal_family)
-    if signal_strength:
-        stmt = stmt.where(Insight.signal_strength == signal_strength)
-        count_stmt = count_stmt.where(Insight.signal_strength == signal_strength)
-    if date_from:
-        dt_from = datetime.fromisoformat(date_from)
-        stmt = stmt.where(Insight.created_at >= dt_from)
-        count_stmt = count_stmt.where(Insight.created_at >= dt_from)
-    if date_to:
-        dt_to = datetime.fromisoformat(date_to)
-        stmt = stmt.where(Insight.created_at <= dt_to)
-        count_stmt = count_stmt.where(Insight.created_at <= dt_to)
+    Source attribution: every insight carries a call_id (100% coverage today),
+    so "source" resolves to the linked call (date, call_type) and, where the
+    call has one, the lead's name — surfaced so the UI can link back to the
+    call/lead detail page. `created_from`/`created_to` are the canonical date
+    param names; `date_from`/`date_to` are kept as aliases for backward compat.
+    """
+    clauses = _build_insight_filters(
+        call_id=call_id,
+        insight_type=insight_type,
+        signal_family=signal_family,
+        signal_strength=signal_strength,
+        pain_layer=pain_layer,
+        tag=tag,
+        search=search,
+        date_from=created_from or date_from,
+        date_to=created_to or date_to,
+    )
+
+    stmt = select(Insight).where(*clauses)
+    count_stmt = select(func.count()).select_from(Insight).where(*clauses)
 
     total = (await session.execute(count_stmt)).scalar_one()
 
     stmt = (
-        stmt.order_by(Insight.frequency_score.desc())
+        stmt.order_by(Insight.frequency_score.desc(), Insight.id.asc())
         .offset((page - 1) * limit)
         .limit(limit)
     )
     result = await session.execute(stmt)
     insights = result.scalars().all()
 
+    # Batch-resolve source attribution for just this page (avoids N+1):
+    # call date/type, then the call's lead name.
+    call_ids = [i.call_id for i in insights if i.call_id]
+    calls_by_id: dict[str, Call] = {}
+    if call_ids:
+        call_rows = (await session.execute(
+            select(Call).where(Call.id.in_(call_ids))
+        )).scalars().all()
+        calls_by_id = {c.id: c for c in call_rows}
+
+    lead_ids = {c.lead_id for c in calls_by_id.values() if c.lead_id is not None}
+    lead_names: dict = {}
+    if lead_ids:
+        lead_rows = (await session.execute(
+            select(Lead.id, Lead.name).where(Lead.id.in_(lead_ids))
+        )).all()
+        lead_names = {lid: name for lid, name in lead_rows}
+
+    # Batch-resolve tags for just this page (avoids N+1).
+    insight_ids = [i.id for i in insights]
+    tags_by_insight: dict[str, list[str]] = {}
+    if insight_ids:
+        tag_rows = (await session.execute(
+            select(InsightTag.insight_id, InsightTag.tag)
+            .where(InsightTag.insight_id.in_(insight_ids), InsightTag.tag.is_not(None))
+        )).all()
+        for iid, t in tag_rows:
+            tags_by_insight.setdefault(iid, []).append(t)
+
+    data = []
+    for i in insights:
+        call = calls_by_id.get(i.call_id) if i.call_id else None
+        lead_id = str(call.lead_id) if call and call.lead_id is not None else None
+        data.append(InsightSummary(
+            insight_id=i.id,
+            call_id=i.call_id,
+            speaker_name=i.speaker_name,
+            insight_type=i.insight_type,
+            signal_family=i.signal_family,
+            signal=i.signal,
+            signal_strength=i.signal_strength,
+            pain_layer=i.pain_layer,
+            raw_quote=i.raw_quote,
+            marketing_translation=i.marketing_translation,
+            hook_angle_example=i.hook_angle_example,
+            best_use_case=i.best_use_case,
+            quote_confidence=i.quote_confidence,
+            frequency_score=i.frequency_score,
+            created_at=i.created_at,
+            call_date=call.date if call else None,
+            call_type=call.call_type if call else None,
+            lead_id=lead_id,
+            lead_name=lead_names.get(call.lead_id) if call and call.lead_id else None,
+            tags=tags_by_insight.get(i.id, []),
+        ))
+
     return InsightListResponse(
-        data=[
-            InsightSummary(
-                insight_id=i.id,
-                call_id=i.call_id,
-                speaker_name=i.speaker_name,
-                insight_type=i.insight_type,
-                signal_family=i.signal_family,
-                signal=i.signal,
-                signal_strength=i.signal_strength,
-                raw_quote=i.raw_quote,
-                marketing_translation=i.marketing_translation,
-                hook_angle_example=i.hook_angle_example,
-                best_use_case=i.best_use_case,
-                quote_confidence=i.quote_confidence,
-                frequency_score=i.frequency_score,
-            )
-            for i in insights
-        ],
+        data=data,
         pagination=_pagination(page, limit, total),
     )
 
@@ -1000,6 +1117,7 @@ async def insight_facets(
         insight_type=await _distinct(Insight.insight_type),
         signal_family=await _distinct(Insight.signal_family),
         signal_strength=await _distinct(Insight.signal_strength),
+        pain_layer=await _distinct(Insight.pain_layer),
     )
 
 
@@ -1014,8 +1132,13 @@ async def insight_summary(
     insight_type: str | None = Query(None),
     signal_family: str | None = Query(None),
     signal_strength: str | None = Query(None),
-    date_from: str | None = Query(None),
-    date_to: str | None = Query(None),
+    pain_layer: str | None = Query(None),
+    tag: str | None = Query(None),
+    search: str | None = Query(None),
+    created_from: str | None = Query(None),
+    created_to: str | None = Query(None),
+    date_from: str | None = Query(None, description="Deprecated alias for created_from."),
+    date_to: str | None = Query(None, description="Deprecated alias for created_to."),
     session: AsyncSession = Depends(get_session),
 ):
     """Pre-aggregated distributions for the CI Insights charts (CI-MKT-01).
@@ -1027,19 +1150,19 @@ async def insight_summary(
     keys are excluded so they never render as an empty chart slice.
     """
 
-    # Build the shared filter predicate once and apply it to every query so
+    # Build the shared filter predicate once (same helper as list_insights) so
     # the charts stay consistent with each other and with the list view.
-    filters = []
-    if insight_type:
-        filters.append(Insight.insight_type == insight_type)
-    if signal_family:
-        filters.append(Insight.signal_family == signal_family)
-    if signal_strength:
-        filters.append(Insight.signal_strength == signal_strength)
-    if date_from:
-        filters.append(Insight.created_at >= datetime.fromisoformat(date_from))
-    if date_to:
-        filters.append(Insight.created_at <= datetime.fromisoformat(date_to))
+    filters = _build_insight_filters(
+        call_id=None,
+        insight_type=insight_type,
+        signal_family=signal_family,
+        signal_strength=signal_strength,
+        pain_layer=pain_layer,
+        tag=tag,
+        search=search,
+        date_from=created_from or date_from,
+        date_to=created_to or date_to,
+    )
 
     def _apply(stmt):
         for f in filters:
@@ -1094,6 +1217,7 @@ async def insight_summary(
         by_insight_type=await _distribution(Insight.insight_type),
         by_signal_family=await _distribution(Insight.signal_family),
         by_signal_strength=await _distribution(Insight.signal_strength),
+        by_pain_layer=await _distribution(Insight.pain_layer),
         top_signals=[
             InsightTopSignal(
                 signal=r.signal,
@@ -1360,31 +1484,97 @@ async def update_content_idea(
 # 9. GET /ci/market-signals
 # ===================================================================
 
+# Prior-window length used for the momentum comparison: last_30_days already
+# includes last_7_days, so the "prior" period is the remaining 23 days.
+_MOMENTUM_PRIOR_DAYS = 23
+
+
+def _momentum(last_7_days: int, last_30_days: int) -> float | None:
+    """7-day mention rate vs. the prior-23-day average rate within the 30d window.
+
+    >0 means the signal is accelerating (mentioned more often lately than its
+    own recent baseline); <0 means it's cooling off. None when last_30_days is
+    too small to form a meaningful baseline (avoids a noisy "infinite spike"
+    reading off one or two mentions).
+    """
+    prior_mentions = max(0, last_30_days - last_7_days)
+    if last_30_days < 3:
+        return None
+    prior_rate = prior_mentions / _MOMENTUM_PRIOR_DAYS
+    recent_rate = last_7_days / 7
+    if prior_rate == 0:
+        return None if recent_rate == 0 else 1.0  # went from nothing to something
+    return (recent_rate - prior_rate) / prior_rate
+
+
 @router.get("/market-signals", response_model=MarketSignalListResponse)
 async def list_market_signals(
-    insight_type: str | None = Query(None),
-    signal_family: str | None = Query(None),
-    sort_by: str = Query("total_mentions"),
+    insight_type: str | None = Query(None, description="Exact match on insight_type."),
+    signal_family: str | None = Query(None, description="Exact match on signal_family."),
+    search: str | None = Query(None, description="Case-insensitive match on signal or example_quote."),
+    min_mentions: int | None = Query(None, ge=0, description="Only signals with total_mentions >= this."),
+    updated_from: str | None = Query(None, description="updated_at >= (ISO date/datetime)."),
+    updated_to: str | None = Query(None, description="updated_at <= (ISO date/datetime)."),
+    sort_by: str = Query("total_mentions", description="total_mentions | last_30_days | last_7_days | momentum"),
+    sort_dir: Literal["asc", "desc"] = Query("desc"),
+    page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=500),
     session: AsyncSession = Depends(get_session),
 ):
-    """Get aggregated market signals (CI-MKT-01)."""
-    stmt = select(MarketSignal)
+    """Get aggregated market signals with filters + pagination (CI-MKT-01).
 
+    `market_signals` has no `created_at` — it's a rolling aggregate keyed on
+    (signal_family, signal) and refreshed in place — so the date range here
+    scopes `updated_at` (when the aggregate itself was last recomputed).
+    """
+    clauses: list = []
     if insight_type:
-        stmt = stmt.where(MarketSignal.insight_type == insight_type)
+        clauses.append(MarketSignal.insight_type == insight_type)
     if signal_family:
-        stmt = stmt.where(MarketSignal.signal_family == signal_family)
+        clauses.append(MarketSignal.signal_family == signal_family)
+    if search:
+        like = f"%{search.strip()}%"
+        clauses.append(or_(MarketSignal.signal.ilike(like), MarketSignal.example_quote.ilike(like)))
+    if min_mentions is not None:
+        clauses.append(MarketSignal.total_mentions >= min_mentions)
+    if updated_from:
+        dt_from = _parse_datetime_param(updated_from, param_name="updated_from")
+        clauses.append(MarketSignal.updated_at >= dt_from)
+    if updated_to:
+        dt_to = _parse_datetime_param(updated_to, param_name="updated_to", end_of_day=True)
+        clauses.append(MarketSignal.updated_at <= dt_to)
 
-    sort_col = {
-        "total_mentions": MarketSignal.total_mentions,
-        "last_30_days": MarketSignal.last_30_days,
-        "last_7_days": MarketSignal.last_7_days,
-    }.get(sort_by, MarketSignal.total_mentions)
+    count_stmt = select(func.count()).select_from(MarketSignal).where(*clauses)
+    total = (await session.execute(count_stmt)).scalar_one()
 
-    stmt = stmt.order_by(sort_col.desc()).limit(limit)
-    result = await session.execute(stmt)
-    signals = result.scalars().all()
+    stmt = select(MarketSignal).where(*clauses)
+
+    # "momentum" isn't a DB column — it's computed in Python from last_7_days/
+    # last_30_days — so that sort happens after fetch, over the full filtered
+    # set (bounded, matches the page's max limit=500), rather than in SQL.
+    if sort_by == "momentum":
+        result = await session.execute(stmt)
+        signals = result.scalars().all()
+        signals = sorted(
+            signals,
+            key=lambda s: (_momentum(s.last_7_days, s.last_30_days) if _momentum(s.last_7_days, s.last_30_days) is not None else float("-inf")),
+            reverse=(sort_dir == "desc"),
+        )
+        signals = signals[(page - 1) * limit : (page - 1) * limit + limit]
+    else:
+        sort_col = {
+            "total_mentions": MarketSignal.total_mentions,
+            "last_30_days": MarketSignal.last_30_days,
+            "last_7_days": MarketSignal.last_7_days,
+        }.get(sort_by, MarketSignal.total_mentions)
+        direction = asc if sort_dir == "asc" else desc
+        stmt = (
+            stmt.order_by(direction(sort_col), MarketSignal.id.asc())
+            .offset((page - 1) * limit)
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        signals = result.scalars().all()
 
     return MarketSignalListResponse(
         data=[
@@ -1396,10 +1586,15 @@ async def list_market_signals(
                 last_30_days=s.last_30_days,
                 last_7_days=s.last_7_days,
                 example_quote=s.example_quote,
+                example_call_id=s.example_call_id,
                 best_marketing_angle=s.best_marketing_angle,
+                notes=s.notes,
+                updated_at=s.updated_at,
+                momentum=_momentum(s.last_7_days, s.last_30_days),
             )
             for s in signals
-        ]
+        ],
+        total=total,
     )
 
 

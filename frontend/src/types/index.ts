@@ -197,12 +197,22 @@ export interface CIInsight {
   signal_family: string;
   signal: string;
   signal_strength: string;
+  pain_layer: string | null;
   raw_quote: string;
   marketing_translation: string;
   hook_angle_example: string;
   best_use_case: string;
   quote_confidence: string;
   frequency_score: number;
+  created_at: string | null;
+  // Source attribution — every insight resolves to the call it was extracted
+  // from (100% call_id coverage); lead fields are null when the call has no
+  // linked lead.
+  call_date: string | null;
+  call_type: string | null;
+  lead_id: string | null;
+  lead_name: string | null;
+  tags: string[];
 }
 
 export interface CIInsightsResponse {
@@ -218,11 +228,14 @@ export interface CIInsightsResponse {
 }
 
 /** Distinct filterable values present in the insights table — drives the
- * insights-page filter dropdowns so options can't drift from the data. */
+ * insights-page filter dropdowns so options can't drift from the data.
+ * `best_use_case` and `tag` aren't exposed here (1,019 / 2,774 distinct
+ * values respectively — free-text cardinality, not dropdown material). */
 export interface CIInsightFacets {
   insight_type: string[];
   signal_family: string[];
   signal_strength: string[];
+  pain_layer: string[];
 }
 
 /** The company-level health assessment shown atop /insights. Synthesized daily by
@@ -260,6 +273,7 @@ export interface CIInsightDistribution {
   by_insight_type: CIInsightCount[];
   by_signal_family: CIInsightCount[];
   by_signal_strength: CIInsightCount[];
+  by_pain_layer: CIInsightCount[];
   top_signals: CIInsightTopSignal[];
 }
 
@@ -273,11 +287,18 @@ export interface CIMarketSignal {
   last_30_days: number;
   last_7_days: number;
   example_quote: string;
+  example_call_id: string | null;
   best_marketing_angle: string;
+  notes: string | null;
+  updated_at: string | null;
+  /** 7d mention rate vs. the prior-23d average rate within the 30d window.
+   * >0 = accelerating, <0 = cooling off, null = not enough volume to judge. */
+  momentum: number | null;
 }
 
 export interface CIMarketSignalsResponse {
   data: CIMarketSignal[];
+  total: number;
 }
 
 /** Distinct filterable values present in the market_signals table — drives

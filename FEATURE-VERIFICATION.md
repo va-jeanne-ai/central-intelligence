@@ -74,22 +74,14 @@ These were already wired before this sprint. The seeded data from Step 1 means d
 - **API:** `GET /api/v1/leads`, `GET /api/v1/leads/stats`
 
 ### F4 — CI Insights
-- **Status:** ✅ **verified-as-empty (2026-05-19)** — wiring confirmed, table empty by design (blocked on F19)
+- **Status:** ✅ **superseded (2026-08-03)** — table populated (1,932 rows), full filters + source attribution shipped. See **"CI Insights — full filters, source attribution, expanded charts (2026-08-03)"** near the end of this doc for the current verification steps.
 - **URL:** `/ci-insights`
-- **Finding:** `insights` table has 0 rows. The page is fully wired (paginated, filterable, live API) but has nothing to display because no transcripts have been processed through the extraction pipeline. The extraction pipeline is F19 (`call_analyzer` Celery task — net-new work).
-- **What was verified:**
-  - [x] `GET /api/v1/ci/insights` returns 200 OK after the F32 JWT fix
-  - [x] Page renders empty state cleanly (no errors)
-- **To unblock:** F19 (build the Sales Call Analyzer extraction task)
-- **API:** `GET /api/v1/ci/insights`, `GET /api/v1/ci/insights/{id}`
+- **API:** `GET /api/v1/ci/insights`, `GET /api/v1/ci/insights/facets`, `GET /api/v1/ci/insights/summary`, `GET /api/v1/ci/insights/{id}`
 
 ### F5 — Market Signals
-- **Status:** ✅ **verified-as-empty (2026-05-19)** — wiring confirmed, table empty by design (blocked on F19)
+- **Status:** ✅ **superseded (2026-08-03)** — table populated (1,961 rows), redesigned as a trending view. See **"Market Signals — filters + trending redesign (2026-08-03)"** near the end of this doc for the current verification steps.
 - **URL:** `/ci-market-signals`
-- **Finding:** `market_signals` table has 0 rows. Same situation as F4 — page is fully wired, empty because no insights have been extracted yet to aggregate from.
-- **What was verified:**
-  - [x] `GET /api/v1/ci/market-signals` returns 200 OK after the F32 JWT fix
-- **To unblock:** F19
+- **API:** `GET /api/v1/ci/market-signals`, `GET /api/v1/ci/market-signals/facets`
 
 ### F6 — Central Intelligence Chat
 - **Status:** ✅ **verified-working (2026-05-19)**
@@ -834,3 +826,122 @@ Email UI remnant reachable, a filter option that matches 0 rows, KPI row
 not rescoping with filters, sort clicks doing nothing or hitting the wrong
 column, or the performance indicator showing a fixed/fake value unrelated
 to the row's real open_rate.
+
+## CI Insights — full filters, source attribution, expanded charts (2026-08-03)
+
+**Feature:** `/ci-insights` (deliverable 6). Note: there is a **separate**
+`/insights` page (core department health metrics/recommendations engine,
+`frontend/src/app/(app)/insights/`) — unrelated to this work, not touched.
+The routed, sidebar-linked page for this deliverable is `/ci-insights`
+(`Marketing → CI Insights` in the sidebar).
+
+**Before you start — audit numbers as of 2026-08-03 (read-only, live DB):**
+`insights` has **1,932 rows**. `insight_type`: Pain 948, Goal 510, Objection
+275, Trigger 191, Win 3, Identity 2, Belief 2, Buying Signal 1 (8 distinct —
+dropdown). `signal_family`: 30 distinct values (Time & Freedom 408, Income &
+Money 405, Identity & Status 382, Skills & Competency 279, Life
+Circumstances 184, Relationships 118, Market & Industry 112, plus 23 smaller
+buckets — dropdown). `signal_strength`: Strong 1024, Moderate 826, Weak 80,
+Medium 2 (4 distinct — dropdown). `pain_layer`: 958 rows NULL, then
+Structural 352, Emotional 192, Identity 184, Belief 157, Tactical 53, Social
+31, Strategic 5 (7 real distinct values once NULLs excluded — dropdown).
+`best_use_case` has **1,019 distinct values** — free-text cardinality,
+**no dropdown** (confirmed via audit, not guessed). `insight_tags` has 4,051
+rows over **2,774 distinct tags** — also too high-cardinality for a
+dropdown; exposed as a free-text exact-match filter. `call_id` is **100%**
+populated (0 NULLs) — every insight's "source" resolves to its call.
+
+**Steps:**
+1. Open `/ci-insights`. Confirm the charts grid at the top still shows the
+   original insight-type donut, signal-strength bars, and top-signals bars
+   — nothing removed — **plus two new/kept charts**: "Top signal families"
+   and a new **"Pain layer breakdown"** horizontal-bar chart.
+2. Confirm the filter row (above the insights list) has: a **Search** box,
+   **Insight Type**, **Signal Family**, **Signal Strength**, **Pain Layer**
+   dropdowns (options must be exactly the real distinct values from the
+   audit above — never a fabricated option), a free-text **Tag** input, and
+   a **Generated** date-range pair (two `<input type="date">`s).
+3. Unfiltered, confirm the list total reads **1,932** and the table is
+   paginated (not a raw dump of all 1,932 rows on one page).
+4. Set Insight Type = `Pain` and a Generated range of `2026-06-17` to
+   `2026-07-01` — confirm the total narrows (well below 1,932) and every
+   visible row's insight-type pill reads "Pain".
+5. Type a Signal Family filter and confirm the charts above rescope too
+   (charts are filter-aware, keyed on the same params as the list — not a
+   static unfiltered summary).
+6. Type a tag fragment used in the data (e.g. `time-freedom`, `burnout`) into
+   the Tag field — confirm the list narrows via the `insight_tags` join
+   (debounced ~300ms) and each visible row's tag chips include the typed
+   tag.
+7. Confirm each insight row shows a **source-attribution line** (📞 icon,
+   call type · lead name · call date) below the quote, and that clicking it
+   navigates to `/sales-calls/{call_id}` (or `/coaching-calls/{call_id}`
+   when the call's `call_type` is "Coaching") — a real link, not a dead
+   span.
+8. Clear all filters — confirm the list returns to 1,932 total and the
+   charts return to the unfiltered distribution.
+
+**Pass:** filter dropdowns only ever show real, non-empty audit-derived
+options (never `best_use_case` or the full tag list as a dropdown); list +
+charts stay in lock-step under every filter combination; the table is
+paginated, never an unpaginated 1,932-row dump; every row's source line
+resolves to a working call-detail link; empty/loading states render cleanly
+with no native `alert()`/`confirm()`. **Fail:** a filter matching 0 rows
+presented as a real option, charts frozen on the unfiltered set while the
+list is filtered, a source line with no link or a 404 target, or any
+unpaginated full-table render.
+
+## Market Signals — filters + trending redesign (2026-08-03)
+
+**Feature:** `/ci-market-signals` (deliverable 7). Redesigned from a flat,
+sortable card grid into a "Trending" view that reads as informative data
+rather than raw aggregate output.
+
+**Before you start — audit numbers as of 2026-08-03 (read-only, live DB):**
+`market_signals` has **1,961 rows**. `insight_type`: Pain 963, Goal 517,
+Objection 278, Trigger 195, Win 3, Belief 2, Identity 2, Buying Signal 1 (8
+distinct). `signal_family`: 30 distinct values (matches `insights`).
+`total_mentions` ranges **0 to 3** across all 1,961 rows (avg ≈ 1) — this
+is a genuinely low-volume dataset today, which is why the page treats
+momentum as a directional read ("picking up" / "steady" / "cooling off"),
+never a literal percentage that would overstate a 1-to-2-mention jump as
+"+100%". There is **no `created_at`** on this table (it's a rolling
+aggregate keyed on `(signal_family, signal)`, recomputed in place) — the
+date-range filter here scopes `updated_at` instead.
+
+**Steps:**
+1. Open `/ci-market-signals`. Confirm the page subtitle and layout read as
+   a "trending" view, not a raw list — each card should lead with a
+   **momentum chip** ("↑ Picking up" / "→ Steady" / "↓ Cooling off" / "Not
+   enough data"), not just a bare mention count.
+2. Confirm the filter row has: **Search**, **Insight Type**, **Signal
+   Family** dropdowns (real distinct values only), a **Min Mentions**
+   number input, an **Updated** date-range pair, and a **Sort By** select
+   whose default is **Momentum**.
+3. Confirm a stat strip appears between the filter row and the card grid
+   showing total signals tracked, how many are picking up, and how many are
+   cooling off (on the current page).
+4. Set Min Mentions = `2` — confirm the shown count narrows (audit found
+   **6** signals with `total_mentions >= 2`) and every visible card's total
+   mentions is ≥ 2.
+5. Switch Sort By to **Last 7 Days**, then **Last 30 Days**, then back to
+   **Momentum** — confirm the card order changes each time via a fresh
+   server call (not a client-side re-sort of stale data).
+6. Confirm `best_marketing_angle` renders as a highlighted callout (💡
+   marker) above the example quote, not buried below it.
+7. Find a card whose `example_quote` is long — confirm it's truncated with
+   a "Read more" toggle rather than dumped in full; click it and confirm it
+   expands in place (no modal, no native dialog).
+8. Clear all filters — confirm the page returns to the unfiltered set
+   (**1,961** total) and Sort By resets to Momentum.
+9. With a filter combination that matches nothing, confirm the empty state
+   is quiet (icon + one short message), not a jarring blank page or error.
+
+**Pass:** momentum reads as plain language, never a bare/misleading
+percentage; filters (search, insight type, signal family, min mentions,
+updated range) all narrow the set correctly via server round-trips; sort
+changes always re-fetch rather than silently reordering cached data;
+`best_marketing_angle` is visually prominent; long quotes collapse behind a
+toggle; empty states are quiet. **Fail:** a momentum chip showing a raw
+percentage on a 1-to-2-mention signal, a filter option with 0 real matches,
+sort appearing to do nothing, or a raw unbounded quote dump.

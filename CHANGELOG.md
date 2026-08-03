@@ -6,6 +6,92 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — CI Insights + Market Signals full filters, source attribution, informative redesign (deliverables 6+7)
+
+Extends both marketing-department CI pages (`/ci-insights`, `/ci-market-signals`) —
+note there is a separate, unrelated `/insights` page (core department health
+metrics/recommendations engine) that this work does **not** touch.
+
+- **Audited `insights` (1,932 rows) and `market_signals` (1,961 rows)
+  read-only** (asyncpg, `statement_cache_size=0`) before building filters —
+  same data-driven-filter philosophy as the leads/email pages. `insight_type`
+  has 8 distinct values (Pain 948, Goal 510, Objection 275, Trigger 191, Win 3,
+  Identity 2, Belief 2, Buying Signal 1). `signal_family` has 30 distinct
+  values. `signal_strength` has 4 (Strong 1024, Moderate 826, Weak 80, Medium
+  2). `pain_layer` has 7 real values once NULLs are excluded (958 rows are
+  NULL; Structural 352, Emotional 192, Identity 184, Belief 157, Tactical 53,
+  Social 31, Strategic 5) — all four got dropdowns. `best_use_case` has 1,019
+  distinct values across ~1,932 rows — free-text cardinality, **not** given a
+  dropdown. `insight_tags` has 4,051 rows over 2,774 distinct tags — also too
+  high-cardinality for a dropdown; exposed as a free-text exact-match filter
+  instead. `call_id` is 100% populated on `insights` — source attribution
+  today always resolves to the linked call (and, where the call has one, its
+  lead) — no other source type exists yet.
+- **`GET /ci/insights`** (`backend/app/routes/ci.py`) extended in place:
+  `insight_type`, `signal_family`, `signal_strength`, `pain_layer` (exact
+  match), `tag` (exact match, joined via `insight_tags`), `search`
+  (ILIKE on `signal`/`raw_quote`), `created_from`/`created_to` (new canonical
+  names; `date_from`/`date_to` kept as deprecated aliases for backward
+  compat), all injection-safe (bind params only, whitelisted columns). New
+  `_parse_datetime_param` helper mirrors the `_parse_date_param` idiom in
+  `routes/ads.py` — 422 on a malformed date instead of an opaque asyncpg 500.
+  Response rows now carry source attribution (`call_date`, `call_type`,
+  `lead_id`, `lead_name` — batch-resolved per page to avoid N+1) and `tags`
+  (batch-resolved the same way), plus `pain_layer` and `created_at`.
+  `GET /ci/insights/facets` now also returns `pain_layer`.
+  `GET /ci/insights/summary` shares the same filter builder as the list
+  endpoint (extracted into `_build_insight_filters`) so the charts always
+  reflect exactly what the table shows, and gained a `by_pain_layer`
+  distribution.
+- **`GET /ci/market-signals`** extended in place: `search` (ILIKE on
+  `signal`/`example_quote`), `min_mentions`, `updated_from`/`updated_to`
+  (there's no `created_at` on this table — it's a rolling aggregate keyed on
+  `(signal_family, signal)` and recomputed in place, so the date range scopes
+  `updated_at`), `sort_dir`, and pagination (`page` — was previously a flat
+  `limit`-only list). Added a `momentum` sort option and a computed
+  `momentum` field per row: 7-day mention rate vs. the prior-23-day average
+  rate within the 30-day window (`(recent_rate - prior_rate) / prior_rate`);
+  returns `null` when `total_mentions < 3` rather than a noisy "infinite
+  spike" reading off one or two mentions (most signals in this dataset sit at
+  1-3 total mentions — `max(total_mentions) = 3` across all 1,961 rows today,
+  so the UI treats "momentum" as a directional signal, not a percentage to
+  take literally). `GET /ci/market-signals/facets` unchanged in shape.
+- **Frontend types** (`frontend/src/types/index.ts`): `CIInsight` gained
+  `pain_layer`, `created_at`, `call_date`, `call_type`, `lead_id`,
+  `lead_name`, `tags`; `CIInsightFacets` gained `pain_layer`;
+  `CIInsightDistribution` gained `by_pain_layer`; `CIMarketSignal` gained
+  `example_call_id`, `notes`, `updated_at`, `momentum`;
+  `CIMarketSignalsResponse` gained `total`.
+- **`/ci-insights`** (`frontend/src/app/(app)/ci-insights/page.tsx`) — this
+  is the routed, sidebar-linked page (`Marketing → CI Insights`); the
+  separate `frontend/src/app/(app)/insights/` directory backs the unrelated
+  `/insights` core-department page and was left untouched. Filter row now
+  has: search, Insight Type, Signal Family, Signal Strength, Pain Layer
+  (all data-driven dropdowns), a free-text Tag filter, and a "Generated"
+  date-range pair (mirrors the leads page's `entry_from`/`entry_to` date
+  pattern) — all server-side, debounced on the free-text inputs. Each
+  insight row now shows a source-attribution line (📞 call type · lead name ·
+  call date) linking to `/sales-calls/{call_id}` or `/coaching-calls/{call_id}`
+  depending on the call's `call_type`, plus up to 4 tag chips. Charts
+  (`insights-charts.tsx`) kept and extended: added a "Pain layer breakdown"
+  horizontal-bar chart alongside the existing insight-type donut,
+  signal-strength bars, signal-family bars, and top-signals bars — same
+  Recharts/Card/skeleton/empty-state conventions as the existing charts, no
+  new chart library.
+- **`/ci-market-signals`** (`frontend/src/app/(app)/ci-market-signals/page.tsx`)
+  redesigned for informativeness rather than a raw list: default sort is now
+  "Momentum"; each card leads with a plain-language **momentum chip**
+  ("↑ Picking up" / "→ Steady" / "↓ Cooling off" / "Not enough data") instead
+  of a raw percentage — the underlying volumes are small enough that a
+  literal "+400%" would overstate a jump from 1 mention to 2. `best_marketing_angle`
+  is surfaced above the fold with a 💡 marker; `example_quote` is collapsed
+  behind a "Read more" toggle past 120 characters instead of a raw dump. Added
+  a stat strip (signals tracked / picking up / cooling off on the current
+  page), a Min Mentions filter, an Updated date-range pair, and a search box
+  (signal/quote) — same FilterBar/FormSelect/Badge-style atoms and debounce
+  pattern as the leads and insights pages. Empty states stayed quiet (icon +
+  one-line message), no native dialogs anywhere.
+
 ### Added — Email campaigns page overhaul (deliverable 2)
 
 Rebuilds `/marketing/email` around real metrics instead of the Compose flow.

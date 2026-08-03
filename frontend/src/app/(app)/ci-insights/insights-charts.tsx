@@ -215,6 +215,46 @@ function TopSignalsBars({ data }: { data: CIInsightDistribution["top_signals"] }
   );
 }
 
+// A cool violet-leaning sequence for pain-layer bars — distinct from the
+// signal-family greens so the two horizontal-bar charts read as different
+// dimensions even side by side.
+const PAIN_LAYER_SEQUENCE = [
+  "#7c3aed",
+  "#9333ea",
+  "#c026d3",
+  "#db2777",
+  "#e11d48",
+  "#f97316",
+  "#ca8a04",
+];
+
+/** Horizontal bars for pain-layer mentions — which "layer" of the pain
+ * (structural, emotional, identity, belief, etc.) shows up most often. */
+function PainLayerBars({ data }: { data: CIInsightDistribution["by_pain_layer"] }) {
+  if (data.length === 0) return <ChartEmpty />;
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(220, data.length * 34)}>
+      <BarChart data={data} layout="vertical" margin={{ left: 12, right: 16 }}>
+        <XAxis type="number" hide />
+        <YAxis
+          type="category"
+          dataKey="label"
+          width={120}
+          tick={{ fontSize: 11, fill: "#6b7280" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <Tooltip cursor={{ fill: "#f9fafb" }} content={<ChartTooltip />} />
+        <Bar dataKey="mentions" radius={[0, 4, 4, 0]} maxBarSize={22}>
+          {data.map((d, i) => (
+            <Cell key={d.label} fill={PAIN_LAYER_SEQUENCE[i % PAIN_LAYER_SEQUENCE.length]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 // ─── Legend (shared for the donut) ────────────────────────────────────────────
 
 function TypeLegend({ data }: { data: CIInsightDistribution["by_insight_type"] }) {
@@ -284,6 +324,18 @@ export function InsightsCharts({
             <ChartSkeleton />
           ) : (
             <SignalFamilyBars data={data.by_signal_family} />
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Pain-layer bars */}
+      <Card>
+        <CardHeader title="Pain layer breakdown" />
+        <CardBody>
+          {isLoading || !data ? (
+            <ChartSkeleton />
+          ) : (
+            <PainLayerBars data={data.by_pain_layer} />
           )}
         </CardBody>
       </Card>
