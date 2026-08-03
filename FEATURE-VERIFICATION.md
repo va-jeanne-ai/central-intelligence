@@ -608,6 +608,13 @@ behavior, not a bug.
    only rows whose Channel chip matches — this filter runs client-side (not
    a query param), so it only affects rows already loaded on the current
    page/pagination window.
+3b. Open the **Source** filter dropdown. Its options now come from the
+   sources actually in the database (via `available_sources` on
+   `GET /leads/stats`), not the old hardcoded list — with current data
+   expect exactly "All Sources" + "WGR". Pick "WGR" and confirm the table
+   still shows rows (server-side filter matches `source='wgr'`). When new
+   sources land in the DB later (e.g. GHL pushing `facebook_ads`), they
+   should appear here automatically with prettified labels.
 4. Pick a lead you can identify as having attribution data (from step 1's
    chips, choose a row NOT showing "No attribution") and open its detail
    page (`/leads/{lead_id}`). Confirm a full-width **Attribution** card

@@ -347,11 +347,27 @@ async def get_leads_stats(
     source_breakdown = [SourceBreakdownItem(**s) for s in data["source_breakdown"]]
     funnel = [FunnelStage(**f) for f in data["funnel"]]
 
+    # Distinct provenance sources actually present — feeds the Source filter
+    # dropdown. Deliberately NOT scoped by entry_from/entry_to: applying a date
+    # range must never remove options from the filter. Count-desc with a name
+    # tie-break, matching the breakdown's deterministic ordering.
+    source_rows = (
+        await session.execute(
+            text(
+                "SELECT LOWER(source) AS src, COUNT(*) AS cnt FROM leads "
+                "WHERE deleted_at IS NULL AND source IS NOT NULL AND source <> '' "
+                "GROUP BY 1 ORDER BY cnt DESC, src"
+            )
+        )
+    ).fetchall()
+    available_sources = [row[0] for row in source_rows]
+
     return LeadsStatsResponse(
         kpis=kpis,
         lead_volume=lead_volume,
         source_breakdown=source_breakdown,
         funnel=funnel,
+        available_sources=available_sources,
     )
 
 

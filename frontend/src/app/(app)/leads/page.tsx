@@ -51,6 +51,10 @@ interface LeadsStatsResponse {
     percentage: number;
   }[];
   funnel: { stage: string; count: number; percentage: number }[];
+  // Distinct provenance `source` values present in the DB (lowercased,
+  // count-desc) — drives the Source filter dropdown so its options always
+  // reflect real data (e.g. 'wgr') instead of the hardcoded legacy enum.
+  available_sources: string[];
 }
 
 // ─── Color maps ───────────────────────────────────────────────────────────────
@@ -119,6 +123,7 @@ const EMPTY_STATS: LeadsStatsResponse = {
   lead_volume: [],
   source_breakdown: [],
   funnel: [],
+  available_sources: [],
 };
 
 const EMPTY_LEADS: LeadsListResponse = {
@@ -786,7 +791,11 @@ function LeadTableRow({ lead }: { lead: Lead }) {
 // funnel's Applications stage and the matching dropdown option — not a real
 // per-lead status, so it's added on top of LeadStatus.
 type FilterStatus = "all" | LeadStatus | "applications";
-type FilterSource = "all" | LeadSource;
+// Source is server-filtered (exact lowercased match on leads.source). The
+// option list comes from stats.available_sources — the distinct values
+// actually in the DB — so any string can be a valid filter value, not just
+// the legacy LeadSource enum.
+type FilterSource = "all" | string;
 // Channel is an open string set (not an enum) — "all" plus any raw channel
 // value seen on the currently-loaded page, or the sentinel below for leads
 // with no attribution. Filtering happens client-side only (Task 3 scope
@@ -842,6 +851,7 @@ function FilterBar({
   onStatusChange,
   sourceFilter,
   onSourceChange,
+  sourceOptions,
   channelFilter,
   onChannelChange,
   channelOptions,
@@ -858,6 +868,10 @@ function FilterBar({
   onStatusChange: (v: FilterStatus) => void;
   sourceFilter: FilterSource;
   onSourceChange: (v: FilterSource) => void;
+  /** Distinct provenance sources present in the DB (from stats.available_sources),
+   * each paired with its display label. Raw value is what the server-side
+   * `source` filter param expects (exact lowercased match). */
+  sourceOptions: { value: string; label: string }[];
   channelFilter: FilterChannel;
   onChannelChange: (v: FilterChannel) => void;
   /** Distinct channel values present on the currently-loaded page, each
@@ -912,9 +926,9 @@ function FilterBar({
         className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
       >
         <option value="all">All Sources</option>
-        {(Object.keys(SOURCE_CONFIG) as LeadSource[]).map((key) => (
-          <option key={key} value={key}>
-            {SOURCE_CONFIG[key].label}
+        {sourceOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
           </option>
         ))}
       </select>
@@ -1316,6 +1330,24 @@ export default function LeadsPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [leadsData.leads]);
 
+  // Source filter options from the distinct values actually in the DB
+  // (stats.available_sources, count-desc from the backend — keep that order
+  // so the most common sources list first). Labels via resolveSource so
+  // legacy enum values keep their curated labels ("Opt-in") and anything
+  // else is prettified ("wgr" → "WGR"). Falls back to the legacy enum list
+  // while stats are still loading (or against an older backend without
+  // available_sources) so the dropdown is never empty.
+  const sourceOptions = useMemo(() => {
+    const sources = stats.available_sources ?? [];
+    if (sources.length === 0) {
+      return (Object.keys(SOURCE_CONFIG) as LeadSource[]).map((key) => ({
+        value: key as string,
+        label: SOURCE_CONFIG[key].label,
+      }));
+    }
+    return sources.map((src) => ({ value: src, label: resolveSource(src).label }));
+  }, [stats.available_sources]);
+
   // Client-side channel filter over the loaded page (server-side filtering
   // on channel is out of scope per Task 3).
   const visibleLeads =
@@ -1444,6 +1476,7 @@ export default function LeadsPage() {
                 statusFilter={statusFilter}
                 onStatusChange={setStatusFilter}
                 sourceFilter={sourceFilter}
+                sourceOptions={sourceOptions}
                 onSourceChange={setSourceFilter}
                 channelFilter={channelFilter}
                 onChannelChange={setChannelFilter}

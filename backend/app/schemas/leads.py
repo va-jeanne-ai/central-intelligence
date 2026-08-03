@@ -136,6 +136,11 @@ class LeadsStatsResponse(BaseModel):
     lead_volume: list[LeadVolumePoint] = Field(default_factory=list)
     source_breakdown: list[SourceBreakdownItem] = Field(default_factory=list)
     funnel: list[FunnelStage] = Field(default_factory=list)
+    # Distinct provenance `leads.source` values present in the table (lowercased,
+    # count-desc). Drives the frontend Source filter dropdown so its options
+    # always reflect real data (e.g. 'wgr') instead of a hardcoded enum. NOT
+    # date-scoped — filter options must not shrink when a date range is applied.
+    available_sources: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

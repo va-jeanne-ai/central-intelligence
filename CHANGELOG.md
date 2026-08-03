@@ -6,6 +6,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Source filter reflects real data
+
+The Leads page Source dropdown was a hardcoded legacy enum (Webinar / VSL /
+Opt-in / Ads / Referral / Other) that didn't include `wgr` — the source on
+100% of current leads — so the filter could never match anything real.
+
+- **`GET /leads/stats`** — response gains `available_sources`: the distinct
+  `leads.source` values actually present (lowercased, count-desc, name
+  tie-break). Deliberately **not** scoped by the `entry_from`/`entry_to`
+  range, so applying a date range never removes filter options.
+- **Leads page (`/leads`)** — the Source filter options are built from
+  `available_sources` (labels via `resolveSource`, so legacy enum values
+  keep their curated labels and anything else is prettified, e.g.
+  `wgr` → "WGR"). New sources appearing in the DB show up automatically.
+  Falls back to the legacy enum list while stats are loading.
+
 ### Added — Lead & sales channel attribution UI (ClickUp 86d3u65cb)
 
 The Leads and Sales surfaces now show Greg's canonical marketing channel,
