@@ -140,13 +140,19 @@ async def compute_revenue_by_channel(
 
     ``closed_sales`` (not ``lead_journey``, which mirrors a disagreeing
     total) is the revenue source of truth — same table the existing avg
-    deal value KPI reads. Joins to ``leads`` via ``external_id`` first (the
-    join that covers all 83 closed sales today), falling back to
-    ``ghl_contact_id`` for email-merged leads (same join contract as
-    lead_engagements/lead_journey — see their docstrings). A closed sale
-    whose lead row can't be found at all (neither join hits) still counts
-    toward revenue — it just carries all-null UTMs, which
-    ``bucket_channel_combos`` buckets as "No attribution".
+    deal value KPI reads. Joins to ``leads`` via a LATERAL subquery that
+    matches on ``external_id`` OR ``ghl_contact_id`` (email-merged leads
+    keep their original external_id and are only reachable through the GHL
+    id), ordered to prefer the external_id match and capped at ``LIMIT 1``
+    per sale — same "OR + ORDER BY preference + LIMIT 1" contract used by
+    the lead detail route's ``lead_journey`` lookup (``app/routes/leads.py``).
+    LATERAL (rather than two independent LEFT JOINs) is deliberate: it makes
+    the lookup structurally one-lead-per-sale, so a closed sale can never
+    fan out into more than one row even if ``ghl_contact_id`` were ever
+    non-unique across leads (no DB-level uniqueness constraint enforces
+    that today). A closed sale whose lead row can't be found at all (no
+    match) still counts toward revenue — it just carries all-null UTMs,
+    which ``bucket_channel_combos`` buckets as "No attribution".
 
     Returns a list of dicts (mirrors ``source_breakdown``'s plain-dict
     contract so both the /sales/summary and /leads/stats routes can consume
@@ -177,34 +183,42 @@ async def compute_revenue_by_channel(
         range_sql += " AND cs.close_date <= :date_to"
         params["date_to"] = d_to
 
-    # Two LEFT JOINs (external_id preferred, ghl_contact_id fallback) +
-    # COALESCE so every closed sale is represented exactly once even if
-    # only the fallback join hits, and still represented (with all-null
-    # UTMs) if neither join hits. Soft-deleted leads are excluded from
-    # both join targets so a deleted lead's row can't smuggle in real UTMs
-    # — it degrades to the same all-null "No attribution" treatment as a
-    # missing lead, which is the intended behavior (a deleted lead is not
-    # a reportable attribution source).
+    # LEFT JOIN LATERAL — one lead row per sale, structurally. The subquery
+    # matches on external_id OR ghl_contact_id, excludes soft-deleted leads
+    # (a deleted lead degrades to the same all-null "No attribution"
+    # treatment as a missing lead — it is not a reportable attribution
+    # source), prefers the external_id match via ORDER BY, and LIMIT 1 caps
+    # it at exactly one row even if ghl_contact_id ever matched more than
+    # one lead. This is strictly safer than two independent LEFT JOINs
+    # COALESCEd together, which can silently fan out a sale's revenue across
+    # multiple output rows if ghl_contact_id duplicates ever appear (nothing
+    # in the schema prevents that today).
     row = await session.execute(
         text(
             f"""
             SELECT
-                COALESCE(l_ext.utm_source_first,  l_ghl.utm_source_first)  AS utm_source_first,
-                COALESCE(l_ext.utm_medium_first,  l_ghl.utm_medium_first)  AS utm_medium_first,
-                COALESCE(l_ext.utm_content_first, l_ghl.utm_content_first) AS utm_content_first,
-                COALESCE(l_ext.utm_source_last,   l_ghl.utm_source_last)   AS utm_source_last,
-                COALESCE(l_ext.utm_medium_last,   l_ghl.utm_medium_last)   AS utm_medium_last,
-                COALESCE(l_ext.utm_content_last,  l_ghl.utm_content_last)  AS utm_content_last,
+                l.utm_source_first,
+                l.utm_medium_first,
+                l.utm_content_first,
+                l.utm_source_last,
+                l.utm_medium_last,
+                l.utm_content_last,
                 SUM(cs.amount_collected) AS revenue,
                 COUNT(*) AS sales_count
             FROM closed_sales cs
-            LEFT JOIN leads l_ext
-                   ON l_ext.external_id = cs.lead_id
-                  AND l_ext.deleted_at IS NULL
-            LEFT JOIN leads l_ghl
-                   ON l_ghl.ghl_contact_id = cs.ghl_contact_id
-                  AND l_ghl.deleted_at IS NULL
-                  AND cs.ghl_contact_id IS NOT NULL
+            LEFT JOIN LATERAL (
+                SELECT lv.utm_source_first, lv.utm_medium_first, lv.utm_content_first,
+                       lv.utm_source_last,  lv.utm_medium_last,  lv.utm_content_last,
+                       lv.external_id
+                FROM leads lv
+                WHERE lv.deleted_at IS NULL
+                  AND (
+                        lv.external_id = cs.lead_id
+                     OR (lv.ghl_contact_id IS NOT NULL AND lv.ghl_contact_id = cs.ghl_contact_id)
+                  )
+                ORDER BY (lv.external_id = cs.lead_id) DESC
+                LIMIT 1
+            ) l ON TRUE
             WHERE 1=1{range_sql}
             GROUP BY 1, 2, 3, 4, 5, 6
             """
@@ -225,6 +239,11 @@ async def compute_revenue_by_channel(
     # for revenue we need to re-aggregate ourselves using the returned
     # combo->label mapping so we sum amount_collected (not sales_count) per
     # bucket, while still reusing the exact same bucketing rules/labels.
+    # Index _buckets by channel label once (O(n)) rather than a linear scan
+    # per combo (O(n²)) — _buckets is small today but this avoids the
+    # quadratic pattern regardless of scale.
+    buckets_by_channel = {b["channel"]: b for b in _buckets}
+
     revenue_buckets: dict[str, dict] = {}
     for r in combo_rows:
         key = (r[0], r[1], r[2], r[3], r[4], r[5])
@@ -239,7 +258,7 @@ async def compute_revenue_by_channel(
             # combo that maps to it (bucket_channel_combos resolves a single
             # channel/platform/reportable triple per bucket label), so it's
             # safe to look them up from the count-bucket for this label.
-            src_bucket = next((b for b in _buckets if b["channel"] == label), {})
+            src_bucket = buckets_by_channel.get(label, {})
             revenue_buckets[label] = {
                 "channel": label,
                 "platform": src_bucket.get("platform"),
