@@ -27,9 +27,29 @@ does the DB reads and hands plain dicts/rows to these functions.
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any, Sequence
+
+
+def _coerce_keyword_counts(value: object) -> dict:
+    """Normalize a keyword_counts cell to a dict.
+
+    The route reads wgr_post_comment_leads via raw text() SQL, and asyncpg
+    hands a Postgres json column to Python as a *string* there (no type
+    info on raw queries). The previous isinstance(dict) guards silently
+    skipped every such row — 0 keyword cards against 2,754 real rows.
+    Malformed strings degrade to {} (never raise)."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+    return {}
 
 
 def _int(value: object) -> int:
@@ -136,10 +156,9 @@ def build_keyword_totals(
     for row in lead_rows:
         if row.get("ig_media_id") not in post_ids:
             continue
-        counts = row.get("keyword_counts") or {}
-        if isinstance(counts, dict):
-            for kw, n in counts.items():
-                per_keyword[str(kw).lower()] += _int(n)
+        counts = _coerce_keyword_counts(row.get("keyword_counts"))
+        for kw, n in counts.items():
+            per_keyword[str(kw).lower()] += _int(n)
         total += _int(row.get("total_leads"))
     return {
         "keywords": sorted(per_keyword.keys()),
@@ -161,10 +180,9 @@ def attach_post_lead_counts(
     out = []
     for p in posts:
         row = by_media_id.get(p.get("ig_media_id"))
-        counts = row.get("keyword_counts") if row else {}
         out.append({
             **p,
-            "lead_counts": counts if isinstance(counts, dict) else {},
+            "lead_counts": _coerce_keyword_counts(row.get("keyword_counts")) if row else {},
             "lead_total": _int(row.get("total_leads")) if row else 0,
         })
     return out

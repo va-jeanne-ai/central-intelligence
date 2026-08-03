@@ -338,3 +338,43 @@ def test_validate_sort_col_case_sensitive_rejects_mismatched_case():
     with pytest.raises(HTTPException) as exc_info:
         _validate_sort_col("Timestamp")
     assert exc_info.value.status_code == 422
+
+
+# --- raw-SQL reality: asyncpg returns json columns as str, not dict ---------
+
+
+def test_build_keyword_totals_parses_json_string_counts():
+    """Raw text() SELECTs hand keyword_counts to Python as a JSON *string*
+    (asyncpg doesn't decode json for untyped raw queries). The rollup must
+    parse it, not silently skip the row (the bug that shipped: 0 keyword
+    cards against 2,754 real rows)."""
+    from app.repositories.social_stats import build_keyword_totals
+
+    posts = [{"ig_media_id": "m1"}, {"ig_media_id": "m2"}]
+    lead_rows = [
+        {"ig_media_id": "m1", "keyword_counts": '{"agent": 2}', "total_leads": 2},
+        {"ig_media_id": "m2", "keyword_counts": '{"info": 7, "agent": 1}', "total_leads": 8},
+    ]
+    out = build_keyword_totals(posts, lead_rows)
+    assert out["per_keyword"] == {"agent": 3, "info": 7}
+    assert out["total_leads"] == 10
+
+
+def test_build_keyword_totals_tolerates_malformed_string():
+    from app.repositories.social_stats import build_keyword_totals
+
+    posts = [{"ig_media_id": "m1"}]
+    lead_rows = [{"ig_media_id": "m1", "keyword_counts": "not json", "total_leads": 3}]
+    out = build_keyword_totals(posts, lead_rows)
+    assert out["per_keyword"] == {}
+    assert out["total_leads"] == 3
+
+
+def test_attach_post_lead_counts_parses_json_string_counts():
+    from app.repositories.social_stats import attach_post_lead_counts
+
+    posts = [{"ig_media_id": "m1"}]
+    lead_rows = [{"ig_media_id": "m1", "keyword_counts": '{"agent": 4}', "total_leads": 4}]
+    out = attach_post_lead_counts(posts, lead_rows)
+    assert out[0]["lead_counts"] == {"agent": 4}
+    assert out[0]["lead_total"] == 4

@@ -515,8 +515,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/social.py": {
-    "mtime": 1785778844.5676,
-    "ast_hash": "487bf49f55b1d83f623bd2c96d010a17",
+    "mtime": 1785779758.629251,
+    "ast_hash": "21f291c3f232fbf4df3388b87e484190",
     "semantic_hash": ""
   },
   "backend/app/routes/transcribe.py": {
@@ -2795,13 +2795,13 @@
     "semantic_hash": ""
   },
   "backend/app/repositories/social_stats.py": {
-    "mtime": 1785778787.2077775,
-    "ast_hash": "5114612bb901b8a2332518b064d5438d",
+    "mtime": 1785780786.6664467,
+    "ast_hash": "4a784a823baf5812dad3d868319b3f39",
     "semantic_hash": ""
   },
   "backend/tests/test_social_stats.py": {
-    "mtime": 1785779006.495134,
-    "ast_hash": "6a7c397e7c33bfb12c0ee910f34ac64a",
+    "mtime": 1785780760.4026372,
+    "ast_hash": "bb3bfa6ae004ecd478d9923f488e70c4",
     "semantic_hash": ""
   }
 }
