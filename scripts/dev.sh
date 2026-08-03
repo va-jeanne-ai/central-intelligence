@@ -16,7 +16,8 @@ cd "$(dirname "$0")/.."          # repo root
 cd backend
 
 if [[ ! -d .venv ]]; then
-  echo "ERROR: backend/.venv missing — run python -m venv .venv && pip install -r requirements.txt first."
+  echo "ERROR: backend/.venv missing — run python -m venv --copies .venv && .venv/bin/pip install -r requirements-dev.txt first."
+  echo "NOTE: if the repo directory ever moves, the venv's script shebangs break (bad interpreter) — rebuild it the same way."
   exit 1
 fi
 
