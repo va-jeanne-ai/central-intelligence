@@ -460,8 +460,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/email.py": {
-    "mtime": 1785771002.11793,
-    "ast_hash": "439297a8c59fb0180dbedb51155ceb00",
+    "mtime": 1785772630.2866757,
+    "ast_hash": "8a8beeb7c7878074baa949f9e37dfeba",
     "semantic_hash": ""
   },
   "backend/app/routes/funnels.py": {
@@ -575,8 +575,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/email.py": {
-    "mtime": 1785770942.0771613,
-    "ast_hash": "1473f135066520e90053dff1054e4bfb",
+    "mtime": 1785772671.5254123,
+    "ast_hash": "9ba1f9ec658fe7d2fdafcfc760f5c616",
     "semantic_hash": ""
   },
   "backend/app/schemas/funnels.py": {
@@ -960,8 +960,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/email/page.tsx": {
-    "mtime": 1785771286.8333733,
-    "ast_hash": "ea1b668cd73095bc19a27d5e2f4f30c3",
+    "mtime": 1785772687.9067054,
+    "ast_hash": "e3210c1c1cc0dd9cf3e775873dd5ab67",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/funnels/page.tsx": {
@@ -2752,6 +2752,11 @@
   "backend/tests/test_revenue_by_channel_breakdown.py": {
     "mtime": 1785770437.860492,
     "ast_hash": "6d00eb9b4f0bd56acad14ed97ca60024",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_email_campaigns.py": {
+    "mtime": 1785772659.475808,
+    "ast_hash": "de4f78fc016539753c104fb0085ad894",
     "semantic_hash": ""
   }
 }

@@ -170,5 +170,5 @@ class EmailCampaignsFilterOptions(BaseModel):
 
 class EmailCampaignsResponse(BaseModel):
     campaigns: list[EmailCampaignListRow] = []
-    summary: EmailCampaignsSummary
-    filter_options: EmailCampaignsFilterOptions
+    summary: EmailCampaignsSummary = EmailCampaignsSummary()
+    filter_options: EmailCampaignsFilterOptions = EmailCampaignsFilterOptions()

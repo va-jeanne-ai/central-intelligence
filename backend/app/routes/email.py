@@ -295,6 +295,9 @@ def _parse_campaigns_date_param(value: str | None, *, param_name: str) -> date |
     Mirrors ``ads._parse_date_param``: fail loudly with a 422 rather than let
     a malformed string reach a ``Date``-typed bind and surface as an opaque
     500 from the asyncpg driver.
+
+    Pure function (no DB, no request context) — unit-tested directly in
+    ``tests/test_email_campaigns.py``.
     """
     if not value:
         return None
@@ -305,6 +308,41 @@ def _parse_campaigns_date_param(value: str | None, *, param_name: str) -> date |
             status_code=422,
             detail=f"Invalid {param_name}: {value!r} — expected ISO format YYYY-MM-DD",
         ) from exc
+
+
+def _resolve_campaigns_sort_by(sort_by: str) -> str:
+    """Return ``sort_by`` if it's in the injection-safe whitelist, else the default.
+
+    Factored out of the route body so the whitelist-fallback behavior (invalid
+    column → falls back to ``"sent_at"`` rather than raising) is unit-testable
+    without a DB or request context.
+    """
+    return sort_by if sort_by in _CAMPAIGNS_SORTABLE_COLUMNS else "sent_at"
+
+
+def _summarize_campaigns(campaigns: list["EmailCampaignListRow"]) -> "EmailCampaignsSummary":
+    """Aggregate totals/averages over a list of campaign rows.
+
+    Pure function — no DB access — so it can be unit-tested directly with
+    plain ``EmailCampaignListRow`` instances. Averages are computed only over
+    rows with a non-null rate (matches the route's prior inline behavior);
+    an empty list returns all-zero fields rather than raising or dividing by
+    zero.
+    """
+    count = len(campaigns)
+    total_recipients = sum(c.recipients_count for c in campaigns)
+    total_opens = sum(c.open_count for c in campaigns)
+    total_clicks = sum(c.click_count for c in campaigns)
+    open_rates = [c.open_rate for c in campaigns if c.open_rate is not None]
+    click_rates = [c.click_rate for c in campaigns if c.click_rate is not None]
+    return EmailCampaignsSummary(
+        count=count,
+        total_recipients=total_recipients,
+        total_opens=total_opens,
+        total_clicks=total_clicks,
+        avg_open_rate=round(sum(open_rates) / len(open_rates), 2) if open_rates else 0.0,
+        avg_click_rate=round(sum(click_rates) / len(click_rates), 2) if click_rates else 0.0,
+    )
 
 
 @router.get("/campaigns", response_model=EmailCampaignsResponse)
@@ -340,8 +378,7 @@ async def get_email_campaigns(
     # ---- Validate / sanitise params (all bind-safe or whitelisted) --------
     parsed_from = _parse_campaigns_date_param(sent_from, param_name="sent_from")
     parsed_to = _parse_campaigns_date_param(sent_to, param_name="sent_to")
-    if sort_by not in _CAMPAIGNS_SORTABLE_COLUMNS:
-        sort_by = "sent_at"
+    sort_by = _resolve_campaigns_sort_by(sort_by)
     # sort_dir is already constrained to the Literal by FastAPI/Pydantic.
 
     where_sql = "deleted_at IS NULL"
@@ -403,20 +440,7 @@ async def get_email_campaigns(
     ]
 
     # ---- Summary over the FILTERED set --------------------------------------
-    count = len(campaigns)
-    total_recipients = sum(c.recipients_count for c in campaigns)
-    total_opens = sum(c.open_count for c in campaigns)
-    total_clicks = sum(c.click_count for c in campaigns)
-    open_rates = [c.open_rate for c in campaigns if c.open_rate is not None]
-    click_rates = [c.click_rate for c in campaigns if c.click_rate is not None]
-    summary = EmailCampaignsSummary(
-        count=count,
-        total_recipients=total_recipients,
-        total_opens=total_opens,
-        total_clicks=total_clicks,
-        avg_open_rate=round(sum(open_rates) / len(open_rates), 2) if open_rates else 0.0,
-        avg_click_rate=round(sum(click_rates) / len(click_rates), 2) if click_rates else 0.0,
-    )
+    summary = _summarize_campaigns(campaigns)
 
     # ---- Filter options — distinct values actually present (unfiltered) ---
     # Data-driven per the leads page philosophy: never offer a dropdown

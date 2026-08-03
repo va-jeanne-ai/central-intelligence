@@ -112,9 +112,28 @@ function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-/** Tercile tier (Top / Mid / Low) of `value` among `all` values, higher = better. */
+/**
+ * Tercile tier (Top / Mid / Low) of `value` among `all` values, higher = better.
+ *
+ * Edge cases (documented, not fixed by a bigger sample — there isn't one at
+ * render time, this is a client-side slice of whatever the current filtered
+ * set is):
+ * - All-equal input (including all-zero, e.g. every visible campaign has
+ *   0% opens) would otherwise rank every row's `v <= value` as true, giving
+ *   every row a 100th-percentile "Top" chip — misleadingly implying real
+ *   spread where there is none. Detected explicitly below and forced to
+ *   "Mid" (no row is actually distinguishable from its peers).
+ * - Small `all.length` (n < 3) degrades gracefully rather than erroring, but
+ *   the tercile split is a rough guide at that size — e.g. with 2 values the
+ *   worse one reads "Low" and the better one "Top", never "Mid"; with 1 value
+ *   the single row's rank is always 1.0 → "Top" (not the all-equal case,
+ *   since there's nothing to compare against, but still not a meaningful
+ *   "best of many" signal — treat single/double-digit filtered sets as
+ *   indicative, not a statistically firm ranking).
+ */
 function tierOf(value: number | null, all: number[]): "Top" | "Mid" | "Low" | null {
   if (value === null || all.length === 0) return null;
+  if (all.every((v) => v === all[0])) return "Mid";
   const sorted = [...all].sort((a, b) => a - b);
   const rank = sorted.filter((v) => v <= value).length / sorted.length;
   if (rank > 2 / 3) return "Top";
