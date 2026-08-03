@@ -14,6 +14,7 @@ has no observed_campaign column; campaign is mirrored data, never matched on
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import NamedTuple, Optional, Sequence
 
 
@@ -83,3 +84,64 @@ class Resolver:
 
 def build_resolver(rows: Sequence) -> Resolver:
     return Resolver(rows)
+
+
+def channel_for_lead(resolver: Resolver, lead) -> Resolution:
+    """Row-level first-touch preferred; fall back to last-touch (Greg's grouping rule).
+    Never mixes first/last fields. `lead` exposes utm_*_first / utm_*_last attributes."""
+    if lead.utm_source_first or lead.utm_medium_first or lead.utm_content_first:
+        return resolver.resolve(
+            lead.utm_source_first, lead.utm_medium_first, lead.utm_content_first
+        )
+    return resolver.resolve(
+        lead.utm_source_last, lead.utm_medium_last, lead.utm_content_last
+    )
+
+
+def summarize_channels(combos, resolver: Resolver, *, unmapped_top_n: int = 8):
+    """combos: iterable of (utm_source_first, utm_medium_first, utm_content_first,
+    utm_source_last, utm_medium_last, utm_content_last, count). Resolves each distinct
+    combo via channel_for_lead semantics, merges counts per bucket, caps unmapped
+    cardinality. Returns list[dict(channel, platform, reportable, count)] with buckets:
+    canonical channels; 'No attribution' (all-null); 'Non-marketing' (reportable=False);
+    'unmapped:*' capped to top_n by count, remainder folded into 'other unmapped'."""
+    buckets: dict[str, dict] = {}
+
+    for sf, mf, cf, sl, ml, cl, count in combos:
+        lead = SimpleNamespace(
+            utm_source_first=sf, utm_medium_first=mf, utm_content_first=cf,
+            utm_source_last=sl, utm_medium_last=ml, utm_content_last=cl,
+        )
+        res = channel_for_lead(resolver, lead)
+
+        if res.channel is None:
+            channel, platform, reportable = "No attribution", None, False
+        elif not res.reportable:
+            channel, platform, reportable = "Non-marketing", None, False
+        else:
+            channel, platform, reportable = res.channel, res.platform, res.reportable
+
+        if channel in buckets:
+            buckets[channel]["count"] += count
+        else:
+            buckets[channel] = {
+                "channel": channel, "platform": platform,
+                "reportable": reportable, "count": count,
+            }
+
+    unmapped_keys = [k for k in buckets if k.startswith("unmapped:")]
+    if len(unmapped_keys) > unmapped_top_n:
+        unmapped_keys.sort(key=lambda k: buckets[k]["count"], reverse=True)
+        overflow_keys = unmapped_keys[unmapped_top_n:]
+        overflow_count = sum(buckets[k]["count"] for k in overflow_keys)
+        for k in overflow_keys:
+            del buckets[k]
+        if "other unmapped" in buckets:
+            buckets["other unmapped"]["count"] += overflow_count
+        else:
+            buckets["other unmapped"] = {
+                "channel": "other unmapped", "platform": None,
+                "reportable": True, "count": overflow_count,
+            }
+
+    return list(buckets.values())
