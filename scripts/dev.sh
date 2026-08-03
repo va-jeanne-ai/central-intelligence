@@ -21,7 +21,18 @@ if [[ ! -d .venv ]]; then
   exit 1
 fi
 
-# Trap propagates SIGINT so all child processes die when the user hits Ctrl+C.
+# Refuse to start on a busy port instead of silently colliding — an orphaned
+# uvicorn holding :8000 makes every later "restart" die with "Address already
+# in use" while the stale server keeps serving old code (bit us 2026-08-04).
+if lsof -ti :8000 >/dev/null 2>&1; then
+  echo "ERROR: port 8000 is already in use (PIDs: $(lsof -ti :8000 | tr '\n' ' '))."
+  echo "       Kill the stale backend first: kill \$(lsof -ti :8000)"
+  exit 1
+fi
+
+# Trap propagates shutdown so all child processes die with this script —
+# EXIT included, so a plain SIGTERM to the parent (how supervisors/tools stop
+# it) also reaps the children instead of orphaning uvicorn on the port.
 pids=()
 cleanup() {
   echo
@@ -30,9 +41,8 @@ cleanup() {
     kill "$pid" 2>/dev/null || true
   done
   wait 2>/dev/null || true
-  exit 0
 }
-trap cleanup INT TERM
+trap cleanup INT TERM EXIT
 
 run_prefixed() {
   local name=$1
