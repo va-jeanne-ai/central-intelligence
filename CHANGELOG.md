@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Channel row on the lead detail Contact card
+
+Channel now shows on every lead detail page (Contact card, under Source) —
+"No attribution" for leads without UTMs, amber for `unmapped:*` — instead of
+only appearing inside the Attribution card (hidden when a lead has no UTMs).
+
 ### Removed — Source column + Source filter on /leads (UI only)
 
 With the channel axis live, the provenance `source` column (uniformly "WGR")

@@ -1081,6 +1081,21 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                     </span>
                   </dd>
                 </div>
+                {/* Channel — always visible (unlike the Attribution card,
+                    which hides when the lead has no UTMs); null renders as
+                    "No attribution", unmapped:* gets the amber tint. */}
+                <div className="flex items-baseline gap-2">
+                  <dt className="w-20 text-[11px] font-bold uppercase tracking-wider text-gray-500 shrink-0">
+                    Channel
+                  </dt>
+                  <dd>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${channelBadgeClasses(detail.channel)}`}
+                    >
+                      {channelLabel(detail.channel)}
+                    </span>
+                  </dd>
+                </div>
                 {detail.entry_date && (
                   <div className="flex items-baseline gap-2">
                     <dt className="w-20 text-[11px] font-bold uppercase tracking-wider text-gray-500 shrink-0">
