@@ -22,6 +22,8 @@ from datetime import date
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.attribution import build_resolver, summarize_channels
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,6 +40,34 @@ def _int(value: object) -> int:
         return 0
 
 
+def _channel_buckets_to_breakdown(buckets: list[dict]) -> list[dict]:
+    """Turn ``summarize_channels`` buckets into the breakdown dicts
+    ``compute_lead_stats`` returns, adding the 1-dp ``percentage`` (of the
+    bucket total — always the same total as ``kpis.total_leads`` since the
+    combos are grouped from the same range-scoped query) and the
+    transitional ``source`` key (see ``SourceBreakdownItem`` docstring).
+
+    Pure function — no DB — so it is unit-testable with fake bucket lists.
+    """
+    total = sum(_int(b["count"]) for b in buckets)
+    breakdown: list[dict] = []
+    for b in buckets:
+        cnt = _int(b["count"])
+        pct = round((cnt / total * 100), 1) if total > 0 else 0.0
+        breakdown.append(
+            {
+                # Transitional: `source` mirrors `channel` so the current
+                # frontend donut (reads `.source`) keeps rendering until
+                # Task 4 switches it to `.channel`; drop `source` after that.
+                "source": b["channel"],
+                "channel": b["channel"],
+                "platform": b.get("platform"),
+                "reportable": b.get("reportable", True),
+                "count": cnt,
+                "percentage": pct,
+            }
+        )
+    return breakdown
 
 
 # ---------------------------------------------------------------------------
@@ -221,29 +251,33 @@ async def compute_lead_stats(
         for w in range(weeks - 1, -1, -1)  # oldest (Wk 1) → newest (anchor week)
     ]
 
-    # ---- 6. Source breakdown (in range) -------------------------------------
+    # ---- 6. Source / channel breakdown (in range) ---------------------------
+    # Grouped on the six raw UTM fields (never rewritten) so distinct combos
+    # can be resolved to a canonical channel at read time via the taxonomy —
+    # channel is never stored (see attribution.py contract).
     row = await session.execute(
         text(
             f"""
-            SELECT
-                COALESCE(LOWER(source), 'other') AS src,
-                COUNT(*) AS cnt
+            SELECT utm_source_first, utm_medium_first, utm_content_first,
+                   utm_source_last,  utm_medium_last,  utm_content_last,
+                   COUNT(*) AS cnt
             FROM leads
             WHERE deleted_at IS NULL{range_sql}
-            GROUP BY src
-            ORDER BY cnt DESC
+            GROUP BY 1,2,3,4,5,6
             """
         ),
         params,
     )
-    source_rows = row.fetchall()
+    combo_rows = row.fetchall()
 
-    source_total: int = sum(_int(r[1]) for r in source_rows)
-    source_breakdown: list[dict] = []
-    for r in source_rows:
-        src, cnt = r[0], _int(r[1])
-        pct = round((cnt / source_total * 100), 1) if source_total > 0 else 0.0
-        source_breakdown.append({"source": src, "count": cnt, "percentage": pct})
+    taxonomy_row = await session.execute(text("SELECT * FROM attribution_taxonomy"))
+    resolver = build_resolver(taxonomy_row.fetchall())
+
+    combos = [
+        (r[0], r[1], r[2], r[3], r[4], r[5], _int(r[6])) for r in combo_rows
+    ]
+    channel_buckets = summarize_channels(combos, resolver)
+    source_breakdown: list[dict] = _channel_buckets_to_breakdown(channel_buckets)
 
     # ---- 7. Sales funnel ----------------------------------------------------
     # Four stages, each counting a progressively narrower group of statuses:

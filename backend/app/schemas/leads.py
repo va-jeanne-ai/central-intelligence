@@ -79,9 +79,17 @@ class LeadVolumePoint(BaseModel):
 
 
 class SourceBreakdownItem(BaseModel):
-    """Share of leads from a single acquisition source."""
+    """Share of leads from a single canonical channel.
+
+    ``source`` is transitional: it is set to the same string as ``channel``
+    so the current frontend donut (which still reads ``.source``) keeps
+    rendering. Drop ``source`` once the frontend switches to ``.channel``.
+    """
 
     source: str
+    channel: str = ""
+    platform: str | None = None
+    reportable: bool = True
     count: int = 0
     percentage: float = 0.0
 
