@@ -102,3 +102,39 @@ export function channelBadgeClasses(channel: string | null | undefined): string 
     ? "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200"
     : "bg-gray-100 text-gray-600";
 }
+
+// ─── Attribution (UTM) fields ────────────────────────────────────────────────
+//
+// The lead detail payload carries 8 raw first/last-touch UTM fields
+// (utmSourceFirst/utmMediumFirst/utmCampaignFirst/utmContentFirst and the
+// …Last equivalents). Many historical leads predate attribution tracking
+// and have all 8 as null — the detail page's Attribution card must be
+// hidden entirely in that case rather than rendering an empty shell.
+
+/** The 8 raw first/last-touch UTM fields shown on the Attribution card. */
+export interface LeadUtmFields {
+  utmSourceFirst: string | null;
+  utmMediumFirst: string | null;
+  utmCampaignFirst: string | null;
+  utmContentFirst: string | null;
+  utmSourceLast: string | null;
+  utmMediumLast: string | null;
+  utmCampaignLast: string | null;
+  utmContentLast: string | null;
+}
+
+/** True when at least one of the 8 UTM fields is non-null — the Attribution
+ * card should render. False (hide the card) when all 8 are null, which is
+ * the common case for leads that predate UTM capture. */
+export function hasAttributionData(fields: LeadUtmFields): boolean {
+  return (
+    fields.utmSourceFirst !== null ||
+    fields.utmMediumFirst !== null ||
+    fields.utmCampaignFirst !== null ||
+    fields.utmContentFirst !== null ||
+    fields.utmSourceLast !== null ||
+    fields.utmMediumLast !== null ||
+    fields.utmCampaignLast !== null ||
+    fields.utmContentLast !== null
+  );
+}

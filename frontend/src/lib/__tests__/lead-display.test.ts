@@ -6,8 +6,21 @@ import {
   resolveSource,
   resolveStatus,
   humanise,
+  hasAttributionData,
   NO_ATTRIBUTION_LABEL,
+  type LeadUtmFields,
 } from "../lead-display";
+
+const ALL_NULL_UTM: LeadUtmFields = {
+  utmSourceFirst: null,
+  utmMediumFirst: null,
+  utmCampaignFirst: null,
+  utmContentFirst: null,
+  utmSourceLast: null,
+  utmMediumLast: null,
+  utmCampaignLast: null,
+  utmContentLast: null,
+};
 
 describe("channelLabel", () => {
   it("renders null as No attribution", () => {
@@ -78,5 +91,31 @@ describe("humanise", () => {
 
   it("uppercases short acronym-like words", () => {
     expect(humanise("vsl")).toBe("VSL");
+  });
+});
+
+describe("hasAttributionData", () => {
+  it("returns false when all 8 UTM fields are null (hide the card)", () => {
+    expect(hasAttributionData(ALL_NULL_UTM)).toBe(false);
+  });
+
+  it("returns true when any single field is non-null", () => {
+    expect(hasAttributionData({ ...ALL_NULL_UTM, utmSourceFirst: "facebook" })).toBe(true);
+    expect(hasAttributionData({ ...ALL_NULL_UTM, utmContentLast: "cta-button" })).toBe(true);
+  });
+
+  it("returns true when all 8 fields are populated", () => {
+    expect(
+      hasAttributionData({
+        utmSourceFirst: "facebook",
+        utmMediumFirst: "cpc",
+        utmCampaignFirst: "spring-launch",
+        utmContentFirst: "ad1",
+        utmSourceLast: "google",
+        utmMediumLast: "organic",
+        utmCampaignLast: "retarget",
+        utmContentLast: "ad2",
+      }),
+    ).toBe(true);
   });
 });

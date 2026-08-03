@@ -13,6 +13,15 @@ import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { showError, showSuccess, showWarning } from "@/lib/toast";
 import type { LeadStatus, LeadSource, CalendarEventRow } from "@/types";
+import {
+  STATUS_CONFIG,
+  SOURCE_CONFIG,
+  humanise,
+  channelLabel,
+  channelBadgeClasses,
+  hasAttributionData,
+  type LeadUtmFields,
+} from "@/lib/lead-display";
 
 // ─── API response shapes ─────────────────────────────────────────────────────
 
@@ -53,7 +62,7 @@ interface NoteRow {
   created_at: string;
 }
 
-interface LeadDetailResponse {
+interface LeadDetailResponse extends LeadUtmFields {
   id: string;
   name: string | null;
   email: string | null;
@@ -65,6 +74,10 @@ interface LeadDetailResponse {
   entry_date: string | null;
   created_at: string | null;
   notes_raw: string | null;
+  // Resolved per-request attribution bucket (never stored — see
+  // app.services.attribution on the backend); null when the lead has no
+  // UTMs. The 8 utm* first/last-touch fields come from LeadUtmFields.
+  channel: string | null;
   calls: LeadCallSummary[];
   goals: LeadGoalSummary[];
   pain_points: LeadPainPointSummary[];
@@ -204,30 +217,12 @@ function mimeIcon(mime: string | null): string {
 }
 
 // ─── Status / Source display config ──────────────────────────────────────────
-// TODO(v2): hoist to @/lib/lead-display.ts — duplicated from
-// /leads/page.tsx for now since the detail page is the second consumer.
-
-const STATUS_CONFIG: Record<
-  LeadStatus,
-  { label: string; dotColor: string; badgeClasses: string }
-> = {
-  new: { label: "New", dotColor: "#3B82F6", badgeClasses: "bg-blue-50 text-blue-700" },
-  contacted: { label: "Active", dotColor: "#F97316", badgeClasses: "bg-orange-50 text-orange-700" },
-  qualified: { label: "Applied", dotColor: "#8B5CF6", badgeClasses: "bg-violet-50 text-violet-700" },
-  appointment_set: { label: "Booked", dotColor: "#0D9488", badgeClasses: "bg-teal-50 text-teal-700" },
-  closed_won: { label: "Closed Won", dotColor: "#10B981", badgeClasses: "bg-green-50 text-green-700" },
-  closed_lost: { label: "Lost", dotColor: "#9CA3AF", badgeClasses: "bg-gray-100 text-gray-500" },
-  stale: { label: "Stale", dotColor: "#F59E0B", badgeClasses: "bg-accent-50 text-accent-700" },
-};
-
-const SOURCE_CONFIG: Record<LeadSource, { label: string; badgeClasses: string }> = {
-  webinar: { label: "Webinar", badgeClasses: "bg-accent-50 text-accent-700" },
-  vsl: { label: "VSL", badgeClasses: "bg-blue-50 text-blue-700" },
-  "opt-in": { label: "Opt-in", badgeClasses: "bg-green-50 text-green-700" },
-  ads: { label: "Ads", badgeClasses: "bg-gray-100 text-gray-600" },
-  referral: { label: "Referral", badgeClasses: "bg-violet-50 text-violet-700" },
-  other: { label: "Other", badgeClasses: "bg-gray-100 text-gray-500" },
-};
+// STATUS_CONFIG / SOURCE_CONFIG / humanise are hoisted to @/lib/lead-display.ts
+// (shared with /leads/page.tsx). This page keeps thin local wrappers around
+// the shared resolvers because, unlike the leads-list payload, this page's
+// `status`/`source` are nullable and historically render "—" for null —
+// the shared resolveStatus/resolveSource fall back to "Unknown" instead,
+// which would change this page's rendered output for those leads.
 
 const STATUS_OPTIONS: LeadStatus[] = [
   "new",
@@ -239,19 +234,11 @@ const STATUS_OPTIONS: LeadStatus[] = [
   "stale",
 ];
 
-function _humanise(value: string): string {
-  return value
-    .split(/[_\-\s]+/)
-    .filter(Boolean)
-    .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1).toLowerCase()))
-    .join(" ");
-}
-
 function resolveStatus(raw: string | null) {
   if (!raw) return { label: "—", dotColor: "#9CA3AF", badgeClasses: "bg-gray-100 text-gray-500" };
   return (
     STATUS_CONFIG[raw as LeadStatus] ?? {
-      label: _humanise(raw),
+      label: humanise(raw),
       dotColor: "#9CA3AF",
       badgeClasses: "bg-gray-100 text-gray-600",
     }
@@ -262,7 +249,7 @@ function resolveSource(raw: string | null) {
   if (!raw) return { label: "—", badgeClasses: "bg-gray-100 text-gray-500" };
   return (
     SOURCE_CONFIG[raw as LeadSource] ?? {
-      label: _humanise(raw),
+      label: humanise(raw),
       badgeClasses: "bg-gray-100 text-gray-600",
     }
   );
@@ -427,7 +414,7 @@ function parseSubmission(rawText: string | null): ParsedSubmission | null {
         typeof val === "string" || typeof val === "number" || typeof val === "boolean"
           ? String(val)
           : JSON.stringify(val);
-      fields.push({ label: _humanise(key), value: valueStr });
+      fields.push({ label: humanise(key), value: valueStr });
     }
     return { fields, raw: parsed, isJson: true };
   } catch {
@@ -1136,7 +1123,7 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                   ))}
                   {/* Preserve any unknown DB status the backend returned */}
                   {detail.status && !STATUS_OPTIONS.includes(detail.status as LeadStatus) && (
-                    <option value={detail.status}>{_humanise(detail.status)}</option>
+                    <option value={detail.status}>{humanise(detail.status)}</option>
                   )}
                 </FormSelect>
               </FormField>
@@ -1152,6 +1139,108 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
             </CardBody>
           </Card>
         </div>
+
+        {/* Attribution — raw first/last-touch UTMs + resolved channel.
+            Values are shown verbatim (client contract — no prettifying, no
+            lowercasing beyond what the API returns). Hidden entirely when
+            all 8 UTM fields are null (historical leads predate attribution
+            tracking) so there's no empty card. */}
+        {hasAttributionData(detail) && (
+          <Card>
+            <CardHeader
+              title="Attribution"
+              action={
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${channelBadgeClasses(detail.channel)}`}
+                >
+                  {channelLabel(detail.channel)}
+                </span>
+              }
+            />
+            <CardBody>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">
+                    First touch
+                  </h3>
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-[13px]">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <dt className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                        Source
+                      </dt>
+                      <dd className="text-gray-700 break-words">
+                        {detail.utmSourceFirst ?? <span className="text-gray-400 italic">—</span>}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <dt className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                        Medium
+                      </dt>
+                      <dd className="text-gray-700 break-words">
+                        {detail.utmMediumFirst ?? <span className="text-gray-400 italic">—</span>}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <dt className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                        Campaign
+                      </dt>
+                      <dd className="text-gray-700 break-words">
+                        {detail.utmCampaignFirst ?? <span className="text-gray-400 italic">—</span>}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <dt className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                        Content
+                      </dt>
+                      <dd className="text-gray-700 break-words">
+                        {detail.utmContentFirst ?? <span className="text-gray-400 italic">—</span>}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+                <div>
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">
+                    Last touch
+                  </h3>
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-[13px]">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <dt className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                        Source
+                      </dt>
+                      <dd className="text-gray-700 break-words">
+                        {detail.utmSourceLast ?? <span className="text-gray-400 italic">—</span>}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <dt className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                        Medium
+                      </dt>
+                      <dd className="text-gray-700 break-words">
+                        {detail.utmMediumLast ?? <span className="text-gray-400 italic">—</span>}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <dt className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                        Campaign
+                      </dt>
+                      <dd className="text-gray-700 break-words">
+                        {detail.utmCampaignLast ?? <span className="text-gray-400 italic">—</span>}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <dt className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                        Content
+                      </dt>
+                      <dd className="text-gray-700 break-words">
+                        {detail.utmContentLast ?? <span className="text-gray-400 italic">—</span>}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        )}
 
         {/* Tags — aggregated from this lead's calls' insights (lead → calls →
             insights → insight_tags). Always rendered so the section is
