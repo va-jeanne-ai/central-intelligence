@@ -389,7 +389,12 @@ Pulls live organic metrics for one Instagram Business/Creator account from the M
 
 **Surfaces it powers**
 
-- **`/marketing/social`** — live IG followers, posts, reach, impressions, engagement once a sync runs.
+- **`/marketing/social`** (legacy top-of-page platform breakdown) — live IG followers, posts, reach, impressions, engagement once a sync runs.
+- **`/marketing/social` main page — rebuilt 1:1 from Greg's own tracking page (deliverable 1, 2026-08-04):** `GET /social/overview` (`backend/app/routes/social.py`) serves the per-post Instagram table, summary stat cards, per-keyword comment-lead cards, and a "Leads by Day" table straight from the WGR mirrors — `instagram_posts` (2,754 posts, existing mirror) joined against two **new** mirror tables:
+  - **`wgr_comment_events`** (15,856 rows, snapshot-reconciled) — mirrors WGR's `comment_events`: one row per IG/FB comment matching a configured lead keyword, with `occurred_at` for day-bucketing. Feeds "Leads by Day" (arrival-date frame — any post, any platform), reproducing WGR's own `comment_leads_by_day()` RPC semantics server-side in `backend/app/repositories/social_stats.py::build_leads_by_day`.
+  - **`wgr_post_comment_leads`** (2,754 rows, snapshot-reconciled) — mirrors WGR's precomputed `post_comment_leads` rollup (`keyword_counts` jsonb + `total_leads` per `ig_media_id`). Feeds the per-post/per-keyword lead columns and the per-keyword + Total Leads stat cards, scoped to whatever date/type filter is active (`build_keyword_totals`).
+  - Migration: `alembic/versions/c2df94038d03_add_comment_lead_mirrors.py` (chained on `e79cc79ec06b`, the `wgr_offers` head). Sync wiring: two new `_sync_snapshot_reconcile` calls in `backend/app/services/wgr_sync/upsert.py::sync_all` (natural upstream PKs — `comment_events.id`, `post_comment_leads.ig_media_id` — both verified unique/non-null, probe 2026-08-04). Mappers: `mapping.map_wgr_comment_event` / `mapping.map_wgr_post_comment_lead`.
+  - Pure rollup logic (`filter_posts`, `build_summary_stats`, `build_keyword_totals`, `attach_post_lead_counts`, `sort_posts`, `build_leads_by_day`) lives in `backend/app/repositories/social_stats.py` — no DB, unit-tested (21 tests, `tests/test_social_stats.py`).
 
 **Auth / setup** — manual token (paste a long-lived token + IG account ID on `/integrations/instagram`; the page has a collapsible **Setup steps** panel walking through both):
 
@@ -401,6 +406,7 @@ Pulls live organic metrics for one Instagram Business/Creator account from the M
 
 - **"Connect with Meta" OAuth button** (one-click connect + token auto-refresh) — built then deferred to ship the manual connector first; lives in git history (branch `feat/instagram-social-integration`).
 - No story/profile-visit metrics. IG comments → `social_comments` still seed-only (separate collector).
+- **Documented gaps in the deliverable-1 rebuild** (see `FEATURE-VERIFICATION.md` "Marketing — Social (Greg-spec rebuild)" for the full list): no live Graph API connect/refresh state to mirror (omitted, not faked); `instagram_posts` has no Skip Rate / Follows columns (reel-only Graph API insights Greg's page shows — omitted); Total Watch Time is approximated as the sum of `avg_watch_time_sec` per reel (the mirror has no total-watch-time column); Leads by Day buckets in UTC rather than the tenant's configured timezone (WGR's RPC uses `ac_timezone`, default America/Denver) — a minor day-boundary difference.
 
 ---
 

@@ -412,6 +412,60 @@ export interface SocialAnalyzeResponse {
   data_used: Record<string, unknown>;
 }
 
+// ─── Social Overview — Greg-spec rebuild (deliverable 1) ────────────────────
+
+export interface SocialOverviewSummary {
+  posts_in_range: number;
+  reels_count: number;
+  carousels_count: number;
+  total_watch_time_sec: number;
+  total_views: number;
+  total_reach: number;
+  total_likes: number;
+  total_saves: number;
+  total_leads: number;
+  per_keyword_leads: Record<string, number>;
+  keywords: string[];
+}
+
+export interface SocialOverviewPost {
+  id: string;
+  ig_media_id: string | null;
+  permalink: string | null;
+  media_type: string | null;
+  is_reel: boolean;
+  caption: string | null;
+  posted_at: string | null;
+  likes_count: number | null;
+  comments_count: number | null;
+  views: number | null;
+  reach: number | null;
+  saves_count: number | null;
+  shares_count: number | null;
+  avg_watch_time_sec: number | null;
+  engagement_rate: number | null;
+  lead_counts: Record<string, number>;
+  lead_total: number;
+}
+
+export interface SocialOverviewLeadDay {
+  day: string;
+  total: number;
+  per_keyword: Record<string, number>;
+}
+
+export interface SocialOverviewResponse {
+  summary: SocialOverviewSummary;
+  posts: SocialOverviewPost[];
+  posts_total: number;
+  leads_by_day: SocialOverviewLeadDay[];
+  keywords: string[];
+  date_from: string | null;
+  date_to: string | null;
+  generated_at: string;
+  gaps: string[];
+}
+
 // ─── Offers ──────────────────────────────────────────────────────────────────
 
 export interface OfferGenerateResponse {

@@ -6,6 +6,59 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Social page rebuilt 1:1 from Greg's tracker spec (deliverable 1)
+
+- **New endpoint `GET /social/overview`** (`backend/app/routes/social.py`)
+  rebuilds the Social Media page directly from Greg's own tracking app
+  (`central-intelligence-greg/index.html`, `view-mkt-social`) as the spec:
+  same sections, same metrics, same structure/ordering — summary stat cards
+  (Posts in Range / Reels / Carousels / Watch Time / Total Views / Total
+  Reach / Total Likes / Total Saves), dynamic per-keyword comment-lead cards
+  + Total Leads, a "Leads by Day" table (comment-arrival frame), and a
+  sortable/paginated Posts table with per-keyword lead columns. Injection-safe
+  sort/filter (`_parse_date_param` idiom from `routes/ads.py`), defaulted
+  schemas. Existing `GET /social` (platform-breakdown summary used elsewhere)
+  is untouched.
+- **Two new WGR mirror tables**, following the `wgr_offers` precedent exactly
+  (model + alembic migration chained on the then-current head + mapper +
+  `_sync_snapshot_reconcile` wiring + `alembic upgrade head` + one-off
+  backfill):
+  - `wgr_comment_events` (15,856 rows) mirrors WGR's `comment_events` — one
+    row per IG/FB comment matching a configured lead keyword; feeds "Leads
+    by Day" (bucketed in UTC by `occurred_at`, reproducing WGR's
+    `comment_leads_by_day()` RPC semantics server-side).
+  - `wgr_post_comment_leads` (2,754 rows) mirrors WGR's precomputed
+    `post_comment_leads` rollup (`keyword_counts` jsonb + `total_leads` per
+    `ig_media_id`); feeds the per-post/keyword lead columns and stat cards.
+  - Migration `alembic/versions/c2df94038d03_add_comment_lead_mirrors.py`
+    (down_revision `e79cc79ec06b`). New model classes `WgrCommentEvent` /
+    `WgrPostCommentLead` in `app/models/intelligence.py`; new mappers
+    `map_wgr_comment_event` / `map_wgr_post_comment_lead` in
+    `app/services/wgr_sync/mapping.py`; two new `_sync_snapshot_reconcile`
+    calls in `app/services/wgr_sync/upsert.py::sync_all`.
+- **Pure rollup helpers** in `backend/app/repositories/social_stats.py`
+  (`filter_posts`, `build_summary_stats`, `build_keyword_totals`,
+  `attach_post_lead_counts`, `sort_posts`, `build_leads_by_day`) — no DB,
+  unit-tested (21 new tests, `tests/test_social_stats.py`; 297 total passing,
+  up from the 276 baseline).
+- **Frontend**: `frontend/src/app/(app)/marketing/social/page.tsx` fully
+  rebuilt against `GET /social/overview` in CI's design language (light
+  mode, shared `Card`/`KpiCard`/`FilterBar`/`Pagination`/`EmptyState` atoms)
+  — same sections/metrics/ordering as Greg's page, not a pixel clone of his
+  dark theme. New types in `frontend/src/types/index.ts`
+  (`SocialOverview*`).
+- **Documented gaps** (things Greg's page renders from a LIVE Instagram
+  Graph API connection or a metric absent from both DBs — omitted, not
+  faked; surfaced via the endpoint's `gaps` array and rendered in the page):
+  no live connect/refresh state to mirror; `instagram_posts` has no Skip
+  Rate / Follows columns (reel-only Graph API insights); Total Watch Time
+  is approximated as the sum of `avg_watch_time_sec` per reel (no
+  total-watch-time column in the mirror); Leads by Day buckets in UTC, not
+  the tenant's `ac_timezone` (default America/Denver).
+- See `INTEGRATIONS.md` (Instagram section) and `FEATURE-VERIFICATION.md`
+  ("Marketing — Social (Greg-spec rebuild)") for full detail and concrete
+  audit numbers.
+
 ### Added — Interactive follow-up chat on Analyze with AI (deliverable 8)
 
 - **New endpoint `POST /analyze/{surface_key}/chat`** (`backend/app/routes/analyze.py`)

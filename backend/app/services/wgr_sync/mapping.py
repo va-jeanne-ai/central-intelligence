@@ -816,6 +816,51 @@ def map_wgr_offer_mapping(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 
 
+def map_wgr_comment_event(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """WGR comment_events (15,855 rows) → CI WgrCommentEvent. Native upstream
+    PK (uuid ``id``, verified unique/non-null, probe 2026-08-04). Feeds the
+    social page's "Leads by Day" rollup (deliverable 1 — Greg-spec rebuild)."""
+    ev_id = _clean(row.get("id"))
+    if not ev_id:
+        return None
+    return {
+        "id": str(ev_id),
+        "ghl_contact_id": _clean(row.get("ghl_contact_id")),
+        "ghl_conversation_id": _clean(row.get("ghl_conversation_id")),
+        "platform": _clean(row.get("platform")),
+        "keyword": _clean(row.get("keyword")),
+        "post_id": _clean(row.get("post_id")),
+        "post_url": _clean(row.get("post_url")),
+        "comment_text": _clean(row.get("comment_text")),
+        "fb_page_id": _clean(row.get("fb_page_id")),
+        "fb_page_name": _clean(row.get("fb_page_name")),
+        "occurred_at": row.get("occurred_at"),
+        "created_at": row.get("created_at"),
+    }
+
+
+def map_wgr_post_comment_lead(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """WGR post_comment_leads (2,754 rows) → CI WgrPostCommentLead. Native
+    upstream PK (``ig_media_id``, verified unique/non-null, probe 2026-08-04).
+    Precomputed per-post/keyword lead rollup — feeds the social page's
+    per-post lead counts and per-keyword stat cards (deliverable 1)."""
+    media_id = _clean(row.get("ig_media_id"))
+    if not media_id:
+        return None
+    return {
+        "ig_media_id": str(media_id),
+        "shortcode": _clean(row.get("shortcode")),
+        "permalink": _clean(row.get("permalink")),
+        "posted_at": row.get("posted_at"),
+        "media_type": _clean(row.get("media_type")),
+        "is_reel": bool(row.get("is_reel", False)),
+        "keyword_counts": row.get("keyword_counts"),
+        "total_leads": row.get("total_leads"),
+        "first_lead_at": row.get("first_lead_at"),
+        "last_lead_at": row.get("last_lead_at"),
+    }
+
+
 def map_meta_campaign(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     ext = _clean(row.get("campaign_id"))
     if not ext:

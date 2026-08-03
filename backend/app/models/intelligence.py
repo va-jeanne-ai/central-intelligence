@@ -5,9 +5,11 @@ from datetime import datetime
 
 from sqlalchemy import (
     ARRAY,
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -172,6 +174,55 @@ class WgrOfferMapping(Base):
     amount_collected: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     revenue_earned: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WgrCommentEvent(Base):
+    """Mirror of WGR's `comment_events` (15,855 rows) — one row per IG/FB
+    comment that matched a configured lead-generation keyword. Feeds the
+    "Leads by Day" table on the social page (deliverable 1 — Greg-spec
+    rebuild): day-bucketed by `occurred_at` in the tenant timezone, mirroring
+    the semantics of WGR's own `comment_leads_by_day()` RPC. Snapshot
+    reconciled (natural upstream PK `id`, verified unique/non-null,
+    probe 2026-08-04) — same precedent as `WgrOffer` / `LeadJourney`."""
+
+    __tablename__ = "wgr_comment_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    ghl_contact_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ghl_conversation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    platform: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    keyword: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    post_id: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    post_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    comment_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fb_page_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fb_page_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    occurred_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WgrPostCommentLead(Base):
+    """Mirror of WGR's `post_comment_leads` (2,754 rows) — precomputed
+    per-post/keyword lead rollup (`keyword_counts` jsonb + `total_leads`),
+    keyed by `ig_media_id`. Feeds the per-post lead counts and per-keyword
+    stat cards on the social page, joined against `instagram_posts` on
+    `ig_media_id`. Snapshot reconciled (natural upstream PK `ig_media_id`,
+    verified unique/non-null, probe 2026-08-04)."""
+
+    __tablename__ = "wgr_post_comment_leads"
+
+    ig_media_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    shortcode: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    permalink: Mapped[str | None] = mapped_column(Text, nullable=True)
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    media_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_reel: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    keyword_counts: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    total_leads: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    first_lead_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_lead_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class BusinessProfile(Base):

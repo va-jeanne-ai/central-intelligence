@@ -38,7 +38,7 @@ from app.models.marketing import AttributionTaxonomy, LeadEngagement
 from app.models.meta_ads import MetaAd, MetaAdPerformance, MetaCampaign
 from app.models.intelligence import (
     BusinessProfile, InsightTag, MarketSignal, Offer, TagDictionary,
-    WgrOffer, WgrOfferMapping,
+    WgrCommentEvent, WgrOffer, WgrOfferMapping, WgrPostCommentLead,
 )
 from app.models.operational import Appointment, ContentIdea, Insight, Lead, LeadJourney, Call
 from app.models.sales import (
@@ -896,6 +896,20 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
             and not (raw.get("payment_level") or "").strip()
             and not (raw.get("offer_id") or "").strip()
         ),
+    )
+    # 4d. wgr_comment_events / wgr_post_comment_leads (deliverable 1 — social
+    # page rebuild) — comment-lead attribution feeding the "Leads by Day"
+    # table and per-post/keyword lead counts. Natural upstream PKs, no
+    # watermark reliance here (snapshot reconcile always full-pulls).
+    counts["wgr_comment_events"] = await _sync_snapshot_reconcile(
+        session, wgr_table="comment_events", model=WgrCommentEvent,
+        pk_attr="id", wgr_pk="id", map_fn=mapping.map_wgr_comment_event,
+        page_size=20_000,
+    )
+    counts["wgr_post_comment_leads"] = await _sync_snapshot_reconcile(
+        session, wgr_table="post_comment_leads", model=WgrPostCommentLead,
+        pk_attr="ig_media_id", wgr_pk="ig_media_id",
+        map_fn=mapping.map_wgr_post_comment_lead,
     )
     # 5. (source, external_id)-deduped marketing/social mirrors.
     for wgr_table, model, map_fn in _SOURCE_EXTERNAL_PLAN:

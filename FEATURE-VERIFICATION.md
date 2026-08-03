@@ -1137,3 +1137,115 @@ through unmodified as the `messages` list. 13 new unit tests
 (`backend/tests/test_analyze_chat.py`) cover message-role/length/count
 validation and pure prompt assembly with no DB/network — backend suite is
 271 passing (258 baseline + 13 new).
+
+## Marketing — Social (Greg-spec rebuild) (deliverable 1) (2026-08-04)
+
+**Feature:** `/marketing/social` main page rebuilt 1:1 from Greg's own
+tracking app (`central-intelligence-greg/index.html`, `view-mkt-social` —
+the client's spec, per the deliverable: "using his version as the spec —
+layout, metrics, structure — mirroring it 1:1"). A new `GET /social/overview`
+endpoint serves every widget Greg's page renders from a **queryable**
+data source; widgets his page renders from a live Instagram Graph API
+connection are omitted (documented gap, not faked).
+
+**Extracted spec (from `view-mkt-social`, lines 2163–2357 of his `index.html`):**
+- Status/filter bar: date-from, date-to, type filter (All/Reels/Photos/
+  Videos/Carousels), Refresh button. (His "Connect & Load"/"Refresh"/"Demo"
+  buttons talk to a live Graph API connection — no equivalent DB state to
+  mirror; see gaps below.)
+- Summary stat cards: Posts in Range, Reels, Carousels, Watch Time (reels
+  only), Total Views (reels only), Total Reach, Total Likes, Total Saves.
+- Dynamic per-keyword lead stat cards (never hardcoded — driven by whatever
+  keywords exist in the data) + a Total Leads card.
+- **Leads by Day** table — comment-arrival date frame (any post, any
+  platform), reads WGR's `comment_leads_by_day()` RPC on his page.
+- **Posts** table — thumbnail, type badge (Reel/Carousel/Video/Photo),
+  caption, date, likes, comments, per-keyword lead columns, views, watch
+  time, reach, saves, shares, avg watch, skip rate, permalink — every
+  column sortable (nulls always last), paginated via "Load More".
+- A separate "Meta Ads" view (`view-meta-ads`, Hook%/Hold%/CTR% ad
+  performance table) looks similar (Hook Rate KPI) but is a **different**
+  specialist page (paid ads, not organic social) — confirmed out of scope
+  by checking `showView()` wiring; not touched.
+
+**Data audit performed (2026-08-04, live queries against both DBs):**
+- CI's own `instagram_posts` mirror: **2,754 rows**, already covers post
+  identity + engagement + reel metrics (no new mirror needed for posts).
+- WGR source additionally has `ig_account_benchmarks` (1 row),
+  `ig_format_performance` (2 rows), `ig_hook_performance` (0 rows),
+  `ig_mission_performance` (0 rows), `creator_scrapes` (0 rows) — **none
+  of these are rendered anywhere in `view-mkt-social`** (confirmed via
+  grep across `index.html`); not mirrored, per the deliverable's "mirror
+  ONLY tables his social section renders" instruction.
+- WGR's comment-lead attribution tables ARE rendered (via his page's
+  `/api/social/comment-leads` + `/api/social/comment-leads-by-day` Express
+  routes) and ARE real, substantial data: `comment_events` (15,856 rows),
+  `post_comment_leads` (2,754 rows, precomputed rollup) — both mirrored as
+  `wgr_comment_events` / `wgr_post_comment_leads` (see CHANGELOG /
+  INTEGRATIONS.md for the migration/mapper/sync details).
+
+**How to locate:** `/marketing/social` — under Marketing in the sidebar.
+
+**Before you start:** live counts as of 2026-08-04 (unfiltered):
+**2,754 posts** (2,122 reels, 511 carousels), **36,427,303 total reach**,
+**966,287 total likes**, **423,822 total saves**, **45,166,566 total
+views** (reels only), **14,363 total comment-leads** (agent: 6,883,
+info: 7,480), **150 distinct Leads-by-Day rows** across the mirrored
+`wgr_comment_events` history.
+
+**Steps:**
+1. Open `/marketing/social`. Confirm the gap notice (amber, collapsible)
+   lists 4 documented gaps and the summary stat cards show real numbers
+   (not "—") once loaded — Posts in Range **2,754**, Reels **2,122**,
+   Carousels **511**, Total Reach **36,427,303**, Total Likes **966,287**.
+2. Confirm the per-keyword lead cards show **Agent Leads: 6,883** and
+   **Info Leads: 7,480** (or current live numbers) plus **Total Leads:
+   14,363**, with no keyword name hardcoded (cards render from whatever
+   keywords the data contains).
+3. Confirm the **Leads by Day** table lists day rows (most recent first)
+   with a per-keyword column per discovered keyword and a Total column.
+4. Confirm the **Posts** table lists real captions/dates/engagement (not
+   "This is a new offer"-style test rows), with a Reel/Carousel/Video/Photo
+   badge per row and per-keyword lead columns.
+5. Click a sortable column header (e.g. "Likes") — confirm the sort order
+   flips on a second click and nulls always sort last, and that Reels-only
+   columns (Views/Avg Watch/Shares) show "—" for non-reel rows.
+6. Change the date-range filter to a narrow window — confirm the stat
+   cards, per-keyword cards, and Posts table all react together (same
+   filtered set), and Reels/Carousels counts change accordingly.
+7. Filter Type to "Reels" — confirm every row in the Posts table shows the
+   Reel badge and the stat cards' Reels count equals Posts in Range.
+8. Reload — confirm the loading skeleton renders briefly, never a
+   spinner-only or blank screen, never a native `alert()`/`confirm()`.
+
+**Pass:** every summary/keyword/leads-by-day/posts-table number is
+traceable to a direct SQL count against `instagram_posts` /
+`wgr_comment_events` / `wgr_post_comment_leads`; filters/sort all apply
+consistently across every widget; the gap notice is present and accurate.
+**Fail:** any stat card shows a fabricated or hardcoded number, a keyword
+name is hardcoded anywhere in the frontend, sort/filter desyncs between
+widgets, or a widget silently renders data for a live-Graph-API feature
+that isn't actually backed by either database.
+
+**Backend proof (2026-08-04):** in-process call to `get_social_overview(...)`
+(no HTTP server) against the real CI DB, cross-checked against direct SQL
+in the same session:
+
+| Metric | `/social/overview` | Direct SQL | Match |
+|---|---|---|---|
+| `posts_total` | 2,754 | `SELECT count(*) FROM instagram_posts` → 2,754 | ✅ |
+| `summary.reels_count` | 2,122 | `... WHERE is_reel` → 2,122 | ✅ |
+| `summary.carousels_count` | 511 | `... WHERE media_type='CAROUSEL_ALBUM'` → 511 | ✅ |
+| `summary.total_reach` | 36,427,303 | `SUM(reach)` → 36,427,303 | ✅ |
+| `summary.total_likes` | 966,287 | `SUM(likes_count)` → 966,287 | ✅ |
+| `summary.total_leads` | 14,363 | `SUM(total_leads)` on `wgr_post_comment_leads` → 14,363 | ✅ |
+
+A second, filtered call (`media_type=REELS`, `date_from`/`date_to` spanning
+2026, `sort_col=views`, `sort_dir=desc`) returned 565 posts, all with
+`is_reel=True`, correctly sorted by `views` descending. Pure-helper suite:
+21 new tests (`backend/tests/test_social_stats.py`), backend total
+**297 passing (276 baseline + 21 new)**.
+
+**Backfill (2026-08-04):** one-off `_sync_snapshot_reconcile` invocation
+(bypassing Celery/Redis — pure DB-to-DB) upserted **15,856 rows** into
+`wgr_comment_events` and **2,754 rows** into `wgr_post_comment_leads`.

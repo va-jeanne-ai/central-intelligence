@@ -1,7 +1,8 @@
 """Social media endpoints.
 
-POST /api/v1/social  — analyze social media performance and generate scripts
-GET  /api/v1/social  — retrieve social media data summary
+POST /api/v1/social           — analyze social media performance and generate scripts
+GET  /api/v1/social            — retrieve social media data summary
+GET  /api/v1/social/overview   — Greg-spec social page rebuild (deliverable 1)
 
 Sprint 3a / CI-MKT-SOCIAL
 """
@@ -9,9 +10,9 @@ Sprint 3a / CI-MKT-SOCIAL
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,20 +23,66 @@ from app.repositories.marketing import (
     SocialCommentRepository,
     SocialStatsRepository,
 )
+from app.repositories.social_stats import (
+    attach_post_lead_counts,
+    build_keyword_totals,
+    build_leads_by_day,
+    build_summary_stats,
+    filter_posts,
+    sort_posts,
+)
 from app.services.integrations_registry import get_provider
 from app.schemas.social import (
     SocialAnalyzeRequest,
     SocialAnalyzeResponse,
     SocialDataResponse,
+    SocialOverviewLeadDay,
+    SocialOverviewPost,
+    SocialOverviewResponse,
+    SocialOverviewSummary,
     SocialPlatformMetric,
 )
 
 # Platforms shown in the per-platform breakdown, in display order.
 _BREAKDOWN_PLATFORMS = ["instagram", "facebook", "tiktok", "linkedin"]
 
+# Documented gaps between Greg's live-Graph-API tracking page and this
+# DB-backed rebuild — surfaced in every /overview response so the frontend
+# (and anyone hitting the endpoint directly) sees them without needing to
+# read FEATURE-VERIFICATION.md. See that doc for full detail.
+_KNOWN_GAPS = [
+    "Live connect/refresh from the Instagram Graph API is not mirrored here "
+    "(no live scrape state in either DB) — posts reflect the WGR mirror's "
+    "last sync, not a live pull.",
+    "Skip Rate and Follows (reel-only Graph API insights) are not present "
+    "in the instagram_posts mirror — omitted rather than fabricated.",
+    "Total Watch Time is approximated as the sum of avg_watch_time_sec per "
+    "reel — the mirror does not carry Graph API's total watch-time metric.",
+    "Leads by Day is bucketed in UTC, not the tenant's configured timezone "
+    "(WGR's comment_leads_by_day() RPC uses ac_timezone, default "
+    "America/Denver) — a minor day-boundary difference.",
+]
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/social", tags=["social"])
+
+
+def _parse_date_param(value: str | None, *, param_name: str) -> date | None:
+    """Parse a query param as a strict ISO ``YYYY-MM-DD`` date.
+
+    Same idiom as ``routes/ads.py._parse_date_param``: fail loudly (422)
+    rather than let a malformed string reach SQL as an opaque 500.
+    """
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid {param_name}: {value!r} — expected ISO format YYYY-MM-DD",
+        ) from exc
 
 
 @router.post("", response_model=SocialAnalyzeResponse)
@@ -203,4 +250,137 @@ async def get_social_data(
         top_content=top_content,
         recent_comments=recent_comments,
         generated_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+@router.get("/overview", response_model=SocialOverviewResponse)
+async def get_social_overview(
+    date_from: str | None = Query(
+        default=None, description="Filter posts/leads on/after this date (YYYY-MM-DD)"
+    ),
+    date_to: str | None = Query(
+        default=None, description="Filter posts/leads on/before this date (YYYY-MM-DD)"
+    ),
+    media_type: str | None = Query(
+        default=None,
+        description="REELS | IMAGE | VIDEO | CAROUSEL_ALBUM — matches Greg's ig-type-filter",
+    ),
+    sort_col: str = Query(default="timestamp", description="Posts table sort column"),
+    sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    session: AsyncSession = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SocialOverviewResponse:
+    """Rebuild Greg's own social tracking page (deliverable 1) from the WGR
+    mirrors — ``instagram_posts`` (posts + engagement + reel metrics) joined
+    against ``wgr_post_comment_leads`` (per-post/keyword lead counts) and
+    ``wgr_comment_events`` (day-bucketed lead arrivals).
+
+    Layout/metrics/structure mirror ``view-mkt-social`` in
+    ``central-intelligence-greg/index.html`` 1:1: summary stat cards,
+    per-keyword lead cards + Total Leads, Leads by Day table, sortable Posts
+    table. Widgets Greg's page renders from a LIVE Instagram Graph API
+    connection (not a DB table) are necessarily out of scope here — see
+    ``_KNOWN_GAPS`` and FEATURE-VERIFICATION.md.
+    """
+    logger.info(
+        "get_social_overview called — user=%s date_from=%s date_to=%s media_type=%s",
+        current_user.id, date_from, date_to, media_type,
+    )
+
+    parsed_from = _parse_date_param(date_from, param_name="date_from")
+    parsed_to = _parse_date_param(date_to, param_name="date_to")
+
+    # ---- Post identity + engagement (unfiltered read; filtered in Python —
+    # small table, ~2.7k rows, same approach as ads.py's identity reads). ---
+    post_rows = (
+        await session.execute(
+            text(
+                """
+                SELECT id, ig_media_id, permalink, media_type, is_reel, caption,
+                       posted_at, likes_count, comments_count, saves_count,
+                       shares_count, reach, views, avg_watch_time_sec, engagement_rate
+                FROM instagram_posts
+                ORDER BY posted_at DESC NULLS LAST
+                """
+            )
+        )
+    ).mappings().all()
+    all_posts = [dict(r) for r in post_rows]
+
+    filtered_posts = filter_posts(
+        all_posts, date_from=parsed_from, date_to=parsed_to, media_type=media_type,
+    )
+
+    # ---- Per-post/keyword lead rollup (small table, ~2.7k rows). -----------
+    lead_rows = (
+        await session.execute(
+            text("SELECT ig_media_id, keyword_counts, total_leads FROM wgr_post_comment_leads")
+        )
+    ).mappings().all()
+    lead_rows = [dict(r) for r in lead_rows]
+
+    summary = build_summary_stats(filtered_posts)
+    kw_totals = build_keyword_totals(filtered_posts, lead_rows)
+    summary["total_leads"] = kw_totals["total_leads"]
+    summary["per_keyword_leads"] = kw_totals["per_keyword"]
+    summary["keywords"] = kw_totals["keywords"]
+
+    posts_with_leads = attach_post_lead_counts(filtered_posts, lead_rows)
+    sorted_posts = sort_posts(posts_with_leads, sort_col=sort_col, sort_dir=sort_dir)
+    page = sorted_posts[offset:offset + limit]
+
+    # ---- Leads by Day — comment-event frame (WGR comment_leads_by_day()
+    # RPC equivalent), scoped by the same date range as the Posts table. ----
+    event_rows = (
+        await session.execute(
+            text("SELECT occurred_at, keyword FROM wgr_comment_events")
+        )
+    ).mappings().all()
+    events = [dict(r) for r in event_rows]
+    lbd = build_leads_by_day(events, date_from=parsed_from, date_to=parsed_to)
+
+    leads_by_day = [
+        SocialOverviewLeadDay(
+            day=d["day"],
+            total=d.get("total", 0),
+            per_keyword={k: v for k, v in d.items() if k not in ("day", "total")},
+        )
+        for d in lbd["days"]
+    ]
+
+    posts_out = [
+        SocialOverviewPost(
+            id=str(p["id"]),
+            ig_media_id=p.get("ig_media_id"),
+            permalink=p.get("permalink"),
+            media_type=p.get("media_type"),
+            is_reel=bool(p.get("is_reel")),
+            caption=p.get("caption"),
+            posted_at=p["posted_at"].isoformat() if p.get("posted_at") else None,
+            likes_count=p.get("likes_count"),
+            comments_count=p.get("comments_count"),
+            views=p.get("views"),
+            reach=p.get("reach"),
+            saves_count=p.get("saves_count"),
+            shares_count=p.get("shares_count"),
+            avg_watch_time_sec=p.get("avg_watch_time_sec"),
+            engagement_rate=p.get("engagement_rate"),
+            lead_counts=p.get("lead_counts", {}),
+            lead_total=p.get("lead_total", 0),
+        )
+        for p in page
+    ]
+
+    return SocialOverviewResponse(
+        summary=SocialOverviewSummary(**summary),
+        posts=posts_out,
+        posts_total=len(sorted_posts),
+        leads_by_day=leads_by_day,
+        keywords=lbd["keywords"] or kw_totals["keywords"],
+        date_from=date_from,
+        date_to=date_to,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        gaps=_KNOWN_GAPS,
     )
