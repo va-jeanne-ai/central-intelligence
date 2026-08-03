@@ -17,6 +17,17 @@ Contract under test — reproducing Greg's own tracking page semantics
   same date range, keyword-generic (never hardcodes keyword names).
 - paginate_posts: pre-slice total (not page length) + correct page
   boundaries, matching the frontend Pagination component's contract.
+- build_group_lead_days: reshapes SQL-pre-aggregated (day, keyword, n) rows
+  into the same {keywords, days: [...]} shape build_leads_by_day produces
+  from raw per-event rows — the perf fix that replaced a raw
+  wgr_comment_events fetch (15,856 rows, 2-4s over the pooler) with a
+  server-side GROUP BY.
+- _build_post_filter_sql (routes/social.py): the shared WHERE-clause
+  builder for the SQL-first /social/overview rewrite. table_alias must
+  qualify every column reference when reused inside a query that JOINs
+  instagram_posts against wgr_post_comment_leads (both tables have
+  posted_at/is_reel/media_type — unqualified columns there raise
+  AmbiguousColumnError, the bug this test guards against regressing).
 """
 
 from datetime import date, datetime, timezone
@@ -26,6 +37,7 @@ from fastapi import HTTPException
 
 from app.repositories.social_stats import (
     attach_post_lead_counts,
+    build_group_lead_days,
     build_keyword_totals,
     build_leads_by_day,
     build_summary_stats,
@@ -33,7 +45,7 @@ from app.repositories.social_stats import (
     paginate_posts,
     sort_posts,
 )
-from app.routes.social import _SORT_COLUMNS, _validate_sort_col
+from app.routes.social import _SORT_COLUMNS, _build_post_filter_sql, _validate_sort_col
 
 
 def _post(
@@ -378,3 +390,119 @@ def test_attach_post_lead_counts_parses_json_string_counts():
     out = attach_post_lead_counts(posts, lead_rows)
     assert out[0]["lead_counts"] == {"agent": 4}
     assert out[0]["lead_total"] == 4
+
+
+# --- build_group_lead_days (perf fix: SQL GROUP BY instead of raw fetch) ---
+
+
+def test_build_group_lead_days_matches_build_leads_by_day_shape():
+    # Same scenario as test_build_leads_by_day_buckets_by_date_and_keyword,
+    # but fed pre-aggregated (day, keyword, n) groups instead of raw events
+    # — the two functions must agree on the final shape.
+    groups = [
+        {"day": date(2026, 1, 1), "keyword": "info", "n": 2},
+        {"day": date(2026, 1, 1), "keyword": "agent", "n": 1},
+        {"day": date(2026, 1, 2), "keyword": "info", "n": 1},
+    ]
+    result = build_group_lead_days(groups)
+    days = {d["day"]: d for d in result["days"]}
+    assert days["2026-01-01"]["info"] == 2
+    assert days["2026-01-01"]["agent"] == 1
+    assert days["2026-01-01"]["total"] == 3
+    assert days["2026-01-02"]["total"] == 1
+    assert result["keywords"] == ["agent", "info"]
+
+
+def test_build_group_lead_days_sorted_most_recent_first():
+    groups = [
+        {"day": date(2026, 1, 1), "keyword": "info", "n": 1},
+        {"day": date(2026, 1, 3), "keyword": "info", "n": 1},
+    ]
+    result = build_group_lead_days(groups)
+    assert [d["day"] for d in result["days"]] == ["2026-01-03", "2026-01-01"]
+
+
+def test_build_group_lead_days_accepts_iso_string_day():
+    # SQL may hand back an ISO date string rather than a date object,
+    # depending on the driver — _post_date() must coerce either.
+    groups = [{"day": "2026-01-01", "keyword": "info", "n": 5}]
+    result = build_group_lead_days(groups)
+    assert result["days"][0]["day"] == "2026-01-01"
+    assert result["days"][0]["info"] == 5
+
+
+def test_build_group_lead_days_ignores_blank_keyword():
+    groups = [{"day": date(2026, 1, 1), "keyword": "", "n": 3}]
+    result = build_group_lead_days(groups)
+    assert result["days"] == []
+
+
+def test_build_group_lead_days_ignores_null_day():
+    groups = [{"day": None, "keyword": "info", "n": 3}]
+    result = build_group_lead_days(groups)
+    assert result["days"] == []
+
+
+def test_build_group_lead_days_empty_input():
+    result = build_group_lead_days([])
+    assert result["days"] == []
+    assert result["keywords"] == []
+
+
+def test_build_group_lead_days_sums_multiple_groups_same_day_keyword():
+    # Shouldn't happen from a proper GROUP BY (each (day, keyword) pair is
+    # one row), but the function must still sum correctly if it did.
+    groups = [
+        {"day": date(2026, 1, 1), "keyword": "info", "n": 2},
+        {"day": date(2026, 1, 1), "keyword": "info", "n": 3},
+    ]
+    result = build_group_lead_days(groups)
+    assert result["days"][0]["info"] == 5
+    assert result["days"][0]["total"] == 5
+
+
+# --- _build_post_filter_sql (routes/social.py) ---
+
+
+def test_build_post_filter_sql_no_filters_is_always_true():
+    where_sql, params = _build_post_filter_sql(date_from=None, date_to=None, media_type=None)
+    assert where_sql == "1=1"
+    assert params == {}
+
+
+def test_build_post_filter_sql_unqualified_by_default():
+    where_sql, params = _build_post_filter_sql(
+        date_from=date(2026, 1, 1), date_to=date(2026, 1, 31), media_type="REELS",
+    )
+    assert "posted_at::date >=" in where_sql
+    assert "p.posted_at" not in where_sql
+    assert "is_reel IS TRUE" in where_sql
+    assert params == {"date_from": date(2026, 1, 1), "date_to": date(2026, 1, 31)}
+
+
+def test_build_post_filter_sql_table_alias_qualifies_every_column():
+    # Regression guard: this is the exact bug found in manual testing —
+    # unqualified posted_at/is_reel/media_type in a query that JOINs
+    # instagram_posts against wgr_post_comment_leads (both tables carry
+    # those column names) raised asyncpg.exceptions.AmbiguousColumnError.
+    where_sql, params = _build_post_filter_sql(
+        date_from=date(2026, 1, 1), date_to=date(2026, 1, 31), media_type="REELS",
+        table_alias="p",
+    )
+    assert "p.posted_at::date >=" in where_sql
+    assert "p.posted_at::date <=" in where_sql
+    assert "p.is_reel IS TRUE" in where_sql
+    assert "UPPER(p.media_type)" not in where_sql  # REELS branch doesn't touch media_type
+
+
+def test_build_post_filter_sql_table_alias_qualifies_media_type_branch():
+    where_sql, params = _build_post_filter_sql(
+        date_from=None, date_to=None, media_type="CAROUSEL_ALBUM", table_alias="p",
+    )
+    assert "UPPER(p.media_type) = UPPER(:media_type)" in where_sql
+    assert params == {"media_type": "CAROUSEL_ALBUM"}
+
+
+def test_build_post_filter_sql_media_type_case_insensitive_param():
+    _, params = _build_post_filter_sql(date_from=None, date_to=None, media_type="carousel_album")
+    assert params["media_type"] == "carousel_album"  # comparison does UPPER() in SQL, not here

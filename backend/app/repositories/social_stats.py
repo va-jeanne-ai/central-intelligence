@@ -274,3 +274,43 @@ def build_leads_by_day(
         for day, counts in sorted(per_day.items(), key=lambda kv: kv[0], reverse=True)
     ]
     return {"keywords": sorted(keywords), "days": days}
+
+
+def build_group_lead_days(groups: Sequence[dict]) -> dict[str, Any]:
+    """Reshape SQL-pre-aggregated (day, keyword, n) groups into the same
+    {keywords, days: [{day, <keyword>: n, total: n}, ...]} shape
+    ``build_leads_by_day`` produces from raw per-event rows.
+
+    Perf note: ``build_leads_by_day`` buckets one dict per comment event —
+    correct, but a full ``wgr_comment_events`` fetch (15,856 rows) measured
+    2-4s over the Supabase transaction pooler, too slow stacked with the
+    route's other queries. The route now does the GROUP BY server-side
+    (``SELECT occurred_at::date AS day, LOWER(TRIM(keyword)) AS keyword,
+    COUNT(*) AS n ... GROUP BY 1, 2``) and this function just reshapes the
+    (day, keyword, n) rows — no event-level scan needed since the count is
+    already computed. ``groups`` rows: ``{"day": date, "keyword": str, "n":
+    int}``; ``day`` may be a ``date``/``datetime`` or an ISO string. Rows
+    with a null/blank keyword should already be filtered out by the SQL
+    (``WHERE keyword IS NOT NULL AND TRIM(keyword) != ''``), but a blank
+    keyword reaching here is still skipped defensively.
+    """
+    per_day: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    keywords: set[str] = set()
+    for row in groups:
+        d = _post_date(row.get("day"))
+        if d is None:
+            continue
+        kw = (row.get("keyword") or "").strip().lower()
+        if not kw:
+            continue
+        n = _int(row.get("n"))
+        keywords.add(kw)
+        day_key = d.isoformat()
+        per_day[day_key][kw] += n
+        per_day[day_key]["total"] += n
+
+    days = [
+        {"day": day, **counts}
+        for day, counts in sorted(per_day.items(), key=lambda kv: kv[0], reverse=True)
+    ]
+    return {"keywords": sorted(keywords), "days": days}

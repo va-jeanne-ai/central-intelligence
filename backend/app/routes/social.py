@@ -9,6 +9,7 @@ Sprint 3a / CI-MKT-SOCIAL
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, timezone
 
@@ -17,7 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser, get_current_user
-from app.database import get_session
+from app.database import AsyncSessionLocal, get_session
 from app.repositories.marketing import (
     InstagramPostRepository,
     SocialCommentRepository,
@@ -25,12 +26,8 @@ from app.repositories.marketing import (
 )
 from app.repositories.social_stats import (
     attach_post_lead_counts,
+    build_group_lead_days,
     build_keyword_totals,
-    build_leads_by_day,
-    build_summary_stats,
-    filter_posts,
-    paginate_posts,
-    sort_posts,
 )
 from app.services.integrations_registry import get_provider
 from app.schemas.social import (
@@ -51,11 +48,27 @@ _BREAKDOWN_PLATFORMS = ["instagram", "facebook", "tiktok", "linkedin"]
 # alias for posted_at plus every sortable column exposed in the frontend
 # (frontend/.../marketing/social/page.tsx's SortCol union). Whitelisted so
 # an unrecognized value fails loudly (422) instead of silently degrading
-# sort_posts() to an unsorted pass-through.
+# to an unsorted pass-through — and so it's safe to interpolate directly
+# into an ORDER BY clause (no user input ever reaches SQL text unescaped).
 _SORT_COLUMNS = {
     "timestamp", "likes_count", "comments_count", "views",
     "avg_watch_time_sec", "reach", "saves_count", "shares_count",
     "engagement_rate",
+}
+
+# sort_col (API/frontend name) -> instagram_posts column, for ORDER BY.
+# "timestamp" is the one alias (matches sort_posts()'s pure-Python
+# equivalent, kept for the response's own in-memory day/keyword work).
+_SORT_COLUMN_SQL = {
+    "timestamp": "posted_at",
+    "likes_count": "likes_count",
+    "comments_count": "comments_count",
+    "views": "views",
+    "avg_watch_time_sec": "avg_watch_time_sec",
+    "reach": "reach",
+    "saves_count": "saves_count",
+    "shares_count": "shares_count",
+    "engagement_rate": "engagement_rate",
 }
 
 # Documented gaps between Greg's live-Graph-API tracking page and this
@@ -95,6 +108,48 @@ def _parse_date_param(value: str | None, *, param_name: str) -> date | None:
             status_code=422,
             detail=f"Invalid {param_name}: {value!r} — expected ISO format YYYY-MM-DD",
         ) from exc
+
+
+def _build_post_filter_sql(
+    *,
+    date_from: date | None,
+    date_to: date | None,
+    media_type: str | None,
+    table_alias: str | None = None,
+) -> tuple[str, dict[str, object]]:
+    """Build the ``instagram_posts`` WHERE clause + bind params shared by
+    the summary/page/keyword queries, so all three agree on exactly the
+    same filtered row set. Mirrors ``filter_posts()``'s semantics: inclusive
+    date bounds on ``posted_at``, "REELS" matches ``is_reel``, any other
+    value matches ``media_type`` case-insensitively.
+
+    ``table_alias`` qualifies every column reference (e.g. ``"p"`` ->
+    ``p.posted_at``) — REQUIRED whenever this clause is reused inside a
+    query that JOINs ``instagram_posts`` against another table which has
+    same-named columns (``wgr_post_comment_leads`` also has ``posted_at``/
+    ``is_reel``/``media_type`` — see its migration), or Postgres raises
+    ``AmbiguousColumnError``. Leave ``None`` for queries selecting FROM
+    ``instagram_posts`` alone with no alias.
+
+    ``media_type`` is bound as a query param (never interpolated) — safe
+    against injection even though it's compared with ``UPPER(...)``.
+    """
+    prefix = f"{table_alias}." if table_alias else ""
+    clauses = ["1=1"]
+    params: dict[str, object] = {}
+    if date_from is not None:
+        clauses.append(f"{prefix}posted_at::date >= :date_from")
+        params["date_from"] = date_from
+    if date_to is not None:
+        clauses.append(f"{prefix}posted_at::date <= :date_to")
+        params["date_to"] = date_to
+    if media_type:
+        if media_type == "REELS":
+            clauses.append(f"{prefix}is_reel IS TRUE")
+        else:
+            clauses.append(f"UPPER({prefix}media_type) = UPPER(:media_type)")
+            params["media_type"] = media_type
+    return " AND ".join(clauses), params
 
 
 def _validate_sort_col(value: str) -> str:
@@ -326,54 +381,172 @@ async def get_social_overview(
     parsed_from = _parse_date_param(date_from, param_name="date_from")
     parsed_to = _parse_date_param(date_to, param_name="date_to")
 
-    # ---- Post identity + engagement (unfiltered read; filtered in Python —
-    # small table, ~2.7k rows, same approach as ads.py's identity reads). ---
-    post_rows = (
-        await session.execute(
-            text(
-                """
-                SELECT id, ig_media_id, permalink, media_type, is_reel, caption,
-                       posted_at, likes_count, comments_count, saves_count,
-                       shares_count, reach, views, avg_watch_time_sec, engagement_rate
-                FROM instagram_posts
-                ORDER BY posted_at DESC NULLS LAST
-                """
-            )
-        )
-    ).mappings().all()
-    all_posts = [dict(r) for r in post_rows]
+    where_sql, where_params = _build_post_filter_sql(
+        date_from=parsed_from, date_to=parsed_to, media_type=media_type,
+    )
+    # Alias-qualified variant for the keyword-totals query, which JOINs
+    # instagram_posts (aliased "p") against wgr_post_comment_leads (aliased
+    # "l") — both tables have posted_at/is_reel/media_type columns (see
+    # wgr_post_comment_leads's own columns in its migration), so the
+    # unqualified where_sql above raises AmbiguousColumnError there.
+    where_sql_p, where_params_p = _build_post_filter_sql(
+        date_from=parsed_from, date_to=parsed_to, media_type=media_type,
+        table_alias="p",
+    )
+    order_col = _SORT_COLUMN_SQL[sort_col]
+    order_dir = "ASC" if sort_dir == "asc" else "DESC"
 
-    filtered_posts = filter_posts(
-        all_posts, date_from=parsed_from, date_to=parsed_to, media_type=media_type,
+    date_filter_sql = ""
+    date_filter_params: dict[str, object] = {}
+    if parsed_from is not None:
+        date_filter_sql += " AND occurred_at::date >= :lbd_date_from"
+        date_filter_params["lbd_date_from"] = parsed_from
+    if parsed_to is not None:
+        date_filter_sql += " AND occurred_at::date <= :lbd_date_to"
+        date_filter_params["lbd_date_to"] = parsed_to
+
+    # ---- Four independent, filter-scoped queries run CONCURRENTLY, each on
+    # its own pooler connection (pool_size=5 gives headroom), instead of
+    # sequentially on one session. This is the fix for the SQL-first
+    # rewrite still landing at ~5-6s: each query is fast on its own (the
+    # regression was never any single query — it was the original design's
+    # "SELECT * incl. captions for all 2,754 rows" 54s scan), but four
+    # sequential round-trips to the Supabase transaction pooler over WAN
+    # each pay their own ~0.3-1s latency PLUS a ~2.4s first-connection tax
+    # apiece if run on separate sessions serially — stacking to 5-8s+ even
+    # after every query itself is small. Running them concurrently overlaps
+    # that latency instead of summing it. Three of the four open their own
+    # fresh session (AsyncSessionLocal — same pattern as dashboard.py);
+    # the route's injected `session` handles the fourth (posts page), since
+    # that's the one whose result composition most naturally lives on the
+    # request-scoped session. None of the four queries depend on another's
+    # result, so no data race — this is pure query parallelism.
+    #
+    # 1. Summary KPIs — ONE aggregate query over the filtered set. No row
+    #    fetch: touches zero caption bytes.
+    # 2. Keyword totals — bounded SELECT of (ig_media_id, keyword_counts,
+    #    total_leads) for FILTERED posts only, via a join against
+    #    instagram_posts on the same where_sql. No captions.
+    # 3. Posts page — SQL ORDER BY (whitelisted) + LIMIT/OFFSET, ONLY the
+    #    requested page. Caption truncated server-side (LEFT(caption, 300))
+    #    — the table renders a preview; the full post is one permalink
+    #    click away on Instagram.
+    # 4. Leads by Day — GROUP BY (day, keyword) aggregate over
+    #    wgr_comment_events, not a raw 15,856-row fetch (that alone
+    #    measured 2-4s). build_group_lead_days reshapes the pre-counted
+    #    groups into the same shape build_leads_by_day produces from raw
+    #    rows.
+    async def _fetch_summary() -> dict:
+        async with AsyncSessionLocal() as s:
+            row = (
+                await s.execute(
+                    text(
+                        f"""
+                        SELECT
+                            COUNT(*) AS posts_in_range,
+                            COUNT(*) FILTER (WHERE is_reel) AS reels_count,
+                            COUNT(*) FILTER (WHERE UPPER(media_type) = 'CAROUSEL_ALBUM') AS carousels_count,
+                            COALESCE(SUM(avg_watch_time_sec) FILTER (WHERE is_reel), 0) AS total_watch_time_sec,
+                            COALESCE(SUM(views) FILTER (WHERE is_reel), 0) AS total_views,
+                            COALESCE(SUM(reach), 0) AS total_reach,
+                            COALESCE(SUM(likes_count), 0) AS total_likes,
+                            COALESCE(SUM(saves_count), 0) AS total_saves
+                        FROM instagram_posts
+                        WHERE {where_sql}
+                        """  # noqa: S608 — where_sql built from a fixed whitelist in _build_post_filter_sql
+                    ),
+                    where_params,
+                )
+            ).mappings().one()
+            return dict(row)
+
+    async def _fetch_lead_rows() -> list[dict]:
+        async with AsyncSessionLocal() as s:
+            rows = (
+                await s.execute(
+                    text(
+                        f"""
+                        SELECT l.ig_media_id, l.keyword_counts, l.total_leads
+                        FROM wgr_post_comment_leads l
+                        JOIN instagram_posts p ON p.ig_media_id = l.ig_media_id
+                        WHERE {where_sql_p}
+                        """  # noqa: S608 — where_sql_p built from a fixed whitelist in _build_post_filter_sql, alias-qualified
+                    ),
+                    where_params_p,
+                )
+            ).mappings().all()
+            return [dict(r) for r in rows]
+
+    async def _fetch_event_groups() -> list[dict]:
+        async with AsyncSessionLocal() as s:
+            rows = (
+                await s.execute(
+                    text(
+                        f"""
+                        SELECT occurred_at::date AS day, LOWER(TRIM(keyword)) AS keyword, COUNT(*) AS n
+                        FROM wgr_comment_events
+                        WHERE keyword IS NOT NULL AND TRIM(keyword) != ''{date_filter_sql}
+                        GROUP BY occurred_at::date, LOWER(TRIM(keyword))
+                        """  # noqa: S608 — date_filter_sql built from a fixed template above
+                    ),
+                    date_filter_params,
+                )
+            ).mappings().all()
+            return [dict(r) for r in rows]
+
+    async def _fetch_page() -> list[dict]:
+        rows = (
+            await session.execute(
+                text(
+                    f"""
+                    SELECT id, ig_media_id, permalink, media_type, is_reel,
+                           LEFT(caption, 300) AS caption,
+                           posted_at, likes_count, comments_count, saves_count,
+                           shares_count, reach, views, avg_watch_time_sec, engagement_rate
+                    FROM instagram_posts
+                    WHERE {where_sql}
+                    ORDER BY {order_col} {order_dir} NULLS LAST
+                    LIMIT :limit OFFSET :offset
+                    """  # noqa: S608 — where_sql/order_col/order_dir all built from fixed whitelists
+                ),
+                {**where_params, "limit": limit, "offset": offset},
+            )
+        ).mappings().all()
+        return [dict(r) for r in rows]
+
+    summary_row, lead_rows, groups, page = await asyncio.gather(
+        _fetch_summary(), _fetch_lead_rows(), _fetch_event_groups(), _fetch_page(),
     )
 
-    # ---- Per-post/keyword lead rollup (small table, ~2.7k rows). -----------
-    lead_rows = (
-        await session.execute(
-            text("SELECT ig_media_id, keyword_counts, total_leads FROM wgr_post_comment_leads")
-        )
-    ).mappings().all()
-    lead_rows = [dict(r) for r in lead_rows]
+    summary = {
+        "posts_in_range": summary_row["posts_in_range"],
+        "reels_count": summary_row["reels_count"],
+        "carousels_count": summary_row["carousels_count"],
+        "total_watch_time_sec": int(summary_row["total_watch_time_sec"]),
+        "total_views": int(summary_row["total_views"]),
+        "total_reach": int(summary_row["total_reach"]),
+        "total_likes": int(summary_row["total_likes"]),
+        "total_saves": int(summary_row["total_saves"]),
+    }
+    posts_total = summary["posts_in_range"]
 
-    summary = build_summary_stats(filtered_posts)
-    kw_totals = build_keyword_totals(filtered_posts, lead_rows)
+    lead_by_media_id = {r["ig_media_id"]: r for r in lead_rows if r.get("ig_media_id")}
+
+    # build_keyword_totals scopes by post_ids present in `posts` — pass a
+    # bare-id stand-in list (no caption/engagement fields needed for this
+    # rollup) so the pure helper's contract (posts, lead_rows) is unchanged.
+    kw_totals = build_keyword_totals(
+        [{"ig_media_id": mid} for mid in lead_by_media_id], lead_rows,
+    )
     summary["total_leads"] = kw_totals["total_leads"]
     summary["per_keyword_leads"] = kw_totals["per_keyword"]
     summary["keywords"] = kw_totals["keywords"]
 
-    posts_with_leads = attach_post_lead_counts(filtered_posts, lead_rows)
-    sorted_posts = sort_posts(posts_with_leads, sort_col=sort_col, sort_dir=sort_dir)
-    page, posts_total = paginate_posts(sorted_posts, limit=limit, offset=offset)
+    # Merge lead_counts onto just the page rows (cheap — page is <= 500
+    # rows, and lead_by_media_id was already fetched, filter-scoped, above).
+    page = attach_post_lead_counts(page, list(lead_by_media_id.values()))
 
-    # ---- Leads by Day — comment-event frame (WGR comment_leads_by_day()
-    # RPC equivalent), scoped by the same date range as the Posts table. ----
-    event_rows = (
-        await session.execute(
-            text("SELECT occurred_at, keyword FROM wgr_comment_events")
-        )
-    ).mappings().all()
-    events = [dict(r) for r in event_rows]
-    lbd = build_leads_by_day(events, date_from=parsed_from, date_to=parsed_to)
+    lbd = build_group_lead_days(groups)
 
     leads_by_day = [
         SocialOverviewLeadDay(
