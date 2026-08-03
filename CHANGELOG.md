@@ -6,6 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed — Source column + Source filter on /leads (UI only)
+
+With the channel axis live, the provenance `source` column (uniformly "WGR")
+and its filter dropdown were redundant on the leads list — hidden from the
+UI. **API unchanged:** `GET /leads` still returns `source` and accepts the
+`source` filter param; `/leads/stats` still returns `available_sources`;
+the lead detail Contact card still shows source.
+
 ### Changed — Channel filter driven by the breakdown, filters server-side
 
 The Channel filter on `/leads` previously offered only the channels visible

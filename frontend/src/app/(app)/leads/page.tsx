@@ -6,15 +6,13 @@ import { Header } from "@/components/layout/header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnalyzeViewButton } from "@/components/analyze/AnalyzeViewButton";
 import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
-import type { Lead, LeadStatus, LeadSource } from "@/types";
+import type { Lead, LeadStatus } from "@/types";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagination } from "@/hooks/use-pagination";
 import { Pagination } from "@/components/ui";
 import {
   STATUS_CONFIG,
-  SOURCE_CONFIG,
-  resolveSource,
   resolveStatus,
   channelLabel,
   channelBadgeClasses,
@@ -52,8 +50,9 @@ interface LeadsStatsResponse {
   }[];
   funnel: { stage: string; count: number; percentage: number }[];
   // Distinct provenance `source` values present in the DB (lowercased,
-  // count-desc) — drives the Source filter dropdown so its options always
-  // reflect real data (e.g. 'wgr') instead of the hardcoded legacy enum.
+  // count-desc). Part of the API contract; the list UI no longer renders a
+  // Source filter (Channel is the meaningful axis), so this is currently
+  // unconsumed here.
   available_sources: string[];
 }
 
@@ -133,9 +132,9 @@ const EMPTY_LEADS: LeadsListResponse = {
   per_page: 50,
 };
 
-// Status / Source display config, and the resolveSource/resolveStatus
-// fallback resolvers, live in @/lib/lead-display.ts (shared with the lead
-// detail page — see the former TODO(v2) there).
+// Status display config and the resolveStatus fallback resolver live in
+// @/lib/lead-display.ts (shared with the lead detail page, which still
+// renders the provenance `source` in its Contact card).
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
@@ -689,12 +688,13 @@ function ScoreBar({ score }: { score: number }) {
 // ─── Table Row ────────────────────────────────────────────────────────────────
 
 function LeadTableRow({ lead }: { lead: Lead }) {
-  // Use the resolver helpers so unknown values (e.g. GHL pushing
-  // source='facebook_ads') get a sensible default instead of crashing.
+  // Use the resolver helper so unknown status values get a sensible
+  // default instead of crashing. (The provenance `source` column was
+  // removed from this table — channel is the meaningful axis; `source`
+  // still exists on the API payload and the lead detail page.)
   const status = resolveStatus(lead.status);
-  const source = resolveSource(lead.source);
-  // Channel is a distinct, open string set from `source` — never routed
-  // through SOURCE_CONFIG. Colored via the same hash palette as the donut
+  // Channel is an open string set — never routed through the legacy
+  // source config. Colored via the same hash palette as the donut
   // (colorForSource) keyed on `channel ?? "No attribution"`; `unmapped:*`
   // dialects get an amber warning tint instead so they surface loudly.
   const channelValue = lead.channel ?? null;
@@ -735,15 +735,6 @@ function LeadTableRow({ lead }: { lead: Lead }) {
           <span className="text-sm font-semibold text-gray-900">{lead.name}</span>
           <span className="text-xs text-gray-400">{lead.email}</span>
         </div>
-      </td>
-
-      {/* Source */}
-      <td className="px-5 py-3.5">
-        <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${source.badgeClasses}`}
-        >
-          {source.label}
-        </span>
       </td>
 
       {/* Channel */}
@@ -791,11 +782,6 @@ function LeadTableRow({ lead }: { lead: Lead }) {
 // funnel's Applications stage and the matching dropdown option — not a real
 // per-lead status, so it's added on top of LeadStatus.
 type FilterStatus = "all" | LeadStatus | "applications";
-// Source is server-filtered (exact lowercased match on leads.source). The
-// option list comes from stats.available_sources — the distinct values
-// actually in the DB — so any string can be a valid filter value, not just
-// the legacy LeadSource enum.
-type FilterSource = "all" | string;
 // Channel filter values are exactly the bucket labels the /leads/stats
 // source_breakdown emits ("No attribution", "Non-marketing", canonical
 // channels, "unmapped:*", "other unmapped"). Selection is sent to the server
@@ -809,7 +795,9 @@ type FilterChannel = "all" | string;
 // Backend-whitelisted sort columns. "Date Added" sorts on entry_date (the lead's
 // displayed date); "Score" has no DB column and is derived from status, so the
 // Score header sorts by status — same ordering the score reflects.
-type SortColumn = "name" | "source" | "entry_date" | "status";
+// "source" stays backend-sortable but has no header anymore (the Source
+// column was removed from this table in favor of Channel).
+type SortColumn = "name" | "entry_date" | "status";
 type SortDir = "asc" | "desc";
 
 function SortableHeader({
@@ -850,9 +838,6 @@ function FilterBar({
   onSearchChange,
   statusFilter,
   onStatusChange,
-  sourceFilter,
-  onSourceChange,
-  sourceOptions,
   channelFilter,
   onChannelChange,
   channelOptions,
@@ -867,12 +852,6 @@ function FilterBar({
   onSearchChange: (v: string) => void;
   statusFilter: FilterStatus;
   onStatusChange: (v: FilterStatus) => void;
-  sourceFilter: FilterSource;
-  onSourceChange: (v: FilterSource) => void;
-  /** Distinct provenance sources present in the DB (from stats.available_sources),
-   * each paired with its display label. Raw value is what the server-side
-   * `source` filter param expects (exact lowercased match). */
-  sourceOptions: { value: string; label: string }[];
   channelFilter: FilterChannel;
   onChannelChange: (v: FilterChannel) => void;
   /** Channel bucket options from the stats source_breakdown (the same
@@ -890,7 +869,6 @@ function FilterBar({
   const hasFilters =
     search !== "" ||
     statusFilter !== "all" ||
-    sourceFilter !== "all" ||
     channelFilter !== "all" ||
     entryFrom !== "" ||
     entryTo !== "";
@@ -920,20 +898,6 @@ function FilterBar({
           className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
         />
       </div>
-
-      {/* Source */}
-      <select
-        value={sourceFilter}
-        onChange={(e) => onSourceChange(e.target.value as FilterSource)}
-        className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
-      >
-        <option value="all">All Sources</option>
-        {sourceOptions.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
 
       {/* Channel — options are the breakdown buckets (with counts); the
           selected bucket filters server-side across the whole dataset. */}
@@ -1090,13 +1054,12 @@ function TableSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="grid grid-cols-6 gap-4 px-5 py-3.5 border-b border-gray-50 items-center"
+          className="grid grid-cols-5 gap-4 px-5 py-3.5 border-b border-gray-50 items-center"
         >
           <div className="space-y-1.5">
             <Skeleton className="h-3.5 w-28" />
             <Skeleton className="h-2.5 w-32" />
           </div>
-          <Skeleton className="h-5 w-16 rounded-full" />
           <Skeleton className="h-5 w-20 rounded-full" />
           <Skeleton className="h-3 w-16" />
           <Skeleton className="h-5 w-20 rounded-full" />
@@ -1119,7 +1082,6 @@ export default function LeadsPage() {
   const [leadsData, setLeadsData] = useState<LeadsListResponse>(EMPTY_LEADS);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
-  const [sourceFilter, setSourceFilter] = useState<FilterSource>("all");
   // Channel filter is CLIENT-SIDE only — it narrows the already-loaded page
   // by lead.channel and does not touch the /leads request params (no
   // server-side channel filter exists per Task 3 scope).
@@ -1206,7 +1168,6 @@ export default function LeadsPage() {
       async function fetchLeads(): Promise<void> {
         const params = new URLSearchParams();
         if (statusFilter !== "all") params.set("status", statusFilter);
-        if (sourceFilter !== "all") params.set("source", sourceFilter);
         if (channelFilter !== "all") params.set("channel", channelFilter);
         if (search) params.set("search", search);
         if (entryFrom) params.set("entry_from", entryFrom);
@@ -1247,14 +1208,13 @@ export default function LeadsPage() {
     }
 
     return doFetch();
-  }, [authLoading, statusFilter, sourceFilter, channelFilter, search, entryFrom, entryTo, sortBy, sortDir, page, pageSize]);
+  }, [authLoading, statusFilter, channelFilter, search, entryFrom, entryTo, sortBy, sortDir, page, pageSize]);
 
   // Mirrors the list-fetch params in fetchLeads above, minus sort/pagination —
   // snapshot for "Analyze this view".
   const openAnalyze = () => {
     const params = new URLSearchParams();
     if (statusFilter !== "all") params.set("status", statusFilter);
-    if (sourceFilter !== "all") params.set("source", sourceFilter);
     if (search) params.set("search", search);
     if (entryFrom) params.set("entry_from", entryFrom);
     if (entryTo) params.set("entry_to", entryTo);
@@ -1267,7 +1227,7 @@ export default function LeadsPage() {
   useEffect(() => {
     resetToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, sourceFilter, channelFilter, search, entryFrom, entryTo, sortBy, sortDir]);
+  }, [statusFilter, channelFilter, search, entryFrom, entryTo, sortBy, sortDir]);
 
   // Build KPI cards from live stats
   const kpiCards = [
@@ -1310,7 +1270,6 @@ export default function LeadsPage() {
   const handleClearFilters = () => {
     setSearch("");
     setStatusFilter("all");
-    setSourceFilter("all");
     setChannelFilter("all");
     setEntryFrom("");
     setEntryTo("");
@@ -1328,24 +1287,6 @@ export default function LeadsPage() {
       })),
     [stats.source_breakdown]
   );
-
-  // Source filter options from the distinct values actually in the DB
-  // (stats.available_sources, count-desc from the backend — keep that order
-  // so the most common sources list first). Labels via resolveSource so
-  // legacy enum values keep their curated labels ("Opt-in") and anything
-  // else is prettified ("wgr" → "WGR"). Falls back to the legacy enum list
-  // while stats are still loading (or against an older backend without
-  // available_sources) so the dropdown is never empty.
-  const sourceOptions = useMemo(() => {
-    const sources = stats.available_sources ?? [];
-    if (sources.length === 0) {
-      return (Object.keys(SOURCE_CONFIG) as LeadSource[]).map((key) => ({
-        value: key as string,
-        label: SOURCE_CONFIG[key].label,
-      }));
-    }
-    return sources.map((src) => ({ value: src, label: resolveSource(src).label }));
-  }, [stats.available_sources]);
 
   // Channel filtering is server-side now (the `channel` query param in
   // fetchLeads) — the loaded page already reflects the selected bucket.
@@ -1468,9 +1409,6 @@ export default function LeadsPage() {
                 onSearchChange={setSearch}
                 statusFilter={statusFilter}
                 onStatusChange={setStatusFilter}
-                sourceFilter={sourceFilter}
-                sourceOptions={sourceOptions}
-                onSourceChange={setSourceFilter}
                 channelFilter={channelFilter}
                 onChannelChange={setChannelFilter}
                 channelOptions={channelOptions}
@@ -1494,15 +1432,8 @@ export default function LeadsPage() {
                     sortDir={sortDir}
                     onSort={handleSort}
                   />
-                  <SortableHeader
-                    label="Source"
-                    column="source"
-                    sortBy={sortBy}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  {/* Not backend-sortable — channel filtering/sorting is
-                      client-side only per Task 3/4 scope. */}
+                  {/* Not backend-sortable — channel is computed at read
+                      time, so there is no DB column to sort on. */}
                   <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     Channel
                   </th>
@@ -1529,7 +1460,7 @@ export default function LeadsPage() {
                 {visibleLeads.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={5}
                       className="px-5 py-12 text-center text-sm text-gray-400"
                     >
                       No leads match your filters.

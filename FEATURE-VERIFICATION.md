@@ -593,8 +593,11 @@ Channel is computed per-request, never stored.
 behavior, not a bug.
 
 **Steps:**
-1. Open `/leads`. Confirm a new **Channel** column appears in the table,
-   right of the existing source column. Each row shows a colored chip (e.g.
+1. Open `/leads`. Confirm a **Channel** column appears in the table, right
+   of Name. (The old Source column and its filter were removed 2026-08-03 —
+   channel is the meaningful axis; provenance `source` still shows on the
+   lead detail Contact card and stays in the API.) Each row shows a colored
+   chip (e.g.
    "Facebook Ads", "Email", "No attribution"). Any chip reading
    `unmapped:<source>/<medium>` or `"other unmapped"` renders with an amber
    warning tint, not the normal chip color — that's the taxonomy
@@ -612,13 +615,10 @@ behavior, not a bug.
    walks the full filtered set. Picking `Non-marketing` shows rows whose
    chips carry the specific non-marketing value (e.g. `system_workflow`) —
    the bucket is the rollup, the chip is the exact resolution.
-3b. Open the **Source** filter dropdown. Its options now come from the
-   sources actually in the database (via `available_sources` on
-   `GET /leads/stats`), not the old hardcoded list — with current data
-   expect exactly "All Sources" + "WGR". Pick "WGR" and confirm the table
-   still shows rows (server-side filter matches `source='wgr'`). When new
-   sources land in the DB later (e.g. GHL pushing `facebook_ads`), they
-   should appear here automatically with prettified labels.
+3b. Confirm there is **no** Source dropdown in the FilterBar — only Search,
+   Channel, Status, and the date range. (Removed 2026-08-03: with channel
+   live, the provenance source filter was redundant on this page. The API's
+   `source` param and `available_sources` field remain for API consumers.)
 4. Pick a lead you can identify as having attribution data (from step 1's
    chips, choose a row NOT showing "No attribution") and open its detail
    page (`/leads/{lead_id}`). Confirm a full-width **Attribution** card
