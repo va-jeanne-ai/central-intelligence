@@ -10,9 +10,9 @@ Sprint 4a / M04-5
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,6 +59,26 @@ def _iso_date(value: object) -> str | None:
         return value.isoformat()
     except AttributeError:
         return str(value)
+
+
+def _parse_date_param(value: str | None, *, param_name: str) -> date | None:
+    """Parse a query param as a strict ISO ``YYYY-MM-DD`` date.
+
+    Unlike ``sales_stats._as_date`` (which silently drops bad input so a
+    malformed report filter doesn't 500 the whole dashboard), this endpoint's
+    date params bind directly to a ``Date`` column via asyncpg — a raw
+    non-date string reaching that bind surfaces as an opaque 500 from the
+    driver. Fail loudly and early instead: 422 with a clear message.
+    """
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid {param_name}: {value!r} — expected ISO format YYYY-MM-DD",
+        ) from exc
 
 
 @router.post("", response_model=AdsAnalyzeResponse)
@@ -187,14 +207,20 @@ async def get_ads_overview(
         snapshot_to,
     )
 
+    # Parse to real `date` objects before anything touches SQL — a malformed
+    # string reaching Postgres as a Date bind param surfaces as an opaque
+    # 500 from the driver instead of a clear 422 here.
+    parsed_from = _parse_date_param(snapshot_from, param_name="snapshot_from")
+    parsed_to = _parse_date_param(snapshot_to, param_name="snapshot_to")
+
     perf_where = "1=1"
     perf_params: dict[str, object] = {}
-    if snapshot_from:
+    if parsed_from is not None:
         perf_where += " AND snapshot_date >= :snapshot_from"
-        perf_params["snapshot_from"] = snapshot_from
-    if snapshot_to:
+        perf_params["snapshot_from"] = parsed_from
+    if parsed_to is not None:
         perf_where += " AND snapshot_date <= :snapshot_to"
-        perf_params["snapshot_to"] = snapshot_to
+        perf_params["snapshot_to"] = parsed_to
 
     # ---- Per-ad performance rollup (sum across snapshots in range) --------
     # + the latest-in-range snapshot's kpi_status/ctr (point-in-time, not

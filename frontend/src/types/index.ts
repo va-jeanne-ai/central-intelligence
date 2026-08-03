@@ -297,14 +297,6 @@ export interface CICallFacets {
 
 // ─── Ads ─────────────────────────────────────────────────────────────────────
 
-export interface AdsData {
-  campaigns: number;
-  avg_roas: number;
-  total_spend: number;
-  top_ads: { campaign_name: string; platform: string; roas: number; spend: number }[];
-  generated_at: string;
-}
-
 export interface AdsAnalyzeResponse {
   analysis: string;
   ad_copy: string;
