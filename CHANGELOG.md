@@ -6,6 +6,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Lead Journey card (WGR lead_journey mirror)
+
+The lead detail page gains a **Journey** card: webinar registration/watch
+behavior (live vs replay, watch time), appointment history (count,
+first/last, outcome, booked by), and sales progression (calls, discovery,
+close date, amount collected, days to close). Hidden when the lead's journey
+shows no activity; a green "Closed $X" chip heads the card for won leads.
+
+- **New mirror `lead_journey`** (migration `c0d1e2f3a4b5`) — WGR's per-lead
+  journey summary, one row per lead (12,818 backfilled 2026-08-03; coverage:
+  11,556 webinar, 1,289 appointments, 318 calls, 83 sales). Upstream
+  rebuilds the table (no PK/watermark; `lead_id` verified unique/non-null),
+  so it syncs via snapshot reconcile in `sync_all` with `page_size=50_000`
+  — `_sync_snapshot_reconcile` gained a `page_size` parameter (the previous
+  hardcoded 10k single-page guard would have skipped delete-reconciliation
+  every run at this table's size).
+- **`GET /leads/{id}`** — response gains a nullable `journey` object
+  (`LeadJourneyInfo`); join contract `leads.external_id` → `ghl_contact_id`
+  fallback, same as `lead_engagements` (12,813 of 12,818 join directly).
+
 ### Added — Channel row on the lead detail Contact card
 
 Channel now shows on every lead detail page (Contact card, under Source) —

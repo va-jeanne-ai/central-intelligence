@@ -39,7 +39,7 @@ from app.models.meta_ads import MetaAd, MetaAdPerformance, MetaCampaign
 from app.models.intelligence import (
     BusinessProfile, InsightTag, MarketSignal, Offer, TagDictionary,
 )
-from app.models.operational import Appointment, ContentIdea, Insight, Lead, Call
+from app.models.operational import Appointment, ContentIdea, Insight, Lead, LeadJourney, Call
 from app.models.sales import (
     CallScore, ClosedSale, CoachingStrike, EodReport, SalesActivity, SalesRep,
     ScorecardCategory, StrikeAction, StrikeEvidence, StrikeRule,
@@ -670,6 +670,7 @@ async def _sync_snapshot_reconcile(
     session: AsyncSession, *, wgr_table: str, model, pk_attr: str,
     wgr_pk: str, map_fn: Callable[[dict], Optional[dict]],
     raw_invalid_fn: Optional[Callable[[dict], bool]] = None,
+    page_size: int = 10_000,
 ) -> int:
     """Full-snapshot mirror WITH delete-reconciliation, count-guarded.
 
@@ -697,7 +698,7 @@ async def _sync_snapshot_reconcile(
     skipped = 0
     invalidated = 0
     pk_null = 0
-    for raw in reader.read_table(wgr_table, page_size=10_000):
+    for raw in reader.read_table(wgr_table, page_size=page_size):
         rows_read += 1
         if raw.get(wgr_pk) is None:
             pk_null += 1
@@ -737,7 +738,7 @@ async def _sync_snapshot_reconcile(
     for i in range(0, len(rows), BATCH):
         written += await _on_conflict_upsert(
             session, model, pk_attr, rows[i:i + BATCH])
-    if rows_read >= 10_000:
+    if rows_read >= page_size:
         logger.error("wgr_sync %s: snapshot table hit page size — skipping "
                      "delete-reconciliation; raise page_size or move to "
                      "keyset pagination", wgr_table)
@@ -834,6 +835,16 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
     counts["meta_ads"] = await _sync_snapshot_reconcile(
         session, wgr_table="meta_ads", model=MetaAd,
         pk_attr="ad_id", wgr_pk="ad_id", map_fn=mapping.map_meta_ad,
+    )
+    # lead_journey is rebuilt upstream (no watermark, no upstream PK — lead_id
+    # verified unique/non-null, probe 2026-08-03), so snapshot reconcile keeps
+    # the mirror exact, including rows WGR drops on rebuild.
+    # page_size=50k: one row per lead (12.8k today) — must fit ONE page for
+    # the reconcile's MVCC consistency guard; revisit if leads approach 50k.
+    counts["lead_journey"] = await _sync_snapshot_reconcile(
+        session, wgr_table="lead_journey", model=LeadJourney,
+        pk_attr="lead_id", wgr_pk="lead_id", map_fn=mapping.map_lead_journey,
+        page_size=50_000,
     )
     # 5. (source, external_id)-deduped marketing/social mirrors.
     for wgr_table, model, map_fn in _SOURCE_EXTERNAL_PLAN:

@@ -192,6 +192,36 @@ class NoteRow(BaseModel):
     created_at: str
 
 
+class LeadJourneyInfo(BaseModel):
+    """Per-lead journey summary from the WGR lead_journey mirror — webinar
+    watch behavior, appointment history, sales progression. All fields
+    optional (upstream computes them best-effort). Timestamps are ISO
+    strings, matching the detail response's date conventions."""
+
+    webinar_count: int | None = None
+    webinar_registered_at: str | None = None
+    watched_live: bool | None = None
+    watched_replay: bool | None = None
+    watch_seconds_total: int | None = None
+    last_opted_in_at: str | None = None
+    appt_count: int | None = None
+    first_appt_at: str | None = None
+    last_appt_at: str | None = None
+    last_appt_outcome: str | None = None
+    last_appt_booked_by: str | None = None
+    appt_qualified: bool | None = None
+    appt_flagged: bool | None = None
+    appt_qual_grade: str | None = None
+    call_count: int | None = None
+    first_call_date: str | None = None
+    discovery_occurred: bool | None = None
+    discovery_held: bool | None = None
+    close_date: str | None = None
+    amount_collected: float | None = None
+    days_to_close: int | None = None
+    journey_gap: str | None = None
+
+
 class LeadDetailResponse(BaseModel):
     """Full payload for GET /api/v1/leads/{id}.
 
@@ -230,6 +260,9 @@ class LeadDetailResponse(BaseModel):
     utmMediumLast: str | None = None  # noqa: N815
     utmCampaignLast: str | None = None  # noqa: N815
     utmContentLast: str | None = None  # noqa: N815
+    # Journey summary from the WGR lead_journey mirror; None when the lead
+    # has no journey row (non-WGR leads, or mirror not yet synced).
+    journey: LeadJourneyInfo | None = None
     calls: list[LeadCallSummary] = Field(default_factory=list)
     goals: list[LeadGoalSummary] = Field(default_factory=list)
     pain_points: list[LeadPainPointSummary] = Field(default_factory=list)

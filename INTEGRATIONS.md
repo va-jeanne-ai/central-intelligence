@@ -152,6 +152,15 @@ The hourly read-only WGR→CI sync now also mirrors Greg's attribution-era data
 - **`meta_campaigns` / `meta_ads`** (snapshot-reconciled) and
   **`meta_ad_performance`** (watermarked) — real Meta Ads data for the Ads
   surface (probe 2026-07-26: 29/472/635 rows).
+- **`lead_journey`** (snapshot-reconciled, added 2026-08-03) — WGR's
+  per-lead journey summary (one row per lead: webinar registration/watch
+  behavior, appointment history + qualification, call counts, discovery,
+  close date / amount collected / days to close). Upstream rebuilds it (no
+  PK, no watermark — `lead_id` verified unique/non-null on 12,818 rows), so
+  it syncs via snapshot reconcile with `page_size=50k` (must fit one page
+  for the MVCC delete guard). Join contract: `leads.external_id` first,
+  `ghl_contact_id` fallback — same as `lead_engagements`. Powers the
+  **Journey card** on `/leads/{id}`.
 
 Connection runs as the dedicated SELECT-only `ci_reader` Postgres role
 (provisioned 2026-07-26; the old write-capable DSN is pending rotation by the
@@ -166,8 +175,8 @@ on the next page load:
 
 | Surface | What it shows |
 |---|---|
-| [`/leads`](frontend/src/app/(app)/leads/page.tsx) | New **Channel** column (hash-colored chip per canonical channel; amber tint for `unmapped:*`/"other unmapped") on every row; the source/channel breakdown donut now groups by resolved channel instead of raw `leads.source`; a client-side Channel filter in the FilterBar (channel isn't a stored column, so filtering can't push to the server). |
-| [`/leads/{id}`](frontend/src/app/(app)/leads/[lead_id]/page.tsx) | New full-width **Attribution** card showing first-touch and last-touch raw UTM rows plus the resolved channel chip; hidden entirely when all 8 UTM fields are null (most historical/pre-attribution leads). |
+| [`/leads`](frontend/src/app/(app)/leads/page.tsx) | **Channel** column (hash-colored chip per canonical channel; amber tint for `unmapped:*`/"other unmapped") on every row; the breakdown donut groups by resolved channel; the **Channel filter**'s options are the breakdown buckets with dataset-wide counts and filter **server-side** (`GET /leads?channel=` — the backend inverts the bucket back to its UTM combos via `bucket_channel_combos`). The legacy provenance Source column + filter were removed from this page 2026-08-03 (API untouched). |
+| [`/leads/{id}`](frontend/src/app/(app)/leads/[lead_id]/page.tsx) | **Channel** row on the Contact card (always visible); full-width **Attribution** card with first/last-touch raw UTM rows (hidden when all 8 UTM fields are null); full-width **Journey** card from the `lead_journey` mirror (webinar watch stats, appointment history, sales progression — hidden when the journey row shows no activity). |
 | `GET /leads` + `GET /leads/{id}` | Response gains `channel` and 8 camelCase UTM fields (`utmSourceFirst` … `utmContentLast`). |
 | `GET /leads/stats` | Breakdown buckets are now canonical channels + `"No attribution"` + `"Non-marketing"` + `unmapped:*` (top-8, then `"other unmapped"`) instead of raw `leads.source` values; counts still sum to `total_leads`. |
 | [`/sales`](frontend/src/app/(app)/sales/page.tsx) → `GET /sales/summary` | `/sales` is a redirect to `/leads` (pre-existing); `/sales/summary` shares `compute_lead_stats` with `/leads/stats`, so it inherits the same channel breakdown automatically — this is a lead-count distribution ("lead channel mix"), not a revenue-by-channel breakdown (that's out of scope, tracked separately). |

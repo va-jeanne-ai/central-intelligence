@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/__init__.py": {
-    "mtime": 1785758259.1375308,
-    "ast_hash": "aacad60b8591ada86792336ea37a8978",
+    "mtime": 1785766759.834923,
+    "ast_hash": "803a249310ce38d7c0fd581f20ec3150",
     "semantic_hash": ""
   },
   "backend/app/models/audit.py": {
@@ -280,8 +280,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/operational.py": {
-    "mtime": 1785758259.138922,
-    "ast_hash": "7c988dc558f1cd984d9bb5dabda6e6dd",
+    "mtime": 1785766728.9047105,
+    "ast_hash": "27ebbd9b040b8597d298d191fc8fb550",
     "semantic_hash": ""
   },
   "backend/app/prompts/__init__.py": {
@@ -485,8 +485,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/leads.py": {
-    "mtime": 1785764857.7088916,
-    "ast_hash": "539b196ab6f4e82fe8b6ae2fa61763cb",
+    "mtime": 1785767598.5040526,
+    "ast_hash": "8baa2d81696aadad90719d0173c99b18",
     "semantic_hash": ""
   },
   "backend/app/routes/marketing.py": {
@@ -590,8 +590,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/leads.py": {
-    "mtime": 1785763634.2731888,
-    "ast_hash": "8101fba65d924cf6f77c18162da45c18",
+    "mtime": 1785767549.9801939,
+    "ast_hash": "1f0a98ab86d330313e7d6a7a514a0daa",
     "semantic_hash": ""
   },
   "backend/app/schemas/offers.py": {
@@ -925,8 +925,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/leads/[lead_id]/page.tsx": {
-    "mtime": 1785765902.2705424,
-    "ast_hash": "6a255b8a31b65e7cf4e2a2e34de3ad2c",
+    "mtime": 1785767747.9882624,
+    "ast_hash": "ab61dc08418e41011eb0c5e33b9cb165",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/leads/page.tsx": {
@@ -1425,8 +1425,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1785765913.4503882,
-    "ast_hash": "cb22f720a2128284c3f55e89cbf94957",
+    "mtime": 1785767847.8915625,
+    "ast_hash": "f7a4d5724958ec4f2e98acfbc8184cd7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1435,13 +1435,13 @@
     "semantic_hash": ""
   },
   "FEATURE-VERIFICATION.md": {
-    "mtime": 1785765422.5500937,
-    "ast_hash": "80a06260a4aef7debaff40e7de89454a",
+    "mtime": 1785767861.9556754,
+    "ast_hash": "24d5820bd9d79499b01c87cdf0dd1779",
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1785758259.134494,
-    "ast_hash": "b660931a9db4f2b585cd546e6da73d28",
+    "mtime": 1785767831.9983122,
+    "ast_hash": "f7a5f3fac65f69953fbc6d031f9dae3d",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
@@ -2015,8 +2015,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/mapping.py": {
-    "mtime": 1785758259.153589,
-    "ast_hash": "5425685d29c473a62cdb033a6dc23c84",
+    "mtime": 1785766814.8418405,
+    "ast_hash": "0d84eee76afa2195ad3f71272c599136",
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/reader.py": {
@@ -2025,8 +2025,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/upsert.py": {
-    "mtime": 1785758259.1545515,
-    "ast_hash": "21247da07f1008e72be7e76e5de479c7",
+    "mtime": 1785767075.0221474,
+    "ast_hash": "d9ba0645388f370ba0d1a85d6c6fdbf1",
     "semantic_hash": ""
   },
   "backend/app/tasks/metric_snapshots.py": {
@@ -2792,6 +2792,11 @@
   "backend/app/routes/leads 2.py": {
     "mtime": 1785758259.0,
     "ast_hash": "b0f41dc7fe92c17803c7841d1772430e",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/c0d1e2f3a4b5_add_lead_journey_mirror.py": {
+    "mtime": 1785766783.9740067,
+    "ast_hash": "7c981453a11fcf57d2290f6897dea784",
     "semantic_hash": ""
   }
 }

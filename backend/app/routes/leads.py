@@ -67,6 +67,7 @@ from app.schemas.leads import (
     LeadsKpiResponse,
     LeadsStatsResponse,
     LeadTagRow,
+    LeadJourneyInfo,
     LeadTagsResponse,
     LeadVolumePoint,
     NoteRow,
@@ -444,7 +445,7 @@ async def get_lead_detail(
     lead_row = (await session.execute(
         text("""
             SELECT id::text AS id, name, email, phone, status, source,
-                   notes, external_id, entry_date, created_at,
+                   notes, external_id, ghl_contact_id, entry_date, created_at,
                    utm_source_first, utm_medium_first, utm_campaign_first, utm_content_first,
                    utm_source_last, utm_medium_last, utm_campaign_last, utm_content_last
             FROM leads
@@ -464,6 +465,52 @@ async def get_lead_detail(
     taxonomy_rows = (await session.execute(text("SELECT * FROM attribution_taxonomy"))).fetchall()
     resolver = build_resolver(taxonomy_rows)
     channel = channel_for_lead(resolver, lead_row).channel
+
+    # 1b. Journey summary from the WGR lead_journey mirror. Join contract
+    # (same as LeadEngagement): leads.external_id FIRST, falling back to
+    # ghl_contact_id (email-merged leads keep their original external_id and
+    # are only reachable through the GHL id). ORDER BY prefers the
+    # external_id match when both hit.
+    journey_row = (await session.execute(
+        text("""
+            SELECT * FROM lead_journey
+            WHERE lead_id = :ext
+               OR (ghl_contact_id IS NOT NULL AND ghl_contact_id = :ghl)
+            ORDER BY (lead_id = :ext) DESC
+            LIMIT 1
+        """),
+        {"ext": lead_row["external_id"] or "", "ghl": lead_row["ghl_contact_id"] or ""},
+    )).mappings().one_or_none()
+
+    def _iso(v):
+        return v.isoformat() if v is not None else None
+
+    journey = None
+    if journey_row is not None:
+        journey = LeadJourneyInfo(
+            webinar_count=journey_row["webinar_count"],
+            webinar_registered_at=_iso(journey_row["webinar_registered_at"]),
+            watched_live=journey_row["watched_live"],
+            watched_replay=journey_row["watched_replay"],
+            watch_seconds_total=journey_row["watch_seconds_total"],
+            last_opted_in_at=_iso(journey_row["last_opted_in_at"]),
+            appt_count=journey_row["appt_count"],
+            first_appt_at=_iso(journey_row["first_appt_at"]),
+            last_appt_at=_iso(journey_row["last_appt_at"]),
+            last_appt_outcome=journey_row["last_appt_outcome"],
+            last_appt_booked_by=journey_row["last_appt_booked_by"],
+            appt_qualified=journey_row["appt_qualified"],
+            appt_flagged=journey_row["appt_flagged"],
+            appt_qual_grade=journey_row["appt_qual_grade"],
+            call_count=journey_row["call_count"],
+            first_call_date=_iso(journey_row["first_call_date"]),
+            discovery_occurred=journey_row["discovery_occurred"],
+            discovery_held=journey_row["discovery_held"],
+            close_date=_iso(journey_row["close_date"]),
+            amount_collected=journey_row["amount_collected"],
+            days_to_close=journey_row["days_to_close"],
+            journey_gap=journey_row["journey_gap"],
+        )
 
     # 2. Calls (with insight count via correlated subquery).
     # processed_date stays NULL until the analyzer finishes — the frontend
@@ -557,6 +604,7 @@ async def get_lead_detail(
         utmMediumLast=lead_row["utm_medium_last"],
         utmCampaignLast=lead_row["utm_campaign_last"],
         utmContentLast=lead_row["utm_content_last"],
+        journey=journey,
         calls=[
             LeadCallSummary(
                 id=str(r["id"]),

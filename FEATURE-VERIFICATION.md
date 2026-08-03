@@ -628,6 +628,18 @@ behavior, not a bug.
    and open its detail page. Confirm the Attribution card does **not**
    render at all (hidden, not shown empty) — all 8 UTM fields are null for
    that lead.
+5b. **Journey card (added 2026-08-03).** On the same detail pages, look for
+   the full-width **Journey** card (between Attribution and Tags). Most WGR
+   leads have one — 11,556 of 12,818 have webinar activity. Check: (a) a
+   lead who watched the webinar shows Registered date, Watched live/replay
+   Yes/No, and a watch time like "24m 38s"; (b) a lead with appointments
+   shows an "Appointments (N)" section with first/last dates, last outcome,
+   and booked-by; (c) a closed lead (filter Channel or use a known buyer)
+   shows a green "Closed $X" chip in the card header plus close date and
+   days-to-close in the Sales section; (d) a lead with no journey activity
+   shows **no** Journey card at all (hidden, not empty). Data refreshes with
+   the nightly WGR sync (snapshot reconcile — upstream rebuilds propagate,
+   including deletions).
 6. Navigate to `/sales`. Confirm it redirects immediately to `/leads` (no
    separate Sales page renders).
 7. Call `GET /api/v1/sales/summary` directly (e.g. via the browser devtools

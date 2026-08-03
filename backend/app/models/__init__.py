@@ -39,6 +39,7 @@ from app.models.operational import (  # noqa: F401
     GoogleDriveFile,
     Insight,
     Lead,
+    LeadJourney,
     LeadNote,
     Member,
     MemberNote,
@@ -122,6 +123,7 @@ __all__ = [
     "MonthlyPreference",
     # operational
     "Lead",
+    "LeadJourney",
     "Member",
     "Appointment",
     "SupportTicket",

@@ -62,6 +62,31 @@ interface NoteRow {
   created_at: string;
 }
 
+interface LeadJourneyInfo {
+  webinar_count: number | null;
+  webinar_registered_at: string | null;
+  watched_live: boolean | null;
+  watched_replay: boolean | null;
+  watch_seconds_total: number | null;
+  last_opted_in_at: string | null;
+  appt_count: number | null;
+  first_appt_at: string | null;
+  last_appt_at: string | null;
+  last_appt_outcome: string | null;
+  last_appt_booked_by: string | null;
+  appt_qualified: boolean | null;
+  appt_flagged: boolean | null;
+  appt_qual_grade: string | null;
+  call_count: number | null;
+  first_call_date: string | null;
+  discovery_occurred: boolean | null;
+  discovery_held: boolean | null;
+  close_date: string | null;
+  amount_collected: number | null;
+  days_to_close: number | null;
+  journey_gap: string | null;
+}
+
 interface LeadDetailResponse extends LeadUtmFields {
   id: string;
   name: string | null;
@@ -78,6 +103,9 @@ interface LeadDetailResponse extends LeadUtmFields {
   // app.services.attribution on the backend); null when the lead has no
   // UTMs. The 8 utm* first/last-touch fields come from LeadUtmFields.
   channel: string | null;
+  // Journey summary from the WGR lead_journey mirror; null when the lead
+  // has no journey row (non-WGR leads).
+  journey: LeadJourneyInfo | null;
   calls: LeadCallSummary[];
   goals: LeadGoalSummary[];
   pain_points: LeadPainPointSummary[];
@@ -252,6 +280,71 @@ function resolveSource(raw: string | null) {
       label: humanise(raw),
       badgeClasses: "bg-gray-100 text-gray-600",
     }
+  );
+}
+
+// ─── Journey card helpers ────────────────────────────────────────────────────
+
+/** One labeled stat in the Journey card grid. */
+function JourneyStat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <dt className="text-[11px] font-bold uppercase tracking-wider text-gray-500">{label}</dt>
+      <dd className="text-gray-700 break-words">{children}</dd>
+    </div>
+  );
+}
+
+const DASH = <span className="text-gray-400 italic">—</span>;
+
+/** "2026-01-13" / ISO timestamp → "Jan 13, 2026" (no time). */
+function formatDateOnly(iso: string | null): React.ReactNode {
+  if (!iso) return DASH;
+  try {
+    return new Date(iso).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+/** 1478 seconds → "24m 38s"; hours when ≥ 1h. */
+function formatWatchTime(seconds: number | null): React.ReactNode {
+  if (!seconds || seconds <= 0) return DASH;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function formatMoney(amount: number | null): React.ReactNode {
+  if (amount === null || amount === undefined) return DASH;
+  return amount.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function yesNo(v: boolean | null): React.ReactNode {
+  if (v === null || v === undefined) return DASH;
+  return v ? "Yes" : "No";
+}
+
+/** The card only renders when the journey row shows actual activity —
+ * every WGR lead has a journey row, but for most it's all zeros. */
+function journeyHasActivity(j: LeadJourneyInfo | null): j is LeadJourneyInfo {
+  if (!j) return false;
+  return Boolean(
+    (j.webinar_count ?? 0) > 0 ||
+      (j.appt_count ?? 0) > 0 ||
+      (j.call_count ?? 0) > 0 ||
+      j.close_date ||
+      j.last_opted_in_at
   );
 }
 
@@ -1252,6 +1345,88 @@ export default function LeadDetailPage({ params }: { params: { lead_id: string }
                     </div>
                   </dl>
                 </div>
+              </div>
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Journey — per-lead summary from the WGR lead_journey mirror:
+            webinar watch behavior, appointment history, sales progression.
+            Hidden when the lead has no journey row or no activity in it. */}
+        {journeyHasActivity(detail.journey) && (
+          <Card>
+            <CardHeader
+              title="Journey"
+              action={
+                detail.journey.close_date ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700">
+                    Closed {formatMoney(detail.journey.amount_collected)}
+                  </span>
+                ) : undefined
+              }
+            />
+            <CardBody>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">
+                    Webinar
+                  </h3>
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-[13px]">
+                    <JourneyStat label="Registered">
+                      {formatDateOnly(detail.journey.webinar_registered_at)}
+                    </JourneyStat>
+                    <JourneyStat label="Watched live">{yesNo(detail.journey.watched_live)}</JourneyStat>
+                    <JourneyStat label="Watched replay">{yesNo(detail.journey.watched_replay)}</JourneyStat>
+                    <JourneyStat label="Watch time">
+                      {formatWatchTime(detail.journey.watch_seconds_total)}
+                    </JourneyStat>
+                  </dl>
+                </div>
+                {(detail.journey.appt_count ?? 0) > 0 && (
+                  <div>
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">
+                      Appointments ({detail.journey.appt_count})
+                    </h3>
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-[13px]">
+                      <JourneyStat label="First">
+                        {formatDateOnly(detail.journey.first_appt_at)}
+                      </JourneyStat>
+                      <JourneyStat label="Last">
+                        {formatDateOnly(detail.journey.last_appt_at)}
+                      </JourneyStat>
+                      <JourneyStat label="Last outcome">
+                        {detail.journey.last_appt_outcome ?? DASH}
+                      </JourneyStat>
+                      <JourneyStat label="Booked by">
+                        {detail.journey.last_appt_booked_by ?? DASH}
+                      </JourneyStat>
+                    </dl>
+                  </div>
+                )}
+                {((detail.journey.call_count ?? 0) > 0 || detail.journey.close_date) && (
+                  <div>
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">
+                      Sales
+                    </h3>
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-[13px]">
+                      <JourneyStat label="Calls">{detail.journey.call_count ?? 0}</JourneyStat>
+                      <JourneyStat label="Discovery held">
+                        {yesNo(detail.journey.discovery_held)}
+                      </JourneyStat>
+                      <JourneyStat label="Close date">
+                        {formatDateOnly(detail.journey.close_date)}
+                      </JourneyStat>
+                      <JourneyStat label="Days to close">
+                        {detail.journey.days_to_close ?? DASH}
+                      </JourneyStat>
+                    </dl>
+                  </div>
+                )}
+                {detail.journey.journey_gap && (
+                  <p className="text-[12px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                    Journey gap: {detail.journey.journey_gap}
+                  </p>
+                )}
               </div>
             </CardBody>
           </Card>

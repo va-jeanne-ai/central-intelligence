@@ -718,6 +718,59 @@ def map_lead_engagement(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 
 
+def map_lead_journey(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Per-lead journey summary (snapshot reconcile — upstream rebuilds the
+    table). lead_id is verified unique/non-null upstream (probe 2026-08-03);
+    a row without one is unusable → skip (kept-and-warned semantics)."""
+    ext = _clean(row.get("lead_id"))
+    if not ext:
+        return None
+    amount = row.get("amount_collected")
+    return {
+        "lead_id": ext,
+        "ghl_contact_id": _clean(row.get("ghl_contact_id")),
+        "email": _clean(row.get("email")),
+        "name": _clean(row.get("name")),
+        "entry_date": row.get("entry_date"),
+        "utm_source_first": _clean(row.get("utm_source_first")),
+        "utm_medium_first": _clean(row.get("utm_medium_first")),
+        "utm_content_first": _clean(row.get("utm_content_first")),
+        "channel_first": _clean(row.get("channel_first")),
+        "attr_derived_from": _clean(row.get("attr_derived_from")),
+        "attr_order_evidence": _clean(row.get("attr_order_evidence")),
+        "utm_source_last": _clean(row.get("utm_source_last")),
+        "utm_medium_last": _clean(row.get("utm_medium_last")),
+        "channel_last": _clean(row.get("channel_last")),
+        "commenter_link_status": _clean(row.get("commenter_link_status")),
+        "first_comment_at": row.get("first_comment_at"),
+        "comment_keyword": _clean(row.get("comment_keyword")),
+        "webinar_count": row.get("webinar_count"),
+        "webinar_registered_at": row.get("webinar_registered_at"),
+        "watched_live": row.get("watched_live"),
+        "watched_replay": row.get("watched_replay"),
+        "watch_seconds_total": row.get("watch_seconds_total"),
+        "last_opted_in_at": row.get("last_opted_in_at"),
+        "appt_count": row.get("appt_count"),
+        "first_appt_at": row.get("first_appt_at"),
+        "last_appt_at": row.get("last_appt_at"),
+        "last_appt_outcome": _clean(row.get("last_appt_outcome")),
+        "last_appt_booked_by": _clean(row.get("last_appt_booked_by")),
+        "last_appt_source": _clean(row.get("last_appt_source")),
+        "call_count": row.get("call_count"),
+        "first_call_date": row.get("first_call_date"),
+        "discovery_occurred": row.get("discovery_occurred"),
+        "discovery_held": row.get("discovery_held"),
+        "sale_id": _clean(row.get("sale_id")),
+        "close_date": row.get("close_date"),
+        "amount_collected": float(amount) if amount is not None else None,
+        "days_to_close": row.get("days_to_close"),
+        "journey_gap": _clean(row.get("journey_gap")),
+        "appt_qualified": row.get("appt_qualified"),
+        "appt_flagged": row.get("appt_flagged"),
+        "appt_qual_grade": _clean(row.get("appt_qual_grade")),
+    }
+
+
 def map_meta_campaign(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     ext = _clean(row.get("campaign_id"))
     if not ext:
