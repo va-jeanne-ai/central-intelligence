@@ -125,3 +125,75 @@ def test_summarize_channels_output_counts_sum_to_input_counts():
     ]
     result = summarize_channels(combos, r)
     assert sum(row["count"] for row in result) == sum(c[-1] for c in combos)
+
+
+# --- bucket_channel_combos (per-combo bucket mapping for server-side filtering) ---
+
+
+def test_bucket_map_labels_match_summarize_buckets():
+    """Every combo maps to a bucket label that exists in summarize_channels'
+    output for the same input, and per-bucket count sums agree."""
+    from app.services.attribution import bucket_channel_combos
+
+    r = build_resolver(ROWS)
+    combos = [
+        _combo(sf="ig", count=10),                 # instagram_organic
+        _combo(sl="ig", ml="paid", count=7),       # meta_paid (last-touch fallback)
+        _combo(count=5),                           # all-null -> No attribution
+        _combo(sf="manual", count=3),              # reportable=False -> Non-marketing
+        _combo(sf="mystery", mf="cpc", count=2),   # unmapped:mystery/cpc
+    ]
+    mapping, buckets = bucket_channel_combos(combos, r)
+    bucket_labels = {b["channel"] for b in buckets}
+    assert set(mapping.values()) <= bucket_labels
+    # count agreement per label
+    by_label: dict = {}
+    for (sf, mf, cf, sl, ml, cl, count) in combos:
+        by_label.setdefault(mapping[(sf, mf, cf, sl, ml, cl)], 0)
+        by_label[mapping[(sf, mf, cf, sl, ml, cl)]] += count
+    assert by_label == {b["channel"]: b["count"] for b in buckets}
+
+
+def test_bucket_map_special_buckets():
+    from app.services.attribution import bucket_channel_combos
+
+    r = build_resolver(ROWS)
+    combos = [_combo(count=4), _combo(sf="manual", count=2)]
+    mapping, _ = bucket_channel_combos(combos, r)
+    assert mapping[(None,) * 6] == "No attribution"
+    assert mapping[("manual", None, None, None, None, None)] == "Non-marketing"
+
+
+def test_bucket_map_rollup_maps_overflow_combos_to_other_unmapped():
+    """Combos whose unmapped dialect is rolled up must map to 'other unmapped',
+    while kept top-N dialects keep their own labels."""
+    from app.services.attribution import bucket_channel_combos
+
+    r = build_resolver(ROWS)
+    combos = [_combo(sf=f"dialect{i}", count=10 - i) for i in range(10)]
+    mapping, buckets = bucket_channel_combos(combos, r, unmapped_top_n=8)
+    labels = {b["channel"] for b in buckets}
+    assert "other unmapped" in labels
+    # top-8 by count keep their own labels; the two smallest roll up
+    kept = [f"unmapped:dialect{i}/-" for i in range(8)]
+    for i, combo in enumerate(combos):
+        key = combo[:6]
+        if i < 8:
+            assert mapping[key] == kept[i]
+        else:
+            assert mapping[key] == "other unmapped"
+
+
+def test_summarize_channels_consistent_with_bucket_map():
+    """summarize_channels must stay behaviorally identical to the bucket view
+    (it is now implemented on top of bucket_channel_combos)."""
+    from app.services.attribution import bucket_channel_combos
+
+    r = build_resolver(ROWS)
+    combos = [
+        _combo(sf="ig", count=1),
+        _combo(sf="ig", mf="paid", count=2),
+        _combo(count=3),
+    ]
+    _, buckets = bucket_channel_combos(combos, r)
+    assert buckets == summarize_channels(combos, r)

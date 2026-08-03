@@ -6,6 +6,31 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Channel filter driven by the breakdown, filters server-side
+
+The Channel filter on `/leads` previously offered only the channels visible
+on the loaded page and filtered client-side — it couldn't find e.g. the 714
+`meta_paid` leads spread across 12,656 rows.
+
+- **`GET /leads`** — new optional `channel` query param accepting exactly the
+  bucket labels the breakdown emits (canonical channels, `"No attribution"`,
+  `"Non-marketing"`, `unmapped:*`, `"other unmapped"`). Channel is computed,
+  not stored, so the backend inverts the bucket: it buckets all distinct UTM
+  combos with the same `bucket_channel_combos` logic the breakdown uses and
+  filters SQL-side on the matching combos (`IS NOT DISTINCT FROM`, so
+  NULL/empty combos match exactly). Unknown labels return zero rows.
+  Verified live: `meta_paid`=714, `No attribution`=10,187,
+  `Non-marketing`=1,100 — identical to the donut.
+- **`app/services/attribution.py`** — `summarize_channels` refactored on top
+  of new `bucket_channel_combos` (returns the per-combo → bucket mapping the
+  filter needs); breakdown behavior unchanged, covered by 4 new unit tests.
+- **Leads page (`/leads`)** — Channel filter options are now the breakdown
+  buckets with dataset-wide counts (e.g. `meta_paid (714)`), in the donut's
+  order; selection is sent server-side, so pagination and "Showing X of Y"
+  reflect the filtered dataset. Note: filtering by `Non-marketing` shows rows
+  whose chips carry the specific non-marketing value (e.g. `system_workflow`)
+  — the bucket is the rollup, the chip is the exact resolution.
+
 ### Changed — Source filter reflects real data
 
 The Leads page Source dropdown was a hardcoded legacy enum (Webinar / VSL /

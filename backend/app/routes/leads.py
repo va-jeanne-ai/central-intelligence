@@ -78,7 +78,7 @@ from app.schemas.calendar import (
     CalendarEventRow,
     CalendarEventsResponse,
 )
-from app.services.attribution import build_resolver, channel_for_lead
+from app.services.attribution import bucket_channel_combos, build_resolver, channel_for_lead
 from app.services.audit import record_event
 
 logger = logging.getLogger(__name__)
@@ -185,6 +185,16 @@ def _week_label(weeks_ago: int) -> str:
 async def list_leads(
     status: str | None = Query(default=None, description="Filter by API status"),
     source: str | None = Query(default=None, description="Filter by source"),
+    channel: str | None = Query(
+        default=None,
+        description=(
+            "Filter by resolved channel bucket — accepts exactly the labels the "
+            "/leads/stats source_breakdown emits (canonical channels, "
+            "'No attribution', 'Non-marketing', 'unmapped:<src>/<med>', "
+            "'other unmapped'). Channel is computed at read time, so this "
+            "filters on the underlying UTM combos that resolve to the bucket."
+        ),
+    ),
     search: str | None = Query(default=None, description="Search name or email"),
     entry_from: str | None = Query(
         default=None, description="Filter: entry_date on/after this date (YYYY-MM-DD)"
@@ -211,6 +221,48 @@ async def list_leads(
         status=status, source=source, search=search,
         entry_from=entry_from, entry_to=entry_to,
     )
+
+    # Channel is resolved at read time (never stored) via the Task-1 helpers —
+    # load the taxonomy once per request, same idiom as compute_lead_stats
+    # (app/repositories/sales_stats.py).
+    taxonomy_rows = (await session.execute(text("SELECT * FROM attribution_taxonomy"))).fetchall()
+    resolver = build_resolver(taxonomy_rows)
+
+    # ---- Server-side channel filter -----------------------------------------
+    # A channel bucket isn't a column, so we invert it: bucket ALL distinct UTM
+    # combos (same base population + bucketing as the /leads/stats breakdown,
+    # via bucket_channel_combos) and filter SQL-side on the combos that map to
+    # the requested bucket. IS NOT DISTINCT FROM makes NULL/'' combos match
+    # exactly. Distinct-combo cardinality is small (dozens), so the OR-list
+    # stays bounded; an unknown bucket label simply matches zero rows.
+    if channel is not None:
+        combo_rows = (
+            await session.execute(
+                text(
+                    "SELECT utm_source_first, utm_medium_first, utm_content_first, "
+                    "utm_source_last, utm_medium_last, utm_content_last, COUNT(*) "
+                    "FROM leads WHERE deleted_at IS NULL GROUP BY 1,2,3,4,5,6"
+                )
+            )
+        ).fetchall()
+        mapping, _ = bucket_channel_combos(combo_rows, resolver)
+        matching = [key for key, label in mapping.items() if label == channel]
+        if matching:
+            combo_fields = (
+                "utm_source_first", "utm_medium_first", "utm_content_first",
+                "utm_source_last", "utm_medium_last", "utm_content_last",
+            )
+            clauses = []
+            for i, key in enumerate(matching):
+                parts = []
+                for j, field in enumerate(combo_fields):
+                    pname = f"ch{i}_{j}"
+                    parts.append(f"{field} IS NOT DISTINCT FROM :{pname}")
+                    params[pname] = key[j]
+                clauses.append("(" + " AND ".join(parts) + ")")
+            where_sql += " AND (" + " OR ".join(clauses) + ")"
+        else:
+            where_sql += " AND FALSE"
 
     # ---- COUNT total matching rows ------------------------------------------
     count_sql = text(f"SELECT COUNT(*) FROM leads WHERE {where_sql}")  # noqa: S608
@@ -249,18 +301,7 @@ async def list_leads(
     )
     rows = (await session.execute(data_sql, params)).fetchall()
 
-    # Channel is resolved at read time (never stored) via the Task-1 helper —
-    # load the taxonomy once per request, same idiom as compute_lead_stats
-    # (app/repositories/sales_stats.py).
-    taxonomy_rows = (await session.execute(text("SELECT * FROM attribution_taxonomy"))).fetchall()
-    resolver = build_resolver(taxonomy_rows)
-
     # ---- Map rows to response models ----------------------------------------
-    # NOTE: channel filtering is intentionally client-side only (see Task 4) —
-    # channel isn't a stored column, so a server-side `channel` filter would
-    # require resolving in SQL or materializing it; the existing `source`
-    # filter above stays as-is. Revisit if server-side channel filtering is
-    # ever needed (e.g. for very large pages).
     leads: list[LeadRecord] = []
     for r in rows:
         (

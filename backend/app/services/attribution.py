@@ -98,14 +98,26 @@ def channel_for_lead(resolver: Resolver, lead) -> Resolution:
     )
 
 
-def summarize_channels(combos, resolver: Resolver, *, unmapped_top_n: int = 8):
-    """combos: iterable of (utm_source_first, utm_medium_first, utm_content_first,
-    utm_source_last, utm_medium_last, utm_content_last, count). Resolves each distinct
-    combo via channel_for_lead semantics, merges counts per bucket, caps unmapped
-    cardinality. Returns list[dict(channel, platform, reportable, count)] with buckets:
-    canonical channels; 'No attribution' (all-null); 'Non-marketing' (reportable=False);
-    'unmapped:*' capped to top_n by count, remainder folded into 'other unmapped'."""
+def bucket_channel_combos(combos, resolver: Resolver, *, unmapped_top_n: int = 8):
+    """Core bucketing shared by the breakdown and the server-side channel filter.
+
+    combos: iterable of (utm_source_first, utm_medium_first, utm_content_first,
+    utm_source_last, utm_medium_last, utm_content_last, count). Resolves each
+    combo via channel_for_lead semantics and applies the bucket rules:
+    all-null -> 'No attribution'; reportable=False -> 'Non-marketing';
+    'unmapped:*' capped to unmapped_top_n by descending count, remainder folded
+    into 'other unmapped'.
+
+    Returns (mapping, buckets):
+    - mapping: {(sf, mf, cf, sl, ml, cl): final bucket label} for every input
+      combo — post-rollup, so an overflow dialect maps to 'other unmapped'.
+      This is what lets a route translate a bucket label back into the exact
+      UTM combos to filter on in SQL.
+    - buckets: list[dict(channel, platform, reportable, count)] — the same
+      aggregate shape summarize_channels has always returned.
+    """
     buckets: dict[str, dict] = {}
+    prelim: dict[tuple, str] = {}
 
     for sf, mf, cf, sl, ml, cl, count in combos:
         lead = SimpleNamespace(
@@ -121,6 +133,7 @@ def summarize_channels(combos, resolver: Resolver, *, unmapped_top_n: int = 8):
         else:
             channel, platform, reportable = res.channel, res.platform, res.reportable
 
+        prelim[(sf, mf, cf, sl, ml, cl)] = channel
         if channel in buckets:
             buckets[channel]["count"] += count
         else:
@@ -129,12 +142,13 @@ def summarize_channels(combos, resolver: Resolver, *, unmapped_top_n: int = 8):
                 "reportable": reportable, "count": count,
             }
 
+    overflow: set[str] = set()
     unmapped_keys = [k for k in buckets if k.startswith("unmapped:")]
     if len(unmapped_keys) > unmapped_top_n:
         unmapped_keys.sort(key=lambda k: buckets[k]["count"], reverse=True)
-        overflow_keys = unmapped_keys[unmapped_top_n:]
-        overflow_count = sum(buckets[k]["count"] for k in overflow_keys)
-        for k in overflow_keys:
+        overflow = set(unmapped_keys[unmapped_top_n:])
+        overflow_count = sum(buckets[k]["count"] for k in overflow)
+        for k in overflow:
             del buckets[k]
         if "other unmapped" in buckets:
             buckets["other unmapped"]["count"] += overflow_count
@@ -144,4 +158,15 @@ def summarize_channels(combos, resolver: Resolver, *, unmapped_top_n: int = 8):
                 "reportable": True, "count": overflow_count,
             }
 
-    return list(buckets.values())
+    mapping = {
+        key: ("other unmapped" if label in overflow else label)
+        for key, label in prelim.items()
+    }
+    return mapping, list(buckets.values())
+
+
+def summarize_channels(combos, resolver: Resolver, *, unmapped_top_n: int = 8):
+    """Aggregate view of bucket_channel_combos — see its docstring for the
+    bucket rules. Kept as the breakdown's entry point; behavior unchanged."""
+    _, buckets = bucket_channel_combos(combos, resolver, unmapped_top_n=unmapped_top_n)
+    return buckets

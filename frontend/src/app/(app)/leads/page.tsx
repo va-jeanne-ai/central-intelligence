@@ -796,12 +796,13 @@ type FilterStatus = "all" | LeadStatus | "applications";
 // actually in the DB — so any string can be a valid filter value, not just
 // the legacy LeadSource enum.
 type FilterSource = "all" | string;
-// Channel is an open string set (not an enum) — "all" plus any raw channel
-// value seen on the currently-loaded page, or the sentinel below for leads
-// with no attribution. Filtering happens client-side only (Task 3 scope
-// didn't add a server-side channel filter param).
+// Channel filter values are exactly the bucket labels the /leads/stats
+// source_breakdown emits ("No attribution", "Non-marketing", canonical
+// channels, "unmapped:*", "other unmapped"). Selection is sent to the server
+// as the `channel` query param, which filters the whole dataset (the backend
+// inverts the bucket back to its UTM combos), so pagination and totals are
+// correct — unlike the earlier page-local client-side filter.
 type FilterChannel = "all" | string;
-const NO_ATTRIBUTION_FILTER_VALUE = "__no_attribution__";
 
 // ─── Column sort ──────────────────────────────────────────────────────────────
 
@@ -874,9 +875,10 @@ function FilterBar({
   sourceOptions: { value: string; label: string }[];
   channelFilter: FilterChannel;
   onChannelChange: (v: FilterChannel) => void;
-  /** Distinct channel values present on the currently-loaded page, each
-   * paired with its display label (raw value for the select's `value`, so
-   * filtering can match `lead.channel` directly). */
+  /** Channel bucket options from the stats source_breakdown (the same
+   * buckets the donut shows, with dataset-wide counts). The raw bucket
+   * label is the select's `value` — it's sent verbatim as the server-side
+   * `channel` query param. */
   channelOptions: { value: string; label: string }[];
   entryFrom: string;
   onEntryFromChange: (v: string) => void;
@@ -933,9 +935,8 @@ function FilterBar({
         ))}
       </select>
 
-      {/* Channel — client-side only, filters the loaded page on
-          lead.channel. Options are derived from the loaded leads since
-          channel is an open string set, not an enum. */}
+      {/* Channel — options are the breakdown buckets (with counts); the
+          selected bucket filters server-side across the whole dataset. */}
       <select
         value={channelFilter}
         onChange={(e) => onChannelChange(e.target.value as FilterChannel)}
@@ -1206,6 +1207,7 @@ export default function LeadsPage() {
         const params = new URLSearchParams();
         if (statusFilter !== "all") params.set("status", statusFilter);
         if (sourceFilter !== "all") params.set("source", sourceFilter);
+        if (channelFilter !== "all") params.set("channel", channelFilter);
         if (search) params.set("search", search);
         if (entryFrom) params.set("entry_from", entryFrom);
         if (entryTo) params.set("entry_to", entryTo);
@@ -1245,7 +1247,7 @@ export default function LeadsPage() {
     }
 
     return doFetch();
-  }, [authLoading, statusFilter, sourceFilter, search, entryFrom, entryTo, sortBy, sortDir, page, pageSize]);
+  }, [authLoading, statusFilter, sourceFilter, channelFilter, search, entryFrom, entryTo, sortBy, sortDir, page, pageSize]);
 
   // Mirrors the list-fetch params in fetchLeads above, minus sort/pagination —
   // snapshot for "Analyze this view".
@@ -1265,7 +1267,7 @@ export default function LeadsPage() {
   useEffect(() => {
     resetToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, sourceFilter, search, entryFrom, entryTo, sortBy, sortDir]);
+  }, [statusFilter, sourceFilter, channelFilter, search, entryFrom, entryTo, sortBy, sortDir]);
 
   // Build KPI cards from live stats
   const kpiCards = [
@@ -1315,20 +1317,17 @@ export default function LeadsPage() {
   };
 
   // Distinct channel values on the currently-loaded page, each with its
-  // display label. "No attribution" (null channel) is represented by the
-  // sentinel value so it's selectable via a normal <option value>. Memoized
-  // on leadsData.leads so it isn't rebuilt (Map + sort) on every render.
-  const channelOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const lead of leadsData.leads) {
-      const raw = lead.channel ?? null;
-      const value = raw ?? NO_ATTRIBUTION_FILTER_VALUE;
-      if (!seen.has(value)) seen.set(value, channelLabel(raw));
-    }
-    return Array.from(seen.entries())
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [leadsData.leads]);
+  // display label + count. Options come from the stats source_breakdown —
+  // the same buckets the donut shows, covering the whole dataset — kept in
+  // the breakdown's order (count-desc from the backend).
+  const channelOptions = useMemo(
+    () =>
+      stats.source_breakdown.map((item) => ({
+        value: item.channel,
+        label: `${item.channel} (${item.count.toLocaleString()})`,
+      })),
+    [stats.source_breakdown]
+  );
 
   // Source filter options from the distinct values actually in the DB
   // (stats.available_sources, count-desc from the backend — keep that order
@@ -1348,15 +1347,9 @@ export default function LeadsPage() {
     return sources.map((src) => ({ value: src, label: resolveSource(src).label }));
   }, [stats.available_sources]);
 
-  // Client-side channel filter over the loaded page (server-side filtering
-  // on channel is out of scope per Task 3).
-  const visibleLeads =
-    channelFilter === "all"
-      ? leadsData.leads
-      : leadsData.leads.filter((lead) => {
-          const value = lead.channel ?? NO_ATTRIBUTION_FILTER_VALUE;
-          return value === channelFilter;
-        });
+  // Channel filtering is server-side now (the `channel` query param in
+  // fetchLeads) — the loaded page already reflects the selected bucket.
+  const visibleLeads = leadsData.leads;
 
   return (
     <>

@@ -603,11 +603,15 @@ behavior, not a bug.
    segments are now canonical channel names (not raw `leads.source` values
    like `wgr`/`ghl`), and that segment counts sum to the total lead count
    shown elsewhere on the page.
-3. In the FilterBar, open the **Channel** filter and pick one value (e.g.
-   "No attribution" or an `unmapped:*` entry). Confirm the table narrows to
-   only rows whose Channel chip matches — this filter runs client-side (not
-   a query param), so it only affects rows already loaded on the current
-   page/pagination window.
+3. In the FilterBar, open the **Channel** filter. Its options are the same
+   buckets as the Source Breakdown donut, each with its dataset-wide count
+   (e.g. `meta_paid (714)`, `No attribution (10,187)`). Pick `meta_paid` and
+   confirm: the table shows only meta_paid-chip rows, AND the
+   "Showing X of Y" total drops to that bucket's count (the filter runs
+   server-side across all leads, not just the loaded page) — pagination
+   walks the full filtered set. Picking `Non-marketing` shows rows whose
+   chips carry the specific non-marketing value (e.g. `system_workflow`) —
+   the bucket is the rollup, the chip is the exact resolution.
 3b. Open the **Source** filter dropdown. Its options now come from the
    sources actually in the database (via `available_sources` on
    `GET /leads/stats`), not the old hardcoded list — with current data
