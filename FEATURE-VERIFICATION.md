@@ -1068,3 +1068,72 @@ builder page still work unchanged. **Fail:** the old test-data offer names
 ("This is a new offer") still appear, the revenue sum doesn't reconcile
 with $471,250, a fabricated Unattributed figure appears despite full
 attribution, or the Create Offer / builder flow is broken.
+
+## Analyze with AI — interactive follow-up chat (deliverable 8) (2026-08-04)
+
+**Feature:** the "Analyze with AI" drawer (available on `/leads` and other
+filtered list surfaces) is no longer a one-shot, read-only result. After the
+initial grounded analysis renders, an "Ask a follow-up" thread appears below
+it with a text input ("Ask a follow-up about this data…"). Follow-up
+questions are answered by a new `POST /api/v1/analyze/{surface_key}/chat`
+endpoint, which recomputes the surface's aggregates from the SAME filters
+currently applied (fresh grounding, not a stale snapshot) and answers using
+only that data plus the running conversation — same hypothesize-never-
+fabricate contract as the initial analysis. The thread is ephemeral: it
+dies with the drawer (closing it, or clicking "Re-run", clears it), nothing
+is persisted server-side.
+
+**How to locate:** open any list page with an "Analyze with AI" button
+(e.g. `/leads`), apply a filter set, click the button to open the drawer.
+Once the initial analysis renders, the follow-up thread + input appear
+below it in the same drawer.
+
+**Steps:**
+1. Go to `/leads`, apply a filter (e.g. a specific channel or date range).
+2. Click **"Analyze with AI"**. Confirm the existing one-shot analysis
+   (narrative, highlights, hypotheses, "Show the data this is based on")
+   still renders exactly as before — unchanged by this work.
+3. Below the analysis, confirm an "Ask a follow-up" section with a text
+   input reading "Ask a follow-up about this data…".
+4. Type a question referencing the visible data, e.g. "which channel
+   drives the most closed revenue?", and press Enter (not Shift+Enter —
+   that should insert a newline instead of sending).
+5. Confirm your question appears immediately as a right-aligned bubble,
+   a typing indicator appears, and the input disables while the reply is
+   pending.
+6. Confirm the assistant's reply appears left-aligned, and that every
+   number it cites (counts, percentages, revenue figures) matches a number
+   visible in the "Show the data this is based on" panel or the narrative
+   above — no invented figures. If the data can't answer the question, the
+   reply should say so rather than guess.
+7. Ask a second follow-up referencing the first answer (e.g. "and what
+   about last month?") — confirm the full local thread (not just the new
+   message) is sent each time, so the assistant can use prior context.
+8. Trigger an error path (e.g. stop the backend briefly, or a network
+   hiccup) — confirm an inline error state appears in the thread area, not
+   a native `alert()`/`confirm()` dialog and not a silent failure.
+9. Click "Re-run" on the analysis, or close and reopen the drawer — confirm
+   the follow-up thread is cleared (ephemeral, matches the analysis's own
+   lifecycle).
+
+**Pass:** the initial analysis is unchanged; the follow-up thread sends on
+Enter, disables while pending, shows user/assistant bubbles distinctly
+styled (right/left), and every number in a reply is traceable to the
+drawer's own displayed aggregates; the thread clears on re-run/close.
+**Fail:** the initial analysis regresses, the follow-up call 500s or hangs
+without an inline error, a reply contains a number not present anywhere in
+the drawer's data, or the thread survives a drawer close/re-run.
+
+**Backend proof (2026-08-04):** a real Anthropic API call was attempted
+first via `chat_view_analysis(...)` with a minimal hand-built aggregates
+dict and the question "Which channel drives the most closed revenue?" — it
+failed with `anthropic.BadRequestError: ... credit balance is too low ...`
+(environment/billing issue, not a code defect). Fell back to the same call
+with `_call_claude_chat` monkeypatched to a canned response: verified the
+system prompt sent to the LLM contained the aggregates JSON verbatim
+(`"18000"` present), the filters echo (`"status=closed_won,
+date_range=last_30_days"`), and that the full message history was passed
+through unmodified as the `messages` list. 13 new unit tests
+(`backend/tests/test_analyze_chat.py`) cover message-role/length/count
+validation and pure prompt assembly with no DB/network — backend suite is
+271 passing (258 baseline + 13 new).

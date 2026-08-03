@@ -7,10 +7,15 @@
  * on" section (the raw aggregates the backend computed and prompted with).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { analyzeView, type AnalyzeViewResponse } from "@/lib/analyze-client";
+import {
+  analyzeView,
+  analyzeViewChat,
+  type AnalyzeChatMessage,
+  type AnalyzeViewResponse,
+} from "@/lib/analyze-client";
 import { SparkleIcon } from "@/components/ui/sparkle-icon";
 
 interface AnalyzeViewDrawerProps {
@@ -21,12 +26,24 @@ interface AnalyzeViewDrawerProps {
   onClose: () => void;
 }
 
+/** One rendered turn in the ephemeral follow-up thread. */
+interface ThreadMessage extends AnalyzeChatMessage {
+  id: string;
+}
+
 export function AnalyzeViewDrawer({ surface, params, open, onClose }: AnalyzeViewDrawerProps) {
   const [result, setResult] = useState<AnalyzeViewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showData, setShowData] = useState(false);
   const [runKey, setRunKey] = useState(0);
+
+  // Follow-up chat thread — ephemeral, dies with the drawer, like the analysis.
+  const [thread, setThread] = useState<ThreadMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatPending, setChatPending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const threadEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open || !params) return;
@@ -44,8 +61,59 @@ export function AnalyzeViewDrawer({ surface, params, open, onClose }: AnalyzeVie
   }, [open, params, surface, runKey]);
 
   useEffect(() => {
-    if (!open) { setResult(null); setError(null); setShowData(false); }
+    if (!open) {
+      setResult(null);
+      setError(null);
+      setShowData(false);
+      setThread([]);
+      setChatInput("");
+      setChatPending(false);
+      setChatError(null);
+    }
   }, [open]);
+
+  // Re-running the analysis (new data snapshot) invalidates any prior
+  // follow-up thread — it was grounded in the old aggregates.
+  useEffect(() => {
+    setThread([]);
+    setChatError(null);
+  }, [runKey]);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [thread, chatPending]);
+
+  async function handleSendFollowUp() {
+    const content = chatInput.trim();
+    if (!content || chatPending || !params) return;
+
+    const userMessage: ThreadMessage = { id: `u-${Date.now()}`, role: "user", content };
+    const nextThread = [...thread, userMessage];
+    setThread(nextThread);
+    setChatInput("");
+    setChatError(null);
+    setChatPending(true);
+
+    try {
+      const { reply } = await analyzeViewChat(
+        surface,
+        params,
+        nextThread.map(({ role, content: c }) => ({ role, content: c })),
+      );
+      setThread((prev) => [...prev, { id: `a-${Date.now()}`, role: "assistant", content: reply }]);
+    } catch (e: unknown) {
+      setChatError(e instanceof Error ? e.message : "Follow-up failed — try again.");
+    } finally {
+      setChatPending(false);
+    }
+  }
+
+  function handleChatKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleSendFollowUp();
+    }
+  }
 
   if (!open) return null;
 
@@ -192,9 +260,81 @@ export function AnalyzeViewDrawer({ surface, params, open, onClose }: AnalyzeVie
               <p className="text-[11px] text-gray-400">
                 Generated {result.generated_at}{result.model ? ` · ${result.model}` : ""} · not saved
               </p>
+
+              {/* ─── Follow-up chat thread ─── */}
+              <section className="border-t border-gray-200 pt-4">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Ask a follow-up
+                </h3>
+
+                {thread.length > 0 && (
+                  <div className="mb-3 flex flex-col gap-3">
+                    {thread.map((m) => (
+                      <div
+                        key={m.id}
+                        className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                      >
+                        <div
+                          className={
+                            m.role === "user"
+                              ? "max-w-[85%] rounded-2xl rounded-tr-[4px] bg-blue-500 px-3.5 py-2.5 text-sm text-white shadow-sm"
+                              : "max-w-[85%] rounded-2xl rounded-tl-[4px] border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-800 shadow-sm"
+                          }
+                          style={{ wordBreak: "break-word" }}
+                        >
+                          <p className="whitespace-pre-wrap leading-6">{m.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {chatPending && (
+                      <div className="flex justify-start">
+                        <div className="rounded-2xl rounded-tl-[4px] border border-gray-200 bg-white px-3.5 py-2.5 shadow-sm">
+                          <span className="flex gap-1">
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.2s]" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.1s]" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={threadEndRef} aria-hidden="true" />
+                  </div>
+                )}
+
+                {chatError && (
+                  <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {chatError}
+                  </div>
+                )}
+              </section>
             </>
           )}
         </div>
+
+        {/* Follow-up input — only once an initial analysis exists to ground it */}
+        {result && !result.empty && (
+          <div className="border-t border-gray-200 px-5 py-3">
+            <div className="flex items-end gap-2">
+              <textarea
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={handleChatKeyDown}
+                disabled={chatPending}
+                placeholder="Ask a follow-up about this data…"
+                rows={1}
+                className="min-h-[38px] flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400 disabled:bg-gray-50"
+              />
+              <Button
+                variant="ai"
+                size="sm"
+                onClick={() => void handleSendFollowUp()}
+                disabled={chatPending || !chatInput.trim()}
+              >
+                Send
+              </Button>
+            </div>
+          </div>
+        )}
       </aside>
     </>
   );

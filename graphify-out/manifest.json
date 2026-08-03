@@ -1370,8 +1370,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1785774381.8230383,
-    "ast_hash": "443d2ab85173bfc6bf23a825ca62e4c3",
+    "mtime": 1785774986.318198,
+    "ast_hash": "8ea8e4fca81e590ebb8de5be5922ae88",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1380,8 +1380,8 @@
     "semantic_hash": ""
   },
   "FEATURE-VERIFICATION.md": {
-    "mtime": 1785774424.9608111,
-    "ast_hash": "ffd97f431a9f039edfde7ead1c43e4ca",
+    "mtime": 1785774962.674973,
+    "ast_hash": "b3f882efc214fc5433e75472d278498a",
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
@@ -2290,8 +2290,8 @@
     "semantic_hash": ""
   },
   "backend/app/analytics/view_analysis/narrative.py": {
-    "mtime": 1784046104.3368587,
-    "ast_hash": "59c4a40a11d2c50b3400adf2102a4f1a",
+    "mtime": 1785774758.8009377,
+    "ast_hash": "f9bfceafd6bd55d2118b60a9963dc6eb",
     "semantic_hash": ""
   },
   "backend/app/analytics/view_analysis/sales_calls.py": {
@@ -2310,18 +2310,18 @@
     "semantic_hash": ""
   },
   "backend/app/routes/analyze.py": {
-    "mtime": 1784046104.3402169,
-    "ast_hash": "440c1cbeda745472001935fc7271816b",
+    "mtime": 1785774776.3793375,
+    "ast_hash": "52d24945046f4626510d3e7053983dfd",
     "semantic_hash": ""
   },
   "backend/app/schemas/analyze.py": {
-    "mtime": 1784046104.3428488,
-    "ast_hash": "0244998d28621087b4794dfd59bcef2c",
+    "mtime": 1785774735.021364,
+    "ast_hash": "8fd1b82cd4b0bfc9faa6c1c351e53647",
     "semantic_hash": ""
   },
   "frontend/src/components/analyze/AnalyzeViewDrawer.tsx": {
-    "mtime": 1784046104.3521252,
-    "ast_hash": "186ee6ced66faeccce7a23e968792633",
+    "mtime": 1785774891.573713,
+    "ast_hash": "fee2c0d1556f033ca3c331f8b203edba",
     "semantic_hash": ""
   },
   "frontend/src/components/appointments/appointments-calendar-view.tsx": {
@@ -2335,8 +2335,8 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/analyze-client.ts": {
-    "mtime": 1784046104.3542418,
-    "ast_hash": "2414478dd0e5e10b1463f3c2cef77043",
+    "mtime": 1785774846.8133178,
+    "ast_hash": "cae693a790ba8ad72e0da5f5eea698ad",
     "semantic_hash": ""
   },
   "frontend/src/lib/appointment-calendar-mapping.ts": {
@@ -2782,6 +2782,11 @@
   "backend/tests/test_offer_stats.py": {
     "mtime": 1785774171.5228174,
     "ast_hash": "aaef7b925c3eefacb32602246acceca0",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_analyze_chat.py": {
+    "mtime": 1785774803.0221984,
+    "ast_hash": "558111fe2ca00e08c21ef9bd58b12e91",
     "semantic_hash": ""
   }
 }

@@ -6,6 +6,58 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Interactive follow-up chat on Analyze with AI (deliverable 8)
+
+- **New endpoint `POST /analyze/{surface_key}/chat`** (`backend/app/routes/analyze.py`)
+  — sibling of the existing one-shot `POST /analyze/{surface_key}`. Accepts
+  the SAME surface filter query params plus a JSON body of the running
+  message history (`{messages: [{role, content}, ...]}`, capped at 20
+  messages / 4000 chars each via new Pydantic validators in
+  `app/schemas/analyze.py`). Recomputes the surface's aggregates from the
+  CURRENT filters (same `get_surface` → `surface.aggregate` path as the
+  initial analysis, so the chat is never grounded in a stale snapshot) and
+  answers via a new `chat_view_analysis(...)` in
+  `app/analytics/view_analysis/narrative.py`. Auth matches the existing
+  `analyze_view` route — no per-route dependency; the global
+  `AuthMiddleware` already covers all `/api/v1` routes.
+- **`chat_view_analysis` is a free-text, multi-turn sibling of
+  `synthesize_view_analysis`**, not a reuse of `call_claude_for_json` (that
+  helper is single-turn and forces a strict JSON-object response — doesn't
+  fit a conversational reply). It builds the Anthropic `messages` list
+  directly using the same client/model conventions
+  (`settings.anthropic_model_default`, the shared `MODEL` constant from
+  `app.analytics.overall_insight`). The system prompt embeds the surface
+  label, the active filters echo, and the aggregates JSON, with the same
+  hypothesize-never-fabricate contract as the initial analysis (every
+  number must appear verbatim in the aggregates; speculation must be
+  flagged as a hypothesis). Prompt assembly is factored into a pure
+  `build_chat_system_prompt(...)` function so it's unit-testable without a
+  DB or a live LLM call.
+- **Frontend — `AnalyzeViewDrawer.tsx`** now renders a follow-up thread
+  below the existing (unchanged) analysis: user messages right-aligned
+  (blue bubble), assistant replies left-aligned (white/bordered bubble,
+  matching the app's existing chat-bubble styling from `MessageBubble`
+  without importing the full chat machinery), a typing indicator while
+  pending, Enter-to-send (Shift+Enter for a newline), the input disabled
+  while a reply is pending, and an inline error state on failure. The
+  thread is ephemeral — it's cleared on drawer close and on "Re-run" (a
+  new analysis run invalidates the aggregates the old thread was grounded
+  in). New `analyzeViewChat(...)` client function in
+  `frontend/src/lib/analyze-client.ts` sends the full local message history
+  each call (no server-side session).
+- **Tests:** 13 new unit tests in `backend/tests/test_analyze_chat.py`
+  covering message validation (role whitelist, content-length cap,
+  message-count cap, boundary values) and pure prompt assembly (aggregates
+  JSON present, filters echo present, surface label present, deterministic
+  output) — no DB, no network. Backend suite: 271 passing (258 baseline +
+  13 new).
+- **Manual proof:** a real Anthropic call was attempted first (minimal
+  hand-built aggregates, one short question) and failed with `credit
+  balance is too low` (billing/env issue, not a code defect). Fell back to
+  the same call path with the LLM call monkeypatched: confirmed the
+  aggregates JSON and filters echo land verbatim in the system prompt sent
+  to the model, and the full message history is passed through unmodified.
+
 ### Added — Real WGR offers + revenue per offer (deliverable 5)
 
 - **Discovery:** CI's own `offers` table (18 rows) is app-CRUD test data
