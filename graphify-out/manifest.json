@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/intelligence.py": {
-    "mtime": 1785773842.0125604,
-    "ast_hash": "130b9dd4df51200354f4d7f96e7dc4de",
+    "mtime": 1785778517.2221017,
+    "ast_hash": "15ea316430b9f7097325068d88cca784",
     "semantic_hash": ""
   },
   "backend/app/models/marketing.py": {
@@ -515,8 +515,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/social.py": {
-    "mtime": 1782142516.7399583,
-    "ast_hash": "bb4217be8b6793eb090ea78320dedd90",
+    "mtime": 1785778844.5676,
+    "ast_hash": "487bf49f55b1d83f623bd2c96d010a17",
     "semantic_hash": ""
   },
   "backend/app/routes/transcribe.py": {
@@ -605,8 +605,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/social.py": {
-    "mtime": 1782142516.7402463,
-    "ast_hash": "912bdba933564c5d38459bd87d8cba86",
+    "mtime": 1785778796.6991093,
+    "ast_hash": "fceadd38cca45e8bc70ba9d4de5f1dc0",
     "semantic_hash": ""
   },
   "backend/app/schemas/transcribe.py": {
@@ -995,8 +995,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/social/page.tsx": {
-    "mtime": 1782142516.7410662,
-    "ast_hash": "d060e14d2fd105de9f08372e758678c6",
+    "mtime": 1785779280.9356513,
+    "ast_hash": "edbd0bb839be96ead5726f7cd9541b94",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/social/scripts/page.tsx": {
@@ -1320,8 +1320,8 @@
     "semantic_hash": ""
   },
   "frontend/src/types/index.ts": {
-    "mtime": 1785772912.5453084,
-    "ast_hash": "36ebb5fa5794d819792f1068eb38f08d",
+    "mtime": 1785778886.6441708,
+    "ast_hash": "ff5990c7b7c9293c60bcdcc97f57c69c",
     "semantic_hash": ""
   },
   "frontend/tailwind.config.ts": {
@@ -1370,8 +1370,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1785774986.318198,
-    "ast_hash": "8ea8e4fca81e590ebb8de5be5922ae88",
+    "mtime": 1785779220.0364702,
+    "ast_hash": "f3816e1fcbc1610448c29a0cb98494ba",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1380,13 +1380,13 @@
     "semantic_hash": ""
   },
   "FEATURE-VERIFICATION.md": {
-    "mtime": 1785774962.674973,
-    "ast_hash": "b3f882efc214fc5433e75472d278498a",
+    "mtime": 1785779268.604067,
+    "ast_hash": "11a29eeda087bbd673f997dc4547cbd4",
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1785774450.828181,
-    "ast_hash": "14f9b94bf69fb38b50b741f822f1201f",
+    "mtime": 1785779194.7978942,
+    "ast_hash": "7e013a8a2293a8d6ed15a1012e120225",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
@@ -1960,8 +1960,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/mapping.py": {
-    "mtime": 1785773957.1746624,
-    "ast_hash": "71d1ea37e1528e65f2c9a0f792ca1816",
+    "mtime": 1785778530.9370985,
+    "ast_hash": "839b71948cc86a0ea242dd5d631c7bc1",
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/reader.py": {
@@ -1970,8 +1970,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/wgr_sync/upsert.py": {
-    "mtime": 1785774047.9889593,
-    "ast_hash": "3cb8ac21031710be935b748bb7773052",
+    "mtime": 1785778562.1605666,
+    "ast_hash": "0fb70058221f4f692bc8229bd9f5608e",
     "semantic_hash": ""
   },
   "backend/app/tasks/metric_snapshots.py": {
@@ -2290,8 +2290,8 @@
     "semantic_hash": ""
   },
   "backend/app/analytics/view_analysis/narrative.py": {
-    "mtime": 1785774758.8009377,
-    "ast_hash": "f9bfceafd6bd55d2118b60a9963dc6eb",
+    "mtime": 1785778101.9596474,
+    "ast_hash": "0b653624455a6d1d0fb3aa57897903a5",
     "semantic_hash": ""
   },
   "backend/app/analytics/view_analysis/sales_calls.py": {
@@ -2785,8 +2785,23 @@
     "semantic_hash": ""
   },
   "backend/tests/test_analyze_chat.py": {
-    "mtime": 1785774803.0221984,
-    "ast_hash": "558111fe2ca00e08c21ef9bd58b12e91",
+    "mtime": 1785778165.34426,
+    "ast_hash": "3116d1690f035bcf19a15889836d0472",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/c2df94038d03_add_comment_lead_mirrors.py": {
+    "mtime": 1785778491.3460858,
+    "ast_hash": "60071db9eb5886e0028f2031ecba6d1a",
+    "semantic_hash": ""
+  },
+  "backend/app/repositories/social_stats.py": {
+    "mtime": 1785778787.2077775,
+    "ast_hash": "5114612bb901b8a2332518b064d5438d",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_social_stats.py": {
+    "mtime": 1785779006.495134,
+    "ast_hash": "6a7c397e7c33bfb12c0ee910f34ac64a",
     "semantic_hash": ""
   }
 }
