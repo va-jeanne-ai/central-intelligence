@@ -4,12 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagination } from "@/hooks/use-pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard, KpiRow } from "@/components/ui/kpi-card";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { ScoreBar } from "@/components/ui/score-bar";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { FormSelect } from "@/components/ui/form-field";
+import { Pagination } from "@/components/ui/pagination";
 
 // ─── API response types ───────────────────────────────────────────────────────
 
@@ -38,6 +40,13 @@ interface CampaignsSummary {
   total_clicks: number;
   avg_open_rate: number;
   avg_click_rate: number;
+  max_open_rate: number;
+}
+
+interface TierThresholds {
+  low: number;
+  high: number;
+  all_equal: boolean;
 }
 
 interface FilterOptions {
@@ -47,12 +56,20 @@ interface FilterOptions {
 
 interface CampaignsResponse {
   campaigns: CampaignRow[];
+  total: number;
+  page: number;
+  per_page: number;
   summary: CampaignsSummary;
+  tier_thresholds: TierThresholds;
+  top_campaigns: CampaignRow[];
   filter_options: FilterOptions;
 }
 
 const EMPTY_DATA: CampaignsResponse = {
   campaigns: [],
+  total: 0,
+  page: 1,
+  per_page: 20,
   summary: {
     count: 0,
     total_recipients: 0,
@@ -60,7 +77,10 @@ const EMPTY_DATA: CampaignsResponse = {
     total_clicks: 0,
     avg_open_rate: 0,
     avg_click_rate: 0,
+    max_open_rate: 0,
   },
+  tier_thresholds: { low: 0, high: 0, all_equal: true },
+  top_campaigns: [],
   filter_options: { campaign_types: [], statuses: [] },
 };
 
@@ -113,31 +133,25 @@ function formatNumber(n: number): string {
 }
 
 /**
- * Tercile tier (Top / Mid / Low) of `value` among `all` values, higher = better.
+ * Tercile tier (Top / Mid / Low) of `value` against the server-computed
+ * `tier_thresholds` (percentile_cont(0.333/0.667) over open_rate for the
+ * WHOLE filtered set, not just the current page — see
+ * `EmailCampaignsTierThresholds` in backend/app/schemas/email.py).
  *
- * Edge cases (documented, not fixed by a bigger sample — there isn't one at
- * render time, this is a client-side slice of whatever the current filtered
- * set is):
- * - All-equal input (including all-zero, e.g. every visible campaign has
- *   0% opens) would otherwise rank every row's `v <= value` as true, giving
- *   every row a 100th-percentile "Top" chip — misleadingly implying real
- *   spread where there is none. Detected explicitly below and forced to
- *   "Mid" (no row is actually distinguishable from its peers).
- * - Small `all.length` (n < 3) degrades gracefully rather than erroring, but
- *   the tercile split is a rough guide at that size — e.g. with 2 values the
- *   worse one reads "Low" and the better one "Top", never "Mid"; with 1 value
- *   the single row's rank is always 1.0 → "Top" (not the all-equal case,
- *   since there's nothing to compare against, but still not a meaningful
- *   "best of many" signal — treat single/double-digit filtered sets as
- *   indicative, not a statistically firm ranking).
+ * `all_equal` mirrors the prior client-side `tierOf()`'s explicit guard:
+ * when every open_rate in the filtered set is identical (including
+ * all-zero, or a 0-1 row filtered set), no row is actually distinguishable
+ * from its peers, so every row renders "Mid" rather than a misleading
+ * Top/Low split off a degenerate zero-width band.
  */
-function tierOf(value: number | null, all: number[]): "Top" | "Mid" | "Low" | null {
-  if (value === null || all.length === 0) return null;
-  if (all.every((v) => v === all[0])) return "Mid";
-  const sorted = [...all].sort((a, b) => a - b);
-  const rank = sorted.filter((v) => v <= value).length / sorted.length;
-  if (rank > 2 / 3) return "Top";
-  if (rank > 1 / 3) return "Mid";
+function tierOf(
+  value: number | null,
+  thresholds: TierThresholds,
+): "Top" | "Mid" | "Low" | null {
+  if (value === null) return null;
+  if (thresholds.all_equal) return "Mid";
+  if (value > thresholds.high) return "Top";
+  if (value > thresholds.low) return "Mid";
   return "Low";
 }
 
@@ -208,11 +222,14 @@ function SortableHeader({
 // ─── Top campaigns ranking card ───────────────────────────────────────────────
 
 function TopCampaignsCard({
-  campaigns,
+  topCampaigns,
   metric,
   maxMetricValue,
 }: {
-  campaigns: CampaignRow[];
+  /** Server-ranked top-5 over the WHOLE filtered set (not just the current
+   * page) — see `top_campaigns` in EmailCampaignsResponse. Already sorted
+   * DESC by `metric`; rendered as-is. */
+  topCampaigns: CampaignRow[];
   metric: SortMetric;
   maxMetricValue: number;
 }) {
@@ -252,9 +269,7 @@ function TopCampaignsCard({
     }
   };
 
-  const top5 = [...campaigns]
-    .sort((a, b) => metricValue(b) - metricValue(a))
-    .slice(0, 5);
+  const top5 = topCampaigns;
 
   return (
     <Card>
@@ -425,6 +440,11 @@ export default function EmailPage() {
   const [sortBy, setSortBy] = useState<SortMetric>("sent_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // Server-side pagination — same idiom as the leads/social pages
+  // (usePagination + shared Pagination component).
+  const { page, pageSize, setPage, setPageSize, resetToFirstPage } =
+    usePagination("email-campaigns-page-size");
+
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSort = (col: SortMetric) => {
@@ -434,6 +454,7 @@ export default function EmailPage() {
       setSortBy(col);
       setSortDir("desc");
     }
+    resetToFirstPage();
   };
 
   useEffect(() => {
@@ -455,6 +476,8 @@ export default function EmailPage() {
         if (status !== "all") params.set("status", status);
         params.set("sort_by", sortBy);
         params.set("sort_dir", sortDir);
+        params.set("page", String(page));
+        params.set("per_page", String(pageSize));
 
         try {
           const result = await apiClient.get<CampaignsResponse>(
@@ -486,20 +509,31 @@ export default function EmailPage() {
       if (searchDebounceRef.current !== null) clearTimeout(searchDebounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, search, sentFrom, sentTo, campaignType, status, sortBy, sortDir]);
+  }, [authLoading, search, sentFrom, sentTo, campaignType, status, sortBy, sortDir, page, pageSize]);
+
+  // Filters changing (not sort/page) should snap back to page 1 — the old
+  // page number may no longer exist in the narrowed result set.
+  useEffect(() => {
+    resetToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, sentFrom, sentTo, campaignType, status]);
 
   const campaigns = useMemo(() => data?.campaigns ?? [], [data]);
+  const topCampaigns = data?.top_campaigns ?? EMPTY_DATA.top_campaigns;
   const filterOptions = data?.filter_options ?? EMPTY_DATA.filter_options;
   const summary = data?.summary ?? EMPTY_DATA.summary;
+  const tierThresholds = data?.tier_thresholds ?? EMPTY_DATA.tier_thresholds;
+  const total = data?.total ?? 0;
 
-  const maxOpenRate = useMemo(
-    () => Math.max(0, ...campaigns.map((c) => c.open_rate ?? 0)),
-    [campaigns],
-  );
-  const openRates = useMemo(
-    () => campaigns.map((c) => c.open_rate ?? 0),
-    [campaigns],
-  );
+  // ScoreBar on each row normalizes against the filtered set's max
+  // open_rate — now SQL-derived (summary.max_open_rate) instead of
+  // recomputed client-side from whatever page happens to be loaded.
+  const maxOpenRate = summary.max_open_rate;
+
+  // Top campaigns card's ScoreBar scales against the #1-ranked campaign's
+  // own metric value (topCampaigns is already sorted DESC by sortBy,
+  // server-side, over the whole filtered set — see top_campaigns in
+  // EmailCampaignsResponse).
   const maxSortMetricValue = useMemo(() => {
     const val = (c: CampaignRow): number => {
       switch (sortBy) {
@@ -523,8 +557,8 @@ export default function EmailPage() {
           return 0;
       }
     };
-    return Math.max(0, ...campaigns.map(val));
-  }, [campaigns, sortBy]);
+    return Math.max(0, ...topCampaigns.map(val));
+  }, [topCampaigns, sortBy]);
 
   const hasFilters =
     !!search || !!sentFrom || !!sentTo || campaignType !== "all" || status !== "all";
@@ -664,7 +698,7 @@ export default function EmailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-1">
             <TopCampaignsCard
-              campaigns={campaigns}
+              topCampaigns={topCampaigns}
               metric={sortBy}
               maxMetricValue={maxSortMetricValue}
             />
@@ -674,7 +708,7 @@ export default function EmailPage() {
             <Card>
               <CardHeader
                 title="Campaigns"
-                action={<span className="text-xs text-gray-400">{campaigns.length} shown</span>}
+                action={<span className="text-xs text-gray-400">{total.toLocaleString("en-US")} total</span>}
               />
               <CardBody noPadding>
                 {campaigns.length === 0 ? (
@@ -748,7 +782,7 @@ export default function EmailPage() {
                             key={c.id}
                             c={c}
                             maxOpenRate={maxOpenRate}
-                            tier={tierOf(c.open_rate, openRates)}
+                            tier={tierOf(c.open_rate, tierThresholds)}
                           />
                         ))}
                       </tbody>
@@ -756,6 +790,17 @@ export default function EmailPage() {
                   </div>
                 )}
               </CardBody>
+              {total > 0 && (
+                <Pagination
+                  page={page}
+                  total={total}
+                  pageSize={pageSize}
+                  onPageChange={setPage}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                  }}
+                />
+              )}
             </Card>
           </div>
         </div>

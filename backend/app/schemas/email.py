@@ -149,7 +149,13 @@ class EmailCampaignListRow(BaseModel):
 
 
 class EmailCampaignsSummary(BaseModel):
-    """Aggregate stats over the FILTERED set (not the whole table)."""
+    """Aggregate stats over the FILTERED set (not the whole table).
+
+    ``max_open_rate`` is the filtered set's max ``open_rate`` (NULLs
+    excluded) — the ScoreBar on each row normalizes against this value
+    server-side now instead of recomputing it client-side from a
+    single page of rows.
+    """
 
     count: int = 0
     total_recipients: int = 0
@@ -157,6 +163,25 @@ class EmailCampaignsSummary(BaseModel):
     total_clicks: int = 0
     avg_open_rate: float = 0.0
     avg_click_rate: float = 0.0
+    max_open_rate: float = 0.0
+
+
+class EmailCampaignsTierThresholds(BaseModel):
+    """Tercile cut points for ``open_rate`` over the FILTERED set (not the
+    current page), computed in SQL via ``percentile_cont``. The frontend
+    classifies each row as Top (> ``high``) / Mid (between) / Low (<= ``low``).
+
+    ``all_equal`` mirrors the documented all-equal edge case from the prior
+    client-side ``tierOf()`` helper: when every open_rate in the filtered set
+    is identical (including all-zero, or a filtered set of 0-1 rows), no row
+    is actually distinguishable from its peers — the frontend must render
+    every row as "Mid" rather than let a degenerate 0-width band produce
+    misleading Top/Low chips.
+    """
+
+    low: float = 0.0
+    high: float = 0.0
+    all_equal: bool = True
 
 
 class EmailCampaignsFilterOptions(BaseModel):
@@ -170,5 +195,12 @@ class EmailCampaignsFilterOptions(BaseModel):
 
 class EmailCampaignsResponse(BaseModel):
     campaigns: list[EmailCampaignListRow] = []
+    total: int = 0
+    page: int = 1
+    per_page: int = 50
     summary: EmailCampaignsSummary = EmailCampaignsSummary()
+    tier_thresholds: EmailCampaignsTierThresholds = EmailCampaignsTierThresholds()
+    # Top-5 by the requested sort metric over the WHOLE filtered set (not
+    # just the current page) — powers the "Top campaigns" ranking card.
+    top_campaigns: list[EmailCampaignListRow] = []
     filter_options: EmailCampaignsFilterOptions = EmailCampaignsFilterOptions()

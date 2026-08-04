@@ -6,6 +6,65 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — `GET /email/campaigns` perf: aggregates + pagination moved into SQL (8s → ~1-1.3s)
+
+- Same class of fix already applied to `social.py` (`GET /social/overview`)
+  and `funnels.py` (`GET /funnels/overview`): the endpoint was fetching
+  **every** filtered campaign (2,426 rows × 15 cols) over the Supabase WAN
+  transaction pooler and aggregating/sorting/paginating in Python —
+  measured **7.8s**, under the frontend's 30s abort today but sluggish and
+  on a collision course with that limit as data grows.
+- `backend/app/routes/email.py::get_email_campaigns` now runs 4 independent,
+  filter-scoped SQL queries **concurrently** (`asyncio.gather`, separate
+  `AsyncSessionLocal` sessions per query — mirrors `social.py`'s pattern so
+  each query's pooler round-trip latency overlaps instead of stacking):
+  1. **Summary** — one aggregate query (`COUNT`/`SUM`/`AVG` FILTER, plus
+     `MAX(open_rate)` and `percentile_cont(0.333/0.667)` for the tercile
+     thresholds) over the filtered set. `AVG(...) FILTER (WHERE ... IS NOT
+     NULL)` reproduces the deleted `_summarize_campaigns` helper's exact
+     semantics — a simple mean over non-null rate values, not a
+     recipient-weighted mean.
+  2. **Page** — `ORDER BY` (existing `_resolve_campaigns_sort_by`
+     whitelist) + `LIMIT`/`OFFSET`, using new `page`/`per_page` query
+     params (same idiom as `leads.py`'s list endpoint).
+  3. **Top-5** — its own `ORDER BY <sort_by> DESC LIMIT 5` over the WHOLE
+     filtered set, not just the current page — powers the "Top campaigns"
+     ranking card without a second full fetch.
+  4. **Filter options** — unchanged (already SQL `DISTINCT`), just moved
+     onto its own concurrent session.
+- **Response contract changed** (both sides owned in this change):
+  `EmailCampaignsResponse` gains `total`, `page`, `per_page`, and
+  `top_campaigns`; `EmailCampaignsSummary` gains `max_open_rate`; a new
+  `EmailCampaignsTierThresholds` (`low`, `high`, `all_equal`) replaces the
+  page's client-side tercile computation over whatever rows happened to be
+  loaded. `all_equal` mirrors the prior client-side `tierOf()`'s explicit
+  all-equal → "Mid" edge-case guard (now computed server-side: `NULL`
+  percentile_cont result, or `low == high`).
+- **`backend/app/routes/email.py`**: deleted the pure `_summarize_campaigns`
+  helper — its aggregation now happens in SQL, so there's no Python rollup
+  step left to unit-test in isolation. `backend/tests/test_email_campaigns.py`
+  drops from 15 → 9 tests (the 6 `_summarize_campaigns` tests removed;
+  the `_parse_campaigns_date_param`/`_resolve_campaigns_sort_by` tests are
+  unchanged and still pass).
+- **Frontend** (`frontend/src/app/(app)/marketing/email/page.tsx`): switched
+  from client-side pagination (all rows fetched, sliced in the browser) to
+  real server pagination — added `page`/`per_page` query params via the
+  shared `usePagination` hook + `Pagination` component (same pattern as
+  `/leads` and `/marketing/social`). The Campaigns card now shows "N total"
+  instead of "N shown"; changing a filter resets to page 1. `TopCampaignsCard`
+  now renders the server's `top_campaigns` directly instead of sorting/
+  slicing the current page's rows (which was only ever a same-page top-5
+  before, not a true filtered-set top-5). Per-row `ScoreBar` normalizes
+  against `summary.max_open_rate`; the tercile chip classifies against
+  `tier_thresholds` instead of a client-computed sample.
+- **Verified equivalence**: unfiltered `total=2,426`; new endpoint's summary
+  (count/total_recipients/total_opens/total_clicks/avg_open_rate/
+  avg_click_rate) matches an old-logic-equivalent SQL query run
+  independently; page 2 returns a disjoint row set from page 1; `top_campaigns`
+  matches the first 5 rows of a full-filtered-set fetch sorted by the same
+  metric. Steady-state handler timing (3 repeat runs, post cold-connection):
+  ~1.0–1.3s — well under the 5s target.
+
 ### Added — Social page rebuilt 1:1 from Greg's tracker spec (deliverable 1)
 
 - **New endpoint `GET /social/overview`** (`backend/app/routes/social.py`)

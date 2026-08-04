@@ -460,8 +460,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/email.py": {
-    "mtime": 1785772630.2866757,
-    "ast_hash": "8a8beeb7c7878074baa949f9e37dfeba",
+    "mtime": 1785871122.0803277,
+    "ast_hash": "284ddae518aaa473d6aeb25ce49be81e",
     "semantic_hash": ""
   },
   "backend/app/routes/funnels.py": {
@@ -575,8 +575,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/email.py": {
-    "mtime": 1785772671.5254123,
-    "ast_hash": "9ba1f9ec658fe7d2fdafcfc760f5c616",
+    "mtime": 1785871054.4710276,
+    "ast_hash": "0e375f4a125e2ccd8c0fbb0f7697caa4",
     "semantic_hash": ""
   },
   "backend/app/schemas/funnels.py": {
@@ -960,8 +960,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/email/page.tsx": {
-    "mtime": 1785772687.9067054,
-    "ast_hash": "e3210c1c1cc0dd9cf3e775873dd5ab67",
+    "mtime": 1785871320.28412,
+    "ast_hash": "455725385a26b54b27c7eb9a8e652c4d",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/funnels/page.tsx": {
@@ -1370,8 +1370,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1785779220.0364702,
-    "ast_hash": "f3816e1fcbc1610448c29a0cb98494ba",
+    "mtime": 1785871376.322234,
+    "ast_hash": "89756badb8ff315ba8901a2be2bfa1dc",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1380,8 +1380,8 @@
     "semantic_hash": ""
   },
   "FEATURE-VERIFICATION.md": {
-    "mtime": 1785779268.604067,
-    "ast_hash": "11a29eeda087bbd673f997dc4547cbd4",
+    "mtime": 1785871426.0517228,
+    "ast_hash": "b050d79c63b666ce0c80f74b2df49383",
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
@@ -2614,11 +2614,6 @@
     "ast_hash": "cf232359bf4a5362be9c8ed264951b5c",
     "semantic_hash": ""
   },
-  "IMPLEMENTATION_PLAN.md": {
-    "mtime": 1785092416.1293726,
-    "ast_hash": "555ff460a452e655df2ee8122d90a4fb",
-    "semantic_hash": ""
-  },
   "docs/client-discovery-prompt.md": {
     "mtime": 1785092995.0216718,
     "ast_hash": "5786de0831fcda0687da82ea05dc0545",
@@ -2734,11 +2729,6 @@
     "ast_hash": "ef0c5c299c00168482d5b689f382e028",
     "semantic_hash": ""
   },
-  "backend/app/routes/leads 2.py": {
-    "mtime": 1785758259.0,
-    "ast_hash": "b0f41dc7fe92c17803c7841d1772430e",
-    "semantic_hash": ""
-  },
   "backend/alembic/versions/c0d1e2f3a4b5_add_lead_journey_mirror.py": {
     "mtime": 1785768061.7056563,
     "ast_hash": "7c981453a11fcf57d2290f6897dea784",
@@ -2750,8 +2740,8 @@
     "semantic_hash": ""
   },
   "backend/tests/test_email_campaigns.py": {
-    "mtime": 1785772659.475808,
-    "ast_hash": "de4f78fc016539753c104fb0085ad894",
+    "mtime": 1785871161.8148394,
+    "ast_hash": "874fa75acd8736477db2a9ca316cfe06",
     "semantic_hash": ""
   },
   "backend/app/repositories/funnel_stats.py": {
@@ -2802,6 +2792,11 @@
   "backend/tests/test_social_stats.py": {
     "mtime": 1785783340.281102,
     "ast_hash": "a708267c5a36c719fbb46c2627d19ec6",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-07-27-lead-source-attribution-ui-deliverable-9.md": {
+    "mtime": 1785092416.1293726,
+    "ast_hash": "555ff460a452e655df2ee8122d90a4fb",
     "semantic_hash": ""
   }
 }

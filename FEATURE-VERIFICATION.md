@@ -740,16 +740,25 @@ placeholder values instead of real DB-backed numbers, the Ads generator CTA
 missing or broken, or an empty table rendering as if it were an error
 instead of a quiet "no data yet" placeholder.
 
-## Marketing — Email Campaigns (2026-08-03)
+## Marketing — Email Campaigns (2026-08-03; perf + pagination reworked 2026-08-05)
 
 **Feature:** `/marketing/email` overhaul (deliverable 2). The Compose Email
 feature (page-builder UI at `/marketing/email/compose`) is removed. The page
-now shows a filterable, sortable campaigns table backed by a new
-`GET /email/campaigns` endpoint, plus a per-row visual performance indicator
-(ScoreBar + Top/Mid/Low tercile chip on open_rate) and a "Top campaigns"
-ranking card. `POST /email` (Analyze with AI) and `POST /email/draft` are
-unchanged; the legacy `GET /email` summary endpoint is unchanged (still used
-internally, no longer called by this page).
+now shows a filterable, sortable, **server-paginated** campaigns table backed
+by `GET /email/campaigns`, plus a per-row visual performance indicator
+(ScoreBar + Top/Mid/Low tercile chip on open_rate, SQL-derived) and a "Top
+campaigns" ranking card (SQL top-5 over the whole filtered set). `POST /email`
+(Analyze with AI) and `POST /email/draft` are unchanged; the legacy
+`GET /email` summary endpoint is unchanged (still used internally, no longer
+called by this page).
+
+**2026-08-05 rework:** the endpoint originally fetched all filtered rows and
+aggregated/paginated in Python (7.8s at 2,426 rows). Summary aggregates,
+sort+pagination, tercile thresholds, and the top-5 ranking now all run in SQL
+across 4 concurrent queries (mirrors the `social.py`/`funnels.py` fix) —
+steady-state ~1.0–1.3s. The page now does real server pagination (`page`/
+`per_page`, shared `Pagination` component — same as `/leads` and
+`/marketing/social`) instead of fetching everything and slicing client-side.
 
 **How to locate:** `/marketing/email` — under Marketing in the sidebar.
 
@@ -773,7 +782,9 @@ every row today (column is real, just nothing to show yet).
 2. Confirm the KPI row shows four tiles — **Campaigns**, **Avg Open Rate**,
    **Avg Click Rate**, **Total Recipients** — all with real numbers (not
    "—"), scoped to whatever filter is currently applied (unfiltered on
-   first load, so **Campaigns = 2,426**).
+   first load, so **Campaigns = 2,426**). The Campaigns card header shows
+   "2,426 total" (not "N shown" — the table only renders one page at a
+   time now).
 3. In the filter row, confirm: a search box (name/subject), a **Campaign
    type** select whose options are exactly the 12 real distinct values
    above (never a fabricated option, never an option with 0 matches), a
@@ -806,8 +817,17 @@ every row today (column is real, just nothing to show yet).
    and a ScoreBar — and that changing "Sort by" re-ranks this card using
    the SAME already-fetched data (no extra network call).
 9. Clear all filters (via "Clear filters") — confirm the table returns to
-   all 2,426 rows and the KPI row returns to the unfiltered totals.
-10. Reload the page and watch the loading state — skeleton tiles/rows
+   showing "2,426 total" and the KPI row returns to the unfiltered totals.
+10. Scroll to the bottom of the Campaigns table — confirm a **Pagination**
+    control (rows-per-page select, "X–Y of 2,426", Previous/Next, Go-to-page)
+    is present, matching the `/leads` and `/marketing/social` pagination UI.
+    Click **Next** — confirm the table swaps to a different set of rows via
+    a fresh server call (`page` param increments) and the row count label
+    stays "2,426 total". Change **Rows per page** — confirm it snaps back to
+    page 1 and the table re-fetches at the new page size. Change any filter
+    (search, date range, type, status) while on page 2+ — confirm it snaps
+    back to page 1 rather than showing an empty page.
+11. Reload the page and watch the loading state — skeleton tiles/rows
     should render briefly, never a blank screen or native
     `alert()`/`confirm()` dialog.
 
@@ -817,11 +837,13 @@ type/status filters narrow both the table and the KPI row together; sort
 toggles work via server round-trip and match the leads-table interaction
 pattern; every row shows a ScoreBar + tercile chip that visibly correlates
 with relative open_rate; the Top-campaigns card re-ranks correctly off the
-selected metric within the current filtered range. **Fail:** any Compose
-Email UI remnant reachable, a filter option that matches 0 rows, KPI row
-not rescoping with filters, sort clicks doing nothing or hitting the wrong
-column, or the performance indicator showing a fixed/fake value unrelated
-to the row's real open_rate.
+selected metric across the WHOLE filtered range (not just the visible page);
+the Pagination control navigates pages via fresh server calls and resets to
+page 1 on a filter change. **Fail:** any Compose Email UI remnant reachable,
+a filter option that matches 0 rows, KPI row not rescoping with filters,
+sort clicks doing nothing or hitting the wrong column, the performance
+indicator showing a fixed/fake value unrelated to the row's real open_rate,
+or pagination controls missing/non-functional.
 
 ## CI Insights — full filters, source attribution, expanded charts (2026-08-03)
 

@@ -10,6 +10,7 @@ Sprint 3a / CI-MKT-EMAIL
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -21,7 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser, get_current_user
-from app.database import get_session
+from app.database import AsyncSessionLocal, get_session
 from app.repositories.marketing import EmailCampaignRepository
 from app.schemas.email import (
     CampaignDetailResponse,
@@ -34,6 +35,7 @@ from app.schemas.email import (
     EmailCampaignsFilterOptions,
     EmailCampaignsResponse,
     EmailCampaignsSummary,
+    EmailCampaignsTierThresholds,
     EmailDataResponse,
     EmailDraftRequest,
     EmailDraftResponse,
@@ -320,29 +322,36 @@ def _resolve_campaigns_sort_by(sort_by: str) -> str:
     return sort_by if sort_by in _CAMPAIGNS_SORTABLE_COLUMNS else "sent_at"
 
 
-def _summarize_campaigns(campaigns: list["EmailCampaignListRow"]) -> "EmailCampaignsSummary":
-    """Aggregate totals/averages over a list of campaign rows.
+def _row_from_mapping(r) -> EmailCampaignListRow:
+    """Map one raw SQL row (mapping) to an ``EmailCampaignListRow``.
 
-    Pure function — no DB access — so it can be unit-tested directly with
-    plain ``EmailCampaignListRow`` instances. Averages are computed only over
-    rows with a non-null rate (matches the route's prior inline behavior);
-    an empty list returns all-zero fields rather than raising or dividing by
-    zero.
+    Shared by the page query and the top-5 query — both select the same
+    column set from ``email_campaigns``.
     """
-    count = len(campaigns)
-    total_recipients = sum(c.recipients_count for c in campaigns)
-    total_opens = sum(c.open_count for c in campaigns)
-    total_clicks = sum(c.click_count for c in campaigns)
-    open_rates = [c.open_rate for c in campaigns if c.open_rate is not None]
-    click_rates = [c.click_rate for c in campaigns if c.click_rate is not None]
-    return EmailCampaignsSummary(
-        count=count,
-        total_recipients=total_recipients,
-        total_opens=total_opens,
-        total_clicks=total_clicks,
-        avg_open_rate=round(sum(open_rates) / len(open_rates), 2) if open_rates else 0.0,
-        avg_click_rate=round(sum(click_rates) / len(click_rates), 2) if click_rates else 0.0,
+    return EmailCampaignListRow(
+        id=str(r["id"]),
+        name=r["name"],
+        subject=r["subject"],
+        campaign_type=r["campaign_type"],
+        status=r["status"],
+        sent_at=r["sent_at"].isoformat() if r["sent_at"] else None,
+        audience_name=r["audience_name"],
+        recipients_count=_int(r["recipients_count"]),
+        open_count=_int(r["open_count"]),
+        click_count=_int(r["click_count"]),
+        unsubscribe_count=_int(r["unsubscribe_count"]),
+        bounce_count=_int(r["bounce_count"]),
+        open_rate=_float(r["open_rate"]) if r["open_rate"] is not None else None,
+        click_rate=_float(r["click_rate"]) if r["click_rate"] is not None else None,
+        archive_url=r["archive_url"],
     )
+
+
+_CAMPAIGN_ROW_COLUMNS = (
+    "id, name, subject, campaign_type, status, sent_at, audience_name, "
+    "recipients_count, open_count, click_count, unsubscribe_count, "
+    "bounce_count, open_rate, click_rate, archive_url"
+)
 
 
 @router.get("/campaigns", response_model=EmailCampaignsResponse)
@@ -358,21 +367,31 @@ async def get_email_campaigns(
     search: str | None = Query(default=None, description="Search name or subject (ILIKE)"),
     sort_by: str = Query(default="sent_at", description="Column to sort by"),
     sort_dir: Literal["asc", "desc"] = Query(default="desc", description="Sort direction"),
+    page: int = Query(default=1, ge=1, description="Page number (1-based)"),
+    per_page: int = Query(default=20, ge=1, le=200, description="Results per page"),
     session: AsyncSession = Depends(get_session),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> EmailCampaignsResponse:
-    """Return campaigns with metric filters, a date range, and server sort.
+    """Return a paginated campaign page plus filtered-set aggregates.
 
     Powers the rebuilt /marketing/email page: filter row (search, date range,
-    campaign type, status, sort-by-metric), the sortable campaigns table, the
-    per-row visual performance indicator (ScoreBar + tercile chip, computed
-    client-side against this filtered set's max open_rate), and the "Top
-    campaigns" ranking card (client-side top-5 slice of the same response).
+    campaign type, status, sort-by-metric), a server-paginated sortable
+    campaigns table, the per-row visual performance indicator (ScoreBar +
+    tercile chip against SQL-derived thresholds), and the "Top campaigns"
+    ranking card (SQL top-5 over the WHOLE filtered set, not just the page).
+
+    Perf (2026-08-05): originally fetched ALL filtered rows (2,426 x 15 cols)
+    over the Supabase WAN pooler and aggregated/sorted/paginated in Python —
+    7.8s. Mirrors the fix already applied to ``social.py``/``funnels.py``:
+    aggregate/sort/paginate in SQL, run the independent filtered-set queries
+    concurrently (own session each) so their pooler round-trip latencies
+    overlap instead of stacking.
     """
     logger.info(
         "get_email_campaigns called — user=%s sent_from=%s sent_to=%s "
-        "campaign_type=%s status=%s search=%s sort_by=%s sort_dir=%s",
-        current_user.id, sent_from, sent_to, campaign_type, status, search, sort_by, sort_dir,
+        "campaign_type=%s status=%s search=%s sort_by=%s sort_dir=%s page=%s per_page=%s",
+        current_user.id, sent_from, sent_to, campaign_type, status, search,
+        sort_by, sort_dir, page, per_page,
     )
 
     # ---- Validate / sanitise params (all bind-safe or whitelisted) --------
@@ -399,78 +418,152 @@ async def get_email_campaigns(
         where_sql += " AND (name ILIKE :search OR subject ILIKE :search)"
         params["search"] = f"%{search}%"
 
-    # ---- Filtered rows ------------------------------------------------------
-    rows = (
-        await session.execute(
-            text(
-                f"""
-                SELECT
-                    id, name, subject, campaign_type, status, sent_at,
-                    audience_name, recipients_count, open_count, click_count,
-                    unsubscribe_count, bounce_count, open_rate, click_rate,
-                    archive_url
-                FROM email_campaigns
-                WHERE {where_sql}
-                ORDER BY {sort_by} {sort_dir} NULLS LAST, id ASC
-                """  # noqa: S608 — where_sql/sort_by built from fixed whitelists above
-            ),
-            params,
-        )
-    ).mappings().all()
+    offset = (page - 1) * per_page
 
-    campaigns = [
-        EmailCampaignListRow(
-            id=str(r["id"]),
-            name=r["name"],
-            subject=r["subject"],
-            campaign_type=r["campaign_type"],
-            status=r["status"],
-            sent_at=r["sent_at"].isoformat() if r["sent_at"] else None,
-            audience_name=r["audience_name"],
-            recipients_count=_int(r["recipients_count"]),
-            open_count=_int(r["open_count"]),
-            click_count=_int(r["click_count"]),
-            unsubscribe_count=_int(r["unsubscribe_count"]),
-            bounce_count=_int(r["bounce_count"]),
-            open_rate=_float(r["open_rate"]) if r["open_rate"] is not None else None,
-            click_rate=_float(r["click_rate"]) if r["click_rate"] is not None else None,
-            archive_url=r["archive_url"],
-        )
-        for r in rows
-    ]
+    # ---- Four independent, filter-scoped queries run CONCURRENTLY, each on
+    # its own pooler connection — same pattern as social.py's /overview fix.
+    # None depends on another's result, so no data race.
+    #
+    # 1. Summary — ONE aggregate query over the filtered set: COUNT, SUMs,
+    #    simple-mean AVGs (matches the prior Python `_summarize_campaigns`
+    #    semantics exactly — AVG over non-null rate values, not a
+    #    recipient-weighted mean), MAX(open_rate), plus the tercile cut
+    #    points via percentile_cont(0.333/0.667) WITHIN GROUP.
+    # 2. Page — SQL ORDER BY (whitelisted) + LIMIT/OFFSET, only the
+    #    requested page.
+    # 3. Top-5 — SQL ORDER BY the SAME sort_by metric DESC (ranking card is
+    #    always "best first" regardless of the table's current sort_dir,
+    #    matching the prior client-side `metricValue(b) - metricValue(a)`
+    #    behavior) + LIMIT 5, over the whole filtered set.
+    # 4. Filter options — distinct campaign_type/status values, unfiltered
+    #    (data-driven dropdowns; never offer a 0-match option).
 
-    # ---- Summary over the FILTERED set --------------------------------------
-    summary = _summarize_campaigns(campaigns)
+    async def _fetch_summary() -> dict:
+        async with AsyncSessionLocal() as s:
+            row = (
+                await s.execute(
+                    text(
+                        f"""
+                        SELECT
+                            COUNT(*) AS count,
+                            COALESCE(SUM(recipients_count), 0) AS total_recipients,
+                            COALESCE(SUM(open_count), 0) AS total_opens,
+                            COALESCE(SUM(click_count), 0) AS total_clicks,
+                            COALESCE(AVG(open_rate) FILTER (WHERE open_rate IS NOT NULL), 0) AS avg_open_rate,
+                            COALESCE(AVG(click_rate) FILTER (WHERE click_rate IS NOT NULL), 0) AS avg_click_rate,
+                            COALESCE(MAX(open_rate), 0) AS max_open_rate,
+                            percentile_cont(0.333) WITHIN GROUP (ORDER BY open_rate) AS tier_low,
+                            percentile_cont(0.667) WITHIN GROUP (ORDER BY open_rate) AS tier_high
+                        FROM email_campaigns
+                        WHERE {where_sql}
+                        """  # noqa: S608 — where_sql built from a fixed whitelist above
+                    ),
+                    params,
+                )
+            ).mappings().one()
+            return dict(row)
 
-    # ---- Filter options — distinct values actually present (unfiltered) ---
-    # Data-driven per the leads page philosophy: never offer a dropdown
-    # option with zero matching rows.
-    type_rows = (
-        await session.execute(
-            text(
-                "SELECT DISTINCT campaign_type FROM email_campaigns "
-                "WHERE deleted_at IS NULL AND campaign_type IS NOT NULL "
-                "ORDER BY campaign_type"
+    async def _fetch_page() -> list[dict]:
+        rows = (
+            await session.execute(
+                text(
+                    f"""
+                    SELECT {_CAMPAIGN_ROW_COLUMNS}
+                    FROM email_campaigns
+                    WHERE {where_sql}
+                    ORDER BY {sort_by} {sort_dir} NULLS LAST, id ASC
+                    LIMIT :limit OFFSET :offset
+                    """  # noqa: S608 — where_sql/sort_by built from fixed whitelists above
+                ),
+                {**params, "limit": per_page, "offset": offset},
             )
-        )
-    ).scalars().all()
-    status_rows = (
-        await session.execute(
-            text(
-                "SELECT DISTINCT status FROM email_campaigns "
-                "WHERE deleted_at IS NULL AND status IS NOT NULL "
-                "ORDER BY status"
-            )
-        )
-    ).scalars().all()
+        ).mappings().all()
+        return [dict(r) for r in rows]
+
+    async def _fetch_top5() -> list[dict]:
+        async with AsyncSessionLocal() as s:
+            rows = (
+                await s.execute(
+                    text(
+                        f"""
+                        SELECT {_CAMPAIGN_ROW_COLUMNS}
+                        FROM email_campaigns
+                        WHERE {where_sql}
+                        ORDER BY {sort_by} DESC NULLS LAST, id ASC
+                        LIMIT 5
+                        """  # noqa: S608 — where_sql/sort_by built from fixed whitelists above
+                    ),
+                    params,
+                )
+            ).mappings().all()
+            return [dict(r) for r in rows]
+
+    async def _fetch_filter_options() -> tuple[list[str], list[str]]:
+        async with AsyncSessionLocal() as s:
+            type_rows = (
+                await s.execute(
+                    text(
+                        "SELECT DISTINCT campaign_type FROM email_campaigns "
+                        "WHERE deleted_at IS NULL AND campaign_type IS NOT NULL "
+                        "ORDER BY campaign_type"
+                    )
+                )
+            ).scalars().all()
+            status_rows = (
+                await s.execute(
+                    text(
+                        "SELECT DISTINCT status FROM email_campaigns "
+                        "WHERE deleted_at IS NULL AND status IS NOT NULL "
+                        "ORDER BY status"
+                    )
+                )
+            ).scalars().all()
+            return list(type_rows), list(status_rows)
+
+    summary_row, page_rows, top5_rows, (type_rows, status_rows) = await asyncio.gather(
+        _fetch_summary(), _fetch_page(), _fetch_top5(), _fetch_filter_options(),
+    )
+
+    campaigns = [_row_from_mapping(r) for r in page_rows]
+    top_campaigns = [_row_from_mapping(r) for r in top5_rows]
+
+    total = _int(summary_row["count"])
+    summary = EmailCampaignsSummary(
+        count=total,
+        total_recipients=_int(summary_row["total_recipients"]),
+        total_opens=_int(summary_row["total_opens"]),
+        total_clicks=_int(summary_row["total_clicks"]),
+        avg_open_rate=round(_float(summary_row["avg_open_rate"]), 2),
+        avg_click_rate=round(_float(summary_row["avg_click_rate"]), 2),
+        max_open_rate=_float(summary_row["max_open_rate"]),
+    )
+
+    tier_low = summary_row["tier_low"]
+    tier_high = summary_row["tier_high"]
+    # All-equal (including the empty-set / single-distinct-value case, where
+    # percentile_cont degenerates to a single repeated value, and the
+    # zero-rows case where both are NULL) — mirrors the prior client-side
+    # `tierOf()`'s explicit all-equal -> "Mid" guard.
+    all_equal = tier_low is None or tier_high is None or _float(tier_low) == _float(tier_high)
+    tier_thresholds = EmailCampaignsTierThresholds(
+        low=_float(tier_low),
+        high=_float(tier_high),
+        all_equal=all_equal,
+    )
+
     filter_options = EmailCampaignsFilterOptions(
-        campaign_types=list(type_rows),
-        statuses=list(status_rows),
+        campaign_types=type_rows,
+        statuses=status_rows,
     )
 
     return EmailCampaignsResponse(
         campaigns=campaigns,
+        total=total,
+        page=page,
+        per_page=per_page,
         summary=summary,
+        tier_thresholds=tier_thresholds,
+        top_campaigns=top_campaigns,
         filter_options=filter_options,
     )
 
