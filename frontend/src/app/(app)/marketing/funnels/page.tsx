@@ -1,134 +1,57 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { KpiCard, KpiRow } from "@/components/ui/kpi-card";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
+import { channelLabel, channelBadgeClasses } from "@/lib/lead-display";
 
-// ─── API response types ──────────────────────────────────────────────────────
+// ─── API response types (GET /funnels/overview — deliverable 3) ────────────
 
-interface FunnelStageStats {
-  funnel_id: string;
+interface FunnelOverviewStage {
   stage: string;
-  event_count: number;
-  conversion_rate: number | null;
-  updated_at: string;
+  label: string;
+  count: number;
+  pct_of_leads: number;
+  conversion_from_previous: number | null;
 }
 
-interface FunnelData {
-  stages: FunnelStageStats[];
+interface FunnelChannelRow {
+  channel: string;
+  platform: string | null;
+  reportable: boolean;
+  leads: number;
+  registered: number;
+  watched: number;
+  booked_appt: number;
+  discovery_held: number;
+  closed: number;
+  lead_to_close_pct: number;
+}
+
+interface FunnelOverviewResponse {
+  overall: FunnelOverviewStage[];
+  by_channel: FunnelChannelRow[];
   generated_at: string;
 }
 
-// ─── KPI data ─────────────────────────────────────────────────────────────────
-
-interface KpiTile {
-  label: string;
-  value: string;
-  sub?: string;
-}
-
-function buildKpiTiles(stages: FunnelStageStats[]): KpiTile[] {
-  if (stages.length === 0) {
-    return [
-      { label: "Total Leads", value: "—" },
-      { label: "Converted", value: "—" },
-      { label: "Conversion Rate", value: "—" },
-      { label: "Stages", value: "—" },
-    ];
-  }
-  const topStage = stages.reduce((max, s) => (s.event_count > max.event_count ? s : max), stages[0]);
-  const bottomStage = stages.reduce((min, s) => (s.event_count < min.event_count ? s : min), stages[0]);
-  const rate = topStage.event_count > 0
-    ? ((bottomStage.event_count / topStage.event_count) * 100).toFixed(1)
-    : "0";
-  return [
-    { label: "Top of Funnel", value: topStage.event_count.toLocaleString(), sub: topStage.stage },
-    { label: "Converted", value: bottomStage.event_count.toLocaleString(), sub: bottomStage.stage },
-    { label: "Overall Conversion", value: `${rate}%` },
-    { label: "Stages", value: stages.length.toString() },
-  ];
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function groupByFunnel(data: FunnelData | null): Map<string, FunnelStageStats[]> {
-  const map = new Map<string, FunnelStageStats[]>();
-  if (!data) return map;
-  for (const s of data.stages) {
-    const arr = map.get(s.funnel_id) ?? [];
-    arr.push(s);
-    map.set(s.funnel_id, arr);
-  }
-  return map;
-}
-
-function formatFunnelId(id: string): string {
-  return id
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-// ─── Funnel stage styling ─────────────────────────────────────────────────────
+// ─── Stage bar color ramp — same emerald language as the prior page ─────────
 
 const STAGE_COLORS = [
   { bgClass: "bg-emerald-100", textClass: "text-emerald-800" },
   { bgClass: "bg-emerald-200", textClass: "text-emerald-800" },
   { bgClass: "bg-emerald-300", textClass: "text-emerald-900" },
-  { bgClass: "bg-emerald-500", textClass: "text-white" },
+  { bgClass: "bg-emerald-400", textClass: "text-emerald-900" },
+  { bgClass: "bg-emerald-600", textClass: "text-white" },
   { bgClass: "bg-emerald-700", textClass: "text-white" },
 ];
 
-// ─── Stale data indicator ─────────────────────────────────────────────────────
+// ─── Overall funnel visual — horizontal stage bars ──────────────────────────
 
-interface StaleIndicatorProps {
-  lastUpdatedAt?: string | null;
-}
-
-function StaleIndicator({ lastUpdatedAt }: StaleIndicatorProps) {
-  let display = "—";
-  if (lastUpdatedAt) {
-    try {
-      const d = new Date(lastUpdatedAt);
-      display = d.toLocaleString(undefined, {
-        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-      });
-    } catch {
-      display = lastUpdatedAt;
-    }
-  }
-
-  return (
-    <div className="inline-flex items-center gap-1.5 text-xs text-gray-400">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        className="w-3.5 h-3.5 flex-shrink-0"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </svg>
-      <span>
-        Last updated:{" "}
-        <span className="tabular-nums">{display}</span>
-      </span>
-    </div>
-  );
-}
-
-// ─── Funnel visualization card ────────────────────────────────────────────────
-
-function FunnelVisualizationCard({ stages }: { stages: FunnelStageStats[] }) {
-  const maxCount = stages.length > 0 ? Math.max(...stages.map((s) => s.event_count)) : 1;
+function FunnelOverviewCard({ stages }: { stages: FunnelOverviewStage[] }) {
+  const maxCount = stages.length > 0 ? Math.max(...stages.map((s) => s.count), 1) : 1;
 
   return (
     <Card>
@@ -137,150 +60,154 @@ function FunnelVisualizationCard({ stages }: { stages: FunnelStageStats[] }) {
         action={
           <span className="text-xs text-gray-400">
             {stages.length > 0
-              ? `${formatFunnelId(stages[0].stage)} to ${formatFunnelId(stages[stages.length - 1].stage)}`
+              ? `${stages[0].label} → ${stages[stages.length - 1].label}`
               : "No data"}
           </span>
         }
       />
       <CardBody>
-        <div className="flex flex-col items-center gap-1.5">
-          {stages.map((stage, index) => {
-            const widthPct = maxCount > 0 ? Math.max((stage.event_count / maxCount) * 100, 20) : 100;
-            const colors = STAGE_COLORS[index % STAGE_COLORS.length];
-            const prevCount = index > 0 ? stages[index - 1].event_count : null;
-            const dropOff = prevCount !== null && prevCount > 0
-              ? `${((1 - stage.event_count / prevCount) * 100).toFixed(1)}%`
-              : null;
-            const stageName = stage.stage.replace(/_/g, " ");
+        {stages.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">
+            No lead journey data available for this range.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {/* Stage label lives OUTSIDE the bar in a fixed column — bars for
+                late stages shrink to slivers (Closed is 0.6% of Leads), and a
+                label inside the bar truncated to "Cl…" (readability bug,
+                2026-08-04). The bar itself stays proportional & centered so
+                the funnel taper still reads; counts/percentages keep their
+                own fixed columns on the right. */}
+            {stages.map((stage, index) => {
+              const widthPct = maxCount > 0 ? Math.max((stage.count / maxCount) * 100, 2) : 100;
+              const colors = STAGE_COLORS[index % STAGE_COLORS.length];
 
-            return (
-              <div
-                key={stage.stage}
-                className="flex flex-col items-center w-full group/stage relative"
-                style={{ maxWidth: `${widthPct}%` }}
-              >
-                {/* Hover tooltip */}
-                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 pointer-events-none group-hover/stage:opacity-100 group-hover/stage:pointer-events-auto transition-opacity duration-150 z-10">
-                  <div className="bg-gray-900 text-white rounded-lg px-4 py-3 shadow-lg whitespace-nowrap text-xs">
-                    <p className="font-bold capitalize text-sm mb-1.5">{stageName}</p>
-                    <div className="flex flex-col gap-1 text-gray-300">
-                      <span>
-                        Count:{" "}
-                        <span className="text-white font-semibold tabular-nums">
-                          {stage.event_count.toLocaleString()}
-                        </span>
-                      </span>
-                      {stage.conversion_rate !== null && (
-                        <span>
-                          Conv. Rate:{" "}
-                          <span className="text-white font-semibold tabular-nums">
-                            {stage.conversion_rate.toFixed(1)}%
-                          </span>
-                        </span>
-                      )}
-                      {dropOff !== null && (
-                        <span>
-                          Drop-off:{" "}
-                          <span className="text-red-300 font-semibold tabular-nums">
-                            {dropOff}
-                          </span>
-                        </span>
-                      )}
+              return (
+                <div key={stage.stage} className="flex flex-col w-full">
+                  <div className="w-full flex items-center gap-3">
+                    <span className="w-28 flex-shrink-0 text-right text-xs font-bold tracking-wide text-gray-700">
+                      {stage.label}
+                    </span>
+                    <div className="flex-1 min-w-0 flex justify-center">
+                      <div
+                        className={`rounded-lg py-2.5 cursor-default ${colors.bgClass}`}
+                        style={{ width: `${widthPct}%` }}
+                        title={`${stage.label}: ${stage.count.toLocaleString()}`}
+                      />
                     </div>
-                  </div>
-                  {/* Arrow */}
-                  <div className="flex justify-center">
-                    <div className="w-2 h-2 bg-gray-900 rotate-45 -mt-1" />
-                  </div>
-                </div>
-
-                {/* Bar + inline stats */}
-                <div className="w-full flex items-center gap-3">
-                  <div
-                    className={`flex-1 rounded-lg flex items-center justify-center px-4 py-2.5 min-w-0 cursor-default ${colors.bgClass}`}
-                  >
-                    <span className={`text-xs font-bold tracking-wide capitalize truncate ${colors.textClass}`}>
-                      {stageName}
+                    <span className="text-xs font-semibold tabular-nums text-gray-700 flex-shrink-0 w-20 text-right">
+                      {stage.count.toLocaleString()}
+                    </span>
+                    <span className="text-[10px] font-medium tabular-nums text-gray-400 flex-shrink-0 w-14 text-right">
+                      {stage.pct_of_leads.toFixed(1)}%
+                    </span>
+                    <span className="text-[10px] font-medium tabular-nums text-gray-400 flex-shrink-0 w-16 text-right">
+                      {stage.conversion_from_previous !== null
+                        ? `${stage.conversion_from_previous.toFixed(1)}% conv.`
+                        : "—"}
                     </span>
                   </div>
-                  <span className="text-xs font-semibold tabular-nums text-gray-700 flex-shrink-0">
-                    {stage.event_count.toLocaleString()}
-                  </span>
-                  {stage.conversion_rate !== null && (
-                    <span className="text-[10px] font-medium tabular-nums text-gray-400 flex-shrink-0">
-                      {stage.conversion_rate.toFixed(1)}%
-                    </span>
+                  {index < stages.length - 1 && (
+                    <div className="w-px h-1.5 bg-emerald-200 self-center" aria-hidden="true" />
                   )}
                 </div>
-                {index < stages.length - 1 && (
-                  <div className="w-px h-1.5 bg-emerald-200" aria-hidden="true" />
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-4 flex items-center gap-4 text-[10px] text-gray-400 font-medium uppercase tracking-wide">
-          <span>Stage</span>
-          <span className="ml-auto">Count</span>
-          <span>Conv. Rate</span>
+              );
+            })}
+          </div>
+        )}
+        <div className="mt-4 flex items-center gap-3 text-[10px] text-gray-400 font-medium uppercase tracking-wide">
+          <span className="w-28 text-right">Stage</span>
+          <span className="ml-auto w-20 text-right">Count</span>
+          <span className="w-14 text-right">% of Leads</span>
+          <span className="w-16 text-right">Step Conv.</span>
         </div>
       </CardBody>
     </Card>
   );
 }
 
-// ─── Funnel performance table card ────────────────────────────────────────────
+// ─── Channel breakdown table ─────────────────────────────────────────────────
 
-function FunnelPerformanceCard({ stages }: { stages: FunnelStageStats[] }) {
+function ChannelBreakdownCard({ rows }: { rows: FunnelChannelRow[] }) {
   return (
     <Card>
       <CardHeader
-        title="Funnel Performance"
-        action={<span className="text-xs text-gray-400">{stages.length} stages</span>}
+        title="Funnel by Channel"
+        action={<span className="text-xs text-gray-400">{rows.length} channels</span>}
       />
       <CardBody noPadding>
-        <table className="w-full text-sm" aria-label="Funnel performance by stage">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                Stage
-              </th>
-              <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                Events
-              </th>
-              <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                Conv. Rate
-              </th>
-              <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                Drop-off
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {stages.map((stage, index) => {
-              const prevCount = index > 0 ? stages[index - 1].event_count : null;
-              const dropOff = prevCount !== null && prevCount > 0
-                ? `${((1 - stage.event_count / prevCount) * 100).toFixed(1)}%`
-                : "—";
-              return (
-                <tr key={stage.stage} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 text-sm font-medium text-gray-800 capitalize">
-                    {stage.stage.replace(/_/g, " ")}
-                  </td>
-                  <td className="px-5 py-3 text-sm text-right tabular-nums text-gray-600">
-                    {stage.event_count.toLocaleString()}
-                  </td>
-                  <td className="px-5 py-3 text-sm text-right tabular-nums text-gray-600">
-                    {stage.conversion_rate !== null ? `${stage.conversion_rate.toFixed(1)}%` : "—"}
-                  </td>
-                  <td className="px-5 py-3 text-sm text-right tabular-nums text-gray-600">
-                    {dropOff}
-                  </td>
+        {rows.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">
+            No channel data available for this range.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" aria-label="Funnel stage counts by channel">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    Channel
+                  </th>
+                  <th className="text-right px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    Leads
+                  </th>
+                  <th className="text-right px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    Registered
+                  </th>
+                  <th className="text-right px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    Watched
+                  </th>
+                  <th className="text-right px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    Booked Appt
+                  </th>
+                  <th className="text-right px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    Discovery Held
+                  </th>
+                  <th className="text-right px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    Closed
+                  </th>
+                  <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    Lead → Close %
+                  </th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {rows.map((row) => (
+                  <tr key={row.channel} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-5 py-3">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${channelBadgeClasses(row.channel)}`}
+                      >
+                        {channelLabel(row.channel)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-gray-700">
+                      {row.leads.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-gray-600">
+                      {row.registered.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-gray-600">
+                      {row.watched.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-gray-600">
+                      {row.booked_appt.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-gray-600">
+                      {row.discovery_held.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums font-semibold text-gray-900">
+                      {row.closed.toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3 text-right tabular-nums text-gray-700">
+                      {row.lead_to_close_pct.toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </CardBody>
     </Card>
   );
@@ -291,39 +218,26 @@ function FunnelPerformanceCard({ stages }: { stages: FunnelStageStats[] }) {
 function FunnelsPageSkeleton() {
   return (
     <main className="flex-1 overflow-y-auto p-7 space-y-6">
-      {/* Heading skeleton */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <Skeleton className="h-6 w-28" />
           <Skeleton className="h-4 w-96 mt-2" />
         </div>
-        <Skeleton className="h-4 w-36" />
+        <Skeleton className="h-8 w-64" />
       </div>
 
-      {/* KPI tiles skeleton */}
-      <div className="grid grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col gap-2">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-7 w-16" />
-          </div>
-        ))}
-      </div>
-
-      {/* Funnel visualization skeleton */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <Skeleton className="h-4 w-28" />
           <Skeleton className="h-3 w-32" />
         </div>
         <div className="px-5 py-6 flex flex-col items-center gap-2">
-          {[100, 80, 60, 40, 20].map((w) => (
-            <Skeleton key={w} className="h-9 rounded-lg" style={{ width: `${w}%` }} />
+          {[100, 88, 62, 22, 8, 5].map((w, i) => (
+            <Skeleton key={i} className="h-9 rounded-lg" style={{ width: `${w}%` }} />
           ))}
         </div>
       </div>
 
-      {/* Performance table skeleton */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <Skeleton className="h-4 w-36" />
@@ -334,6 +248,8 @@ function FunnelsPageSkeleton() {
             <div key={i} className="flex items-center gap-4 px-5 py-3">
               <Skeleton className="h-4 w-28" />
               <Skeleton className="h-4 w-14 ml-auto" />
+              <Skeleton className="h-4 w-14" />
+              <Skeleton className="h-4 w-14" />
               <Skeleton className="h-4 w-14" />
               <Skeleton className="h-4 w-14" />
             </div>
@@ -348,9 +264,10 @@ function FunnelsPageSkeleton() {
 
 export default function FunnelsPage() {
   const { isLoading: authLoading } = useAuth();
-  const [data, setData] = useState<FunnelData | null>(null);
+  const [data, setData] = useState<FunnelOverviewResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedFunnel, setSelectedFunnel] = useState<string | null>(null);
+  const [entryFrom, setEntryFrom] = useState("");
+  const [entryTo, setEntryTo] = useState("");
 
   useEffect(() => {
     if (authLoading) return;
@@ -358,20 +275,19 @@ export default function FunnelsPage() {
     let cancelled = false;
 
     async function fetchData(): Promise<void> {
+      setIsLoading(true);
       try {
-        const result = await apiClient.get<FunnelData>("/funnels", {
-          silent: true,
-        });
-        if (!cancelled) {
-          setData(result);
-          // Auto-select the first funnel
-          const funnelIds = Array.from(new Set(result.stages.map((s) => s.funnel_id)));
-          if (funnelIds.length > 0 && !selectedFunnel) {
-            setSelectedFunnel(funnelIds[0]);
-          }
-        }
+        const params = new URLSearchParams();
+        if (entryFrom) params.set("entry_from", entryFrom);
+        if (entryTo) params.set("entry_to", entryTo);
+        const qs = params.toString();
+        const result = await apiClient.get<FunnelOverviewResponse>(
+          `/funnels/overview${qs ? `?${qs}` : ""}`,
+          { silent: true },
+        );
+        if (!cancelled) setData(result);
       } catch {
-        // On error, data stays null — page renders with "—" fallbacks.
+        // On error, data stays null — page renders with quiet empty states.
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -379,14 +295,9 @@ export default function FunnelsPage() {
 
     void fetchData();
     return () => { cancelled = true; };
-  }, [authLoading]);
+  }, [authLoading, entryFrom, entryTo]);
 
-  const funnelMap = groupByFunnel(data);
-  const funnelIds = Array.from(funnelMap.keys());
-  const activeStages = selectedFunnel ? (funnelMap.get(selectedFunnel) ?? []) : [];
-  const kpiTiles = buildKpiTiles(activeStages);
-
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <>
         <Header title="Funnels" />
@@ -395,52 +306,59 @@ export default function FunnelsPage() {
     );
   }
 
+  const hasFilters = entryFrom !== "" || entryTo !== "";
+
   return (
     <>
       <Header title="Funnels" />
 
       <main className="flex-1 overflow-y-auto p-7 space-y-6">
-        {/* Page heading + funnel selector + stale indicator */}
+        {/* Page heading + date range filter */}
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Funnels</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Funnel stage metrics, conversion rates, and stage-by-stage drop-off.
+              Lead journey stages from entry through close, sliceable by channel.
             </p>
           </div>
-          <div className="flex items-center gap-4 flex-shrink-0 mt-1">
-            {funnelIds.length > 1 && (
-              <select
-                value={selectedFunnel ?? ""}
-                onChange={(e) => setSelectedFunnel(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          <div className="flex items-center gap-1.5 text-gray-500 flex-shrink-0 mt-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide shrink-0">
+              Entered
+            </span>
+            <input
+              type="date"
+              aria-label="Entered on or after"
+              value={entryFrom}
+              max={entryTo || undefined}
+              onChange={(e) => setEntryFrom(e.target.value)}
+              className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 text-gray-600"
+            />
+            <span className="text-gray-300">–</span>
+            <input
+              type="date"
+              aria-label="Entered on or before"
+              value={entryTo}
+              min={entryFrom || undefined}
+              onChange={(e) => setEntryTo(e.target.value)}
+              className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 text-gray-600"
+            />
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={() => { setEntryFrom(""); setEntryTo(""); }}
+                className="px-2.5 py-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
               >
-                {funnelIds.map((id) => (
-                  <option key={id} value={id}>
-                    {formatFunnelId(id)}
-                  </option>
-                ))}
-              </select>
+                Clear
+              </button>
             )}
-            <StaleIndicator lastUpdatedAt={data?.generated_at ?? null} />
           </div>
         </div>
 
-        {/* Row 1: KPI tiles */}
-        <section aria-label="Funnel KPIs">
-          <KpiRow>
-            <KpiCard label={kpiTiles[0].label} value={kpiTiles[0].value} sub={kpiTiles[0].sub} borderColor="#10B981" />
-            <KpiCard label={kpiTiles[1].label} value={kpiTiles[1].value} sub={kpiTiles[1].sub} borderColor="#F59E0B" />
-            <KpiCard label={kpiTiles[2].label} value={kpiTiles[2].value} sub={kpiTiles[2].sub} borderColor="#3B82F6" />
-            <KpiCard label={kpiTiles[3].label} value={kpiTiles[3].value} sub={kpiTiles[3].sub} borderColor="#F97316" />
-          </KpiRow>
-        </section>
+        {/* Row 1: Overall funnel visual */}
+        <FunnelOverviewCard stages={data?.overall ?? []} />
 
-        {/* Row 2: Funnel visualization + AI suggestions */}
-        <FunnelVisualizationCard stages={activeStages} />
-
-        {/* Row 3: Funnel performance table */}
-        <FunnelPerformanceCard stages={activeStages} />
+        {/* Row 2: Channel breakdown table */}
+        <ChannelBreakdownCard rows={data?.by_channel ?? []} />
       </main>
     </>
   );

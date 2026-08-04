@@ -260,12 +260,22 @@ class InsightSummary(BaseModel):
     signal_family: str | None = None
     signal: str | None = None
     signal_strength: str | None = None
+    pain_layer: str | None = None
     raw_quote: str | None = None
     marketing_translation: str | None = None
     hook_angle_example: str | None = None
     best_use_case: str | None = None
     quote_confidence: str | None = None
     frequency_score: int = 1
+    created_at: datetime | None = None
+    # Source attribution — every insight has a call_id today (100% coverage),
+    # so "source" always resolves to a call. If other source types are added
+    # later (emails, docs) they'll need their own columns; this stays additive.
+    call_date: datetime | None = None
+    call_type: str | None = None
+    lead_id: str | None = None
+    lead_name: str | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class InsightListResponse(BaseModel):
@@ -277,12 +287,19 @@ class InsightFacets(BaseModel):
     """Distinct filterable values actually present in the insights table.
 
     Drives the insights-page filter dropdowns so the available options can
-    never drift from the data the analyzer/WGR sync produce.
+    never drift from the data the analyzer/WGR sync produce. Fields with a
+    single distinct value (or with essentially free-text cardinality, like
+    `best_use_case`) are intentionally omitted — a dropdown with one option
+    or a thousand isn't a filter, it's noise.
     """
 
     insight_type: list[str]
     signal_family: list[str]
     signal_strength: list[str]
+    pain_layer: list[str]
+    # Source labels ("Call · <call_type>", "Other") — drives the table's
+    # Source filter; same label contract as InsightDistribution.by_source.
+    source: list[str] = Field(default_factory=list)
 
 
 class InsightCount(BaseModel):
@@ -318,6 +335,11 @@ class InsightDistribution(BaseModel):
     by_insight_type: list[InsightCount]
     by_signal_family: list[InsightCount]
     by_signal_strength: list[InsightCount]
+    by_pain_layer: list[InsightCount]
+    # Where the insights came from — "Call · <call_type>" labels ("Other" for
+    # any future non-call source). Defaulted so older cached clients tolerate
+    # its absence (dict/schema lock-step convention).
+    by_source: list[InsightCount] = Field(default_factory=list)
     top_signals: list[InsightTopSignal]
 
 
@@ -463,11 +485,23 @@ class MarketSignalItem(BaseModel):
     last_30_days: int = 0
     last_7_days: int = 0
     example_quote: str | None = None
+    example_call_id: str | None = None
     best_marketing_angle: str | None = None
+    notes: str | None = None
+    updated_at: datetime | None = None
+    # Momentum = recent 7d rate vs. the prior-23d average within the 30d window
+    # (last_30_days - last_7_days spread over 23 days). None only when
+    # last_30_days is 0 (no activity at all in the window — nothing to
+    # compare). See `_momentum()` in routes/ci.py: live data caps
+    # last_30_days at 2, so this is a coarse directional read, not a precise
+    # rate — the frontend renders it as a "picking up / steady / cooling
+    # off" chip, never a literal percentage.
+    momentum: float | None = None
 
 
 class MarketSignalListResponse(BaseModel):
     data: list[MarketSignalItem]
+    total: int = 0
 
 
 class MarketSignalFacets(BaseModel):

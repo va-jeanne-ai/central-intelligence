@@ -1,5 +1,9 @@
 """One-time (or repeatable) WGR → CI backfill driver.
 
+NOTE: legacy bulk_load path — does NOT cover the attribution-era tables
+(attribution_taxonomy, lead_engagements, meta_*); for those use
+``sync_wgr(since='full')`` (attribution spec, r4 audit catch).
+
 Runs the full idempotent sync directly (no Celery worker needed). Safe to
 re-run. ``--dry-run`` only reports WGR source counts vs current CI counts so you
 can eyeball the expected load before writing.
@@ -53,6 +57,17 @@ async def dry_run() -> None:
 
 
 def execute() -> None:
+    # Refuse to run while a sync run holds the lock — this loader writes the
+    # same tables the task syncs (attribution plan Task 5b).
+    import redis as _redis_lib
+
+    from app.tasks.wgr_sync import LOCK_KEY, _redis
+    try:
+        if _redis().exists(LOCK_KEY):
+            sys.exit("a WGR sync run holds the lock — wait for it (or its TTL) "
+                     "before bulk-loading")
+    except (_redis_lib.exceptions.RedisError, OSError):
+        pass  # redis down → no task can be running either
     # Sync psycopg2 bulk loader — robust over the transaction pooler (the async
     # path hangs on sustained multi-batch writes).
     from app.services.wgr_sync import bulk_load

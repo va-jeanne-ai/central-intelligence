@@ -74,22 +74,14 @@ These were already wired before this sprint. The seeded data from Step 1 means d
 - **API:** `GET /api/v1/leads`, `GET /api/v1/leads/stats`
 
 ### F4 — CI Insights
-- **Status:** ✅ **verified-as-empty (2026-05-19)** — wiring confirmed, table empty by design (blocked on F19)
+- **Status:** ✅ **superseded (2026-08-03)** — table populated (1,932 rows), full filters + source attribution shipped. See **"CI Insights — full filters, source attribution, expanded charts (2026-08-03)"** near the end of this doc for the current verification steps.
 - **URL:** `/ci-insights`
-- **Finding:** `insights` table has 0 rows. The page is fully wired (paginated, filterable, live API) but has nothing to display because no transcripts have been processed through the extraction pipeline. The extraction pipeline is F19 (`call_analyzer` Celery task — net-new work).
-- **What was verified:**
-  - [x] `GET /api/v1/ci/insights` returns 200 OK after the F32 JWT fix
-  - [x] Page renders empty state cleanly (no errors)
-- **To unblock:** F19 (build the Sales Call Analyzer extraction task)
-- **API:** `GET /api/v1/ci/insights`, `GET /api/v1/ci/insights/{id}`
+- **API:** `GET /api/v1/ci/insights`, `GET /api/v1/ci/insights/facets`, `GET /api/v1/ci/insights/summary`, `GET /api/v1/ci/insights/{id}`
 
 ### F5 — Market Signals
-- **Status:** ✅ **verified-as-empty (2026-05-19)** — wiring confirmed, table empty by design (blocked on F19)
+- **Status:** ✅ **superseded (2026-08-03)** — table populated (1,961 rows), redesigned as a trending view. See **"Market Signals — filters + trending redesign (2026-08-03)"** near the end of this doc for the current verification steps.
 - **URL:** `/ci-market-signals`
-- **Finding:** `market_signals` table has 0 rows. Same situation as F4 — page is fully wired, empty because no insights have been extracted yet to aggregate from.
-- **What was verified:**
-  - [x] `GET /api/v1/ci/market-signals` returns 200 OK after the F32 JWT fix
-- **To unblock:** F19
+- **API:** `GET /api/v1/ci/market-signals`, `GET /api/v1/ci/market-signals/facets`
 
 ### F6 — Central Intelligence Chat
 - **Status:** ✅ **verified-working (2026-05-19)**
@@ -123,13 +115,9 @@ These were already wired before this sprint. The seeded data from Step 1 means d
 - **Note:** this is the most complete user-facing feature in the app. Every other CRUD page should follow this page's pattern.
 
 ### F9 — Offers library (read-only)
-- **Status:** ✅ **verified-as-empty (2026-05-19)** — wiring OK, `offers` table has 0 rows
+- **Status:** ✅ **superseded (2026-08-04)** — main listing now shows the real WGR offer catalog + revenue. See **"Marketing — Offers (real WGR catalog, deliverable 5)"** near the end of this doc for current verification steps.
 - **URL:** `/marketing/offers`
-- **What was verified:**
-  - [x] Page renders cleanly with empty library + 0 KPI counts (no crash, no error)
-  - [x] `GET /api/v1/offers` returns 200 OK
-- **To unblock:** F18 (offer builder save handler) — once F18 ships, creating offers via the builder will populate this library.
-- **API:** `GET /api/v1/offers`
+- **API:** `GET /api/v1/offers/catalog` (new); legacy `GET /api/v1/offers` (app-CRUD test data) untouched, still backs the builder's create flow.
 
 ### F10 — Marketing overview hub
 - **Status:** ✅ **verified-working (2026-05-19)**
@@ -535,3 +523,729 @@ After each session, count:
   - F24 ICP "Generate" is fire-and-forget; no task-status polling.
   - F24 ICP UI/backend schema mismatch (industry, criteria, matchScore vs segment, demographics, psychographics, is_primary). Mapped what I could; full schema alignment deferred.
   - F13 content-ideas POST has ~5s latency from local Mac → Supabase ap-southeast-2 pooler. Optimistic rendering would mask it.
+
+## WGR Attribution Data Sync (2026-07-26)
+
+**Feature:** CI now mirrors Greg's attribution data: per-lead first/last-touch
+UTMs + GHL contact id, the attribution taxonomy (UTM → canonical channel,
+with a read-time resolver at `backend/app/services/attribution.py`),
+attribution touches (`lead_engagements`), and Meta Ads campaigns/ads/daily
+performance. Sync runs are serialized by a Redis lock; manual partial pulls
+no longer advance the watermark.
+
+**How to locate:** backend data only for now (the Leads/Sales UI ships in the
+next ticket, ClickUp 86d3u65cb). Verify via DB or API.
+
+**Steps:**
+1. Run the probe: `cd backend && PYTHONPATH=. .venv/bin/python -m
+   scripts.probe_wgr_attribution` — connection identity must say `ci_reader`,
+   every table OK. Note the WGR-side counts.
+2. In CI's DB (Supabase table editor or psql): `attribution_taxonomy`,
+   `meta_campaigns`, `meta_ads`, `meta_ad_performance` row counts are > 0 and
+   match the probe's WGR counts (2026-07-26 reference: 27 / 29 / 472 / 635).
+   `lead_engagements` is expected EMPTY until Greg's email-attribution flow
+   starts producing — not a failure.
+3. Pick a lead you know came from Instagram or email — its row in `leads`
+   shows `utm_source_last` (first-touch coverage is sparse upstream: ~85 of
+   12k leads; last-touch ~2.4k — expected).
+4. Wait for (or trigger) the hourly sync; `sync_log` shows the new tables
+   syncing without errors, and a second concurrent trigger returns
+   `run lock not acquired`.
+
+**Pass:** counts match WGR's; a known lead carries UTM values; concurrent
+runs skip cleanly. **Fail:** any mirrored table empty while WGR has rows
+(except lead_engagements), sync errors in sync_log, or probe reports a role
+other than ci_reader.
+
+## Lead & Sales Source Attribution (2026-08-03)
+
+**Feature:** The Leads UI now surfaces the read-time canonical channel from
+the WGR attribution sync (previous section): a Channel column + filter and
+channel breakdown donut on `/leads`, and a full-width Attribution card on
+lead detail showing raw first/last-touch UTMs. `/sales/summary` inherits the
+same breakdown since it shares `compute_lead_stats` with `/leads/stats`.
+Channel is computed per-request, never stored.
+
+**Sales half (deliverable 9b, added 2026-08-03):** `/leads` also gains a
+**Revenue by Channel** card — `closed_sales.amount_collected` attributed to
+the same canonical channel buckets, scoped by `close_date` via the page's
+existing date-range filter. `GET /sales/summary` gains an unscoped
+`revenue_by_channel` key with the same shape.
+
+**How to locate:**
+- **`/leads`** — the main Leads Dashboard.
+- **`/leads/{lead_id}`** — click any row from the leads list to open detail.
+- **`/sales`** — redirects straight to `/leads`; there is no separate Sales
+  page to check. Verify the channel breakdown via `GET /sales/summary`
+  directly (or trust `/leads/stats`, since both endpoints share the same
+  `compute_lead_stats` breakdown code).
+
+**Before you start:** with real data, expect `"No attribution"` to be the
+*largest* bucket on both `/leads` and `/sales/summary` — only ~87 of 12,656
+`source='wgr'` leads have first-touch UTMs and ~2,447 have last-touch UTMs
+(~20% coverage). A dashboard mostly showing "No attribution" is correct
+behavior, not a bug.
+
+**Steps:**
+1. Open `/leads`. Confirm a **Channel** column appears in the table, right
+   of Name. (The old Source column and its filter were removed 2026-08-03 —
+   channel is the meaningful axis; provenance `source` still shows on the
+   lead detail Contact card and stays in the API.) Each row shows a colored
+   chip (e.g.
+   "Facebook Ads", "Email", "No attribution"). Any chip reading
+   `unmapped:<source>/<medium>` or `"other unmapped"` renders with an amber
+   warning tint, not the normal chip color — that's the taxonomy
+   surface-loudly contract working as intended.
+2. Look at the source/channel breakdown donut on `/leads`. Confirm its
+   segments are now canonical channel names (not raw `leads.source` values
+   like `wgr`/`ghl`), and that segment counts sum to the total lead count
+   shown elsewhere on the page.
+3. In the FilterBar, open the **Channel** filter. Its options are the same
+   buckets as the Source Breakdown donut, each with its dataset-wide count
+   (e.g. `meta_paid (714)`, `No attribution (10,187)`). Pick `meta_paid` and
+   confirm: the table shows only meta_paid-chip rows, AND the
+   "Showing X of Y" total drops to that bucket's count (the filter runs
+   server-side across all leads, not just the loaded page) — pagination
+   walks the full filtered set. Picking `Non-marketing` shows rows whose
+   chips carry the specific non-marketing value (e.g. `system_workflow`) —
+   the bucket is the rollup, the chip is the exact resolution.
+3b. Confirm there is **no** Source dropdown in the FilterBar — only Search,
+   Channel, Status, and the date range. (Removed 2026-08-03: with channel
+   live, the provenance source filter was redundant on this page. The API's
+   `source` param and `available_sources` field remain for API consumers.)
+4. Pick a lead you can identify as having attribution data (from step 1's
+   chips, choose a row NOT showing "No attribution") and open its detail
+   page (`/leads/{lead_id}`). Confirm a full-width **Attribution** card
+   appears showing a First touch row and a Last touch row of raw UTM values
+   (source/medium/campaign/content) plus the resolved channel chip.
+5. Pick a different lead whose list-page Channel chip read "No attribution"
+   and open its detail page. Confirm the Attribution card does **not**
+   render at all (hidden, not shown empty) — all 8 UTM fields are null for
+   that lead.
+5b. **Journey card (added 2026-08-03).** On the same detail pages, look for
+   the full-width **Journey** card (between Attribution and Tags). Most WGR
+   leads have one — 11,556 of 12,818 have webinar activity. Check: (a) a
+   lead who watched the webinar shows Registered date, Watched live/replay
+   Yes/No, and a watch time like "24m 38s"; (b) a lead with appointments
+   shows an "Appointments (N)" section with first/last dates, last outcome,
+   and booked-by; (c) a closed lead (filter Channel or use a known buyer)
+   shows a green "Closed $X" chip in the card header plus close date and
+   days-to-close in the Sales section; (d) a lead with no journey activity
+   shows **no** Journey card at all (hidden, not empty). Data refreshes with
+   the nightly WGR sync (snapshot reconcile — upstream rebuilds propagate,
+   including deletions).
+6. Navigate to `/sales`. Confirm it redirects immediately to `/leads` (no
+   separate Sales page renders).
+7. Call `GET /api/v1/sales/summary` directly (e.g. via the browser devtools
+   Network tab while on `/leads`, or curl with an auth token) and confirm
+   its breakdown list uses the same channel buckets as `/leads/stats` —
+   canonical channels, `"No attribution"`, `"Non-marketing"`, and
+   `unmapped:*` — with counts summing to the endpoint's total.
+8. **Revenue by Channel (deliverable 9b).** On `/leads`, scroll below the
+   Source Breakdown donut and confirm a **Revenue by Channel** card renders:
+   each row shows a channel chip (same styling as the table's Channel
+   column — amber for `unmapped:*`/`"other unmapped"`), a sales count, a
+   dollar revenue figure (no decimals), and a % share of the range's total
+   revenue. The card header shows the total revenue + sales count for the
+   selected date range.
+9. Clear all filters/date range (or set the range to "All time") and
+   confirm the card's total revenue reads **$471,250** across **83 sales**
+   — this is `closed_sales.amount_collected` summed across every closed
+   sale, the revenue source of truth (the `lead_journey` mirror disagrees
+   at $422,750; that's a known, un-reconciled discrepancy — `closed_sales`
+   is authoritative). Confirm `"No attribution"` is the largest bucket by
+   revenue (only 11 of the 83 buying leads carry any UTMs) — that is
+   expected, not a bug.
+10. Narrow the date range to a smaller window (e.g. one month) and confirm
+   the card's total revenue and sales count both drop to a subset of the
+   all-time figures, and the row set only shows channels with sales in that
+   window (or the card shows its quiet "No closed sales in this range"
+   empty state if none fall inside it).
+11. Call `GET /api/v1/leads/stats` directly and confirm the JSON includes a
+   `revenue_by_channel` array with `channel`, `platform`, `reportable`,
+   `sales_count`, `revenue`, and `revenue_percentage` keys per bucket, and
+   that `GET /sales/summary`'s `revenue_by_channel` (unscoped) sums to the
+   same $471,250 / 83 sales as step 9.
+
+**Pass:** Channel column + chips render on `/leads` with amber tint on
+unmapped entries; donut segments are canonical channels summing to the
+total; Channel filter narrows the loaded rows; Attribution card shows raw
+UTMs + channel on leads with data and is absent (not empty) on leads
+without; `/sales` still redirects to `/leads`; `/sales/summary` and
+`/leads/stats` share the same bucket set; Revenue by Channel card renders
+with all-time totals of $471,250 / 83 sales, "No attribution" dominant, and
+a scoped date range narrows both figures to a subset. **Fail:** any of the
+above missing, chip colors not distinguishing unmapped from mapped
+channels, donut/filter counts not summing to the total, `/sales/summary`
+diverging from `/leads/stats`'s bucket shape, or the Revenue by Channel
+totals not matching $471,250 / 83 sales unscoped.
+
+## Marketing — Ads (real data) (2026-08-03)
+
+**Feature:** `/marketing/ads` no longer shows a hardcoded platform-breakdown
+widget (Google/Facebook/Instagram/TikTok rows that always read "—"). The
+page now renders straight from the WGR Meta Ads mirror — real campaigns, ads,
+and daily performance snapshots — via a new `GET /ads/overview` endpoint. The
+legacy `GET /ads` (ads_stats summary) and the `POST /ads` Analyze-with-AI /
+ad-copy-generator flow are unchanged.
+
+**How to locate:** `/marketing/ads` — the main Ads page under Marketing in
+the sidebar.
+
+**Before you start:** live counts as of 2026-08-03 are 29 campaigns, 472
+ads, 647 performance snapshot rows — but only **7 of the 472 ads** currently
+carry any performance data (the rest are identity-only: name, format,
+status, hook, no spend yet). A Top Ads table showing exactly 7 rows (not 15)
+is correct, not a bug. Most campaigns will show $0 spend / 0 leads for the
+same reason — that's real data, not a rendering error.
+
+**Steps:**
+1. Open `/marketing/ads`. Confirm the **Platform Breakdown** card (rows for
+   Google Ads / Facebook Ads / Instagram Ads / TikTok Ads, all showing "—")
+   is gone entirely — there is no per-platform table at all now.
+2. Confirm the KPI row shows four tiles with real numbers, not "—":
+   **Active Campaigns** (14 of 29 total), **Total Spend** (~$17,006 as of
+   2026-08-03 — will grow as sync continues), **Cost / Lead**, and **CTR**
+   with an impressions sub-label. All four carry the marketing green
+   (`#10B981`) top border.
+3. Look at the **Campaigns** table. Confirm it lists real campaign names
+   (e.g. "AK - new webinar", "WFM - Originals") — not placeholders — each
+   with a status chip (Active/Paused), objective, budget (daily or
+   lifetime, whichever the campaign has set), spend, leads, cost-per-lead,
+   and an ads count. Rows are sorted by spend descending; the top row should
+   be "AK - new webinar" (~$17,006 spend, 62 ads) at time of writing.
+4. Look at the **Top Ads by Spend** table. Confirm each row shows a real ad
+   name, its parent campaign name, ad format (e.g. "Video_Reel"), a status
+   chip, a KPI-status chip (Scale/Watch/Kill — some cells legitimately blank
+   since `kpi_status` is null on ~60% of performance rows), spend, leads,
+   and cost-per-lead. Hover a hook-text cell that's truncated — the full
+   hook shows in the tooltip. Hover a row for an ad with a `kill_date` set —
+   the kill reason (e.g. "$80.94 spent, 0 leads ever — >3x kill threshold...")
+   shows in the tooltip.
+5. Confirm the **Generate Ad Copy** CTA card (right column, row 2) is still
+   present and its "Generate Copy" button still links to
+   `/marketing/ads/generator` — this is the preserved Analyze-with-AI
+   affordance, untouched by this change.
+6. Reload the page and watch the loading state — skeleton tiles/rows should
+   render briefly, never a spinner-only or blank screen, and never native
+   `alert()`/`confirm()` dialogs.
+
+**Pass:** Platform Breakdown widget is gone; KPI tiles show real (non-"—")
+numbers matching the DB; Campaigns table lists real campaign identity +
+rollup data sorted by spend; Top Ads table shows up to 15 real ads with
+spend-derived metrics and working hover tooltips for hook text and kill
+reasons; the Ad Copy Generator CTA still works. **Fail:** Platform
+Breakdown widget still present, any KPI/table showing fabricated or
+placeholder values instead of real DB-backed numbers, the Ads generator CTA
+missing or broken, or an empty table rendering as if it were an error
+instead of a quiet "no data yet" placeholder.
+
+## Marketing — Email Campaigns (2026-08-03)
+
+**Feature:** `/marketing/email` overhaul (deliverable 2). The Compose Email
+feature (page-builder UI at `/marketing/email/compose`) is removed. The page
+now shows a filterable, sortable campaigns table backed by a new
+`GET /email/campaigns` endpoint, plus a per-row visual performance indicator
+(ScoreBar + Top/Mid/Low tercile chip on open_rate) and a "Top campaigns"
+ranking card. `POST /email` (Analyze with AI) and `POST /email/draft` are
+unchanged; the legacy `GET /email` summary endpoint is unchanged (still used
+internally, no longer called by this page).
+
+**How to locate:** `/marketing/email` — under Marketing in the sidebar.
+
+**Before you start — audit numbers as of 2026-08-03 (read-only, live DB):**
+`email_campaigns` has **2,426 rows**, all `deleted_at IS NULL`. **`status`
+has exactly one distinct value: `sent`** — every row. There are **zero**
+drafts and **zero** archived campaigns in the real database (those only
+ever existed via the now-removed Compose flow), which is why the old
+Drafts/Archived sections are gone rather than kept empty. `campaign_type`
+has **12 distinct values**: Value/Education (648), Weekly Nurture (441),
+Story-led (366), Launch (312), Transactional (307), Promotional Offer
+(160), Client Win (94), Welcome/Onboarding (41), Re-engagement (35),
+Unclassifiable (17), `regular` (2), and 3 rows with `campaign_type = NULL`.
+`sent_at` ranges from 2016-07-25 to 2026-08-02. `bounce_count` is 0 on
+every row today (column is real, just nothing to show yet).
+
+**Steps:**
+1. Open `/marketing/email`. Confirm there is **no Compose Email card and no
+   "+ New Campaign" / "+ New Draft" button anywhere on the page** — the
+   feature is fully removed, not just hidden.
+2. Confirm the KPI row shows four tiles — **Campaigns**, **Avg Open Rate**,
+   **Avg Click Rate**, **Total Recipients** — all with real numbers (not
+   "—"), scoped to whatever filter is currently applied (unfiltered on
+   first load, so **Campaigns = 2,426**).
+3. In the filter row, confirm: a search box (name/subject), a **Campaign
+   type** select whose options are exactly the 12 real distinct values
+   above (never a fabricated option, never an option with 0 matches), a
+   **Status** select (will show only **"sent"** — correct, since that's
+   the only real value), a **Sent** date-range pair, and a **Sort by**
+   metric select (Date sent, Sent/Recipients, Opens, Clicks, Open rate,
+   Click rate, Unsubscribes, Bounces).
+4. Type a campaign name fragment into search (e.g. "webinar") — confirm the
+   table narrows to matching rows within ~300ms (debounced) and the KPI
+   row's counts shrink to match the filtered set, not the full unfiltered
+   total.
+5. Set the Sent date range to a narrow recent window (e.g. 2026-07-01 to
+   2026-08-02) — confirm the table and KPI row rescope to that window only,
+   and the **Top campaigns** card (left column) re-ranks using only
+   campaigns sent in that window.
+6. Click a sortable column header (Recipients, Opens, Clicks, Unsubs,
+   Bounces, or the Sent date header) — confirm it toggles ascending/
+   descending (▲/▼ indicator) and the table re-sorts via a fresh server
+   call (`sort_by`/`sort_dir` params), matching the leads table's
+   click-to-sort behavior.
+7. Confirm every row shows a **ScoreBar** in the rightmost "Performance"
+   column, filled proportional to that row's open_rate relative to the
+   filtered set's max open_rate, plus a small **Top / Mid / Low** chip.
+   Sort by Open rate descending — confirm the top rows carry "Top" chips
+   and the bottom rows carry "Low" chips (tercile split within the
+   currently filtered set, not a fixed global threshold).
+8. Confirm the **"Top campaigns"** card shows exactly 5 rows (or fewer if
+   the filtered set has under 5), ranked #1–#5 by whichever metric is
+   selected in "Sort by", each with a name, the metric's formatted value,
+   and a ScoreBar — and that changing "Sort by" re-ranks this card using
+   the SAME already-fetched data (no extra network call).
+9. Clear all filters (via "Clear filters") — confirm the table returns to
+   all 2,426 rows and the KPI row returns to the unfiltered totals.
+10. Reload the page and watch the loading state — skeleton tiles/rows
+    should render briefly, never a blank screen or native
+    `alert()`/`confirm()` dialog.
+
+**Pass:** Compose Email is fully gone (no card, no CTA, no route reachable);
+filter dropdowns only ever show real, non-empty options; search/date-range/
+type/status filters narrow both the table and the KPI row together; sort
+toggles work via server round-trip and match the leads-table interaction
+pattern; every row shows a ScoreBar + tercile chip that visibly correlates
+with relative open_rate; the Top-campaigns card re-ranks correctly off the
+selected metric within the current filtered range. **Fail:** any Compose
+Email UI remnant reachable, a filter option that matches 0 rows, KPI row
+not rescoping with filters, sort clicks doing nothing or hitting the wrong
+column, or the performance indicator showing a fixed/fake value unrelated
+to the row's real open_rate.
+
+## CI Insights — full filters, source attribution, expanded charts (2026-08-03)
+
+**Feature:** `/ci-insights` (deliverable 6). Note: there is a **separate**
+`/insights` page (core department health metrics/recommendations engine,
+`frontend/src/app/(app)/insights/`) — unrelated to this work, not touched.
+The routed, sidebar-linked page for this deliverable is `/ci-insights`
+(`Marketing → CI Insights` in the sidebar).
+
+**Before you start — audit numbers as of 2026-08-03 (read-only, live DB):**
+`insights` has **1,932 rows**. `insight_type`: Pain 948, Goal 510, Objection
+275, Trigger 191, Win 3, Identity 2, Belief 2, Buying Signal 1 (8 distinct —
+dropdown). `signal_family`: 30 distinct values (Time & Freedom 408, Income &
+Money 405, Identity & Status 382, Skills & Competency 279, Life
+Circumstances 184, Relationships 118, Market & Industry 112, plus 23 smaller
+buckets — dropdown). `signal_strength`: Strong 1024, Moderate 826, Weak 80,
+Medium 2 (4 distinct — dropdown). `pain_layer`: 958 rows NULL, then
+Structural 352, Emotional 192, Identity 184, Belief 157, Tactical 53, Social
+31, Strategic 5 (7 real distinct values once NULLs excluded — dropdown).
+`best_use_case` has **1,019 distinct values** — free-text cardinality,
+**no dropdown** (confirmed via audit, not guessed). `insight_tags` has 4,051
+rows over **2,774 distinct tags** — also too high-cardinality for a
+dropdown; exposed as a free-text exact-match filter. `call_id` is **100%**
+populated (0 NULLs) — every insight's "source" resolves to its call.
+
+**Steps:**
+1. Open `/ci-insights`. Confirm the charts grid at the top still shows the
+   original insight-type donut, signal-strength bars, and top-signals bars
+   — nothing removed — **plus two new/kept charts**: "Top signal families"
+   and a new **"Pain layer breakdown"** horizontal-bar chart.
+2. Confirm the filter row (above the insights list) has: a **Search** box,
+   **Insight Type**, **Signal Family**, **Signal Strength**, **Pain Layer**
+   dropdowns (options must be exactly the real distinct values from the
+   audit above — never a fabricated option), a free-text **Tag** input, and
+   a **Generated** date-range pair (two `<input type="date">`s).
+3. Unfiltered, confirm the list total reads **1,932** and the table is
+   paginated (not a raw dump of all 1,932 rows on one page).
+4. Set Insight Type = `Pain` and a Generated range of `2026-06-17` to
+   `2026-07-01` — confirm the total narrows (well below 1,932) and every
+   visible row's insight-type pill reads "Pain".
+5. Type a Signal Family filter and confirm the charts above rescope too
+   (charts are filter-aware, keyed on the same params as the list — not a
+   static unfiltered summary).
+6. Type a tag fragment used in the data (e.g. `time-freedom`, `burnout`) into
+   the Tag field — confirm the list narrows via the `insight_tags` join
+   (debounced ~300ms) and each visible row's tag chips include the typed
+   tag.
+7. Confirm each insight row shows a **source-attribution line** (📞 icon,
+   call type · lead name · call date) below the quote, and that clicking it
+   navigates to `/sales-calls/{call_id}` (or `/coaching-calls/{call_id}`
+   when the call's `call_type` is "Coaching") — a real link, not a dead
+   span.
+8. Clear all filters — confirm the list returns to 1,932 total and the
+   charts return to the unfiltered distribution.
+
+**Pass:** filter dropdowns only ever show real, non-empty audit-derived
+options (never `best_use_case` or the full tag list as a dropdown); list +
+charts stay in lock-step under every filter combination; the table is
+paginated, never an unpaginated 1,932-row dump; every row's source line
+resolves to a working call-detail link; empty/loading states render cleanly
+with no native `alert()`/`confirm()`. **Fail:** a filter matching 0 rows
+presented as a real option, charts frozen on the unfiltered set while the
+list is filtered, a source line with no link or a 404 target, or any
+unpaginated full-table render.
+
+## Market Signals — filters + trending redesign (2026-08-03)
+
+**Feature:** `/ci-market-signals` (deliverable 7). Redesigned from a flat,
+sortable card grid into a "Trending" view that reads as informative data
+rather than raw aggregate output.
+
+**Before you start — audit numbers as of 2026-08-03 (read-only, live DB):**
+`market_signals` has **1,961 rows**. `insight_type`: Pain 963, Goal 517,
+Objection 278, Trigger 195, Win 3, Belief 2, Identity 2, Buying Signal 1 (8
+distinct). `signal_family`: 30 distinct values (matches `insights`).
+`total_mentions` ranges **0 to 3** across all 1,961 rows (avg ≈ 1).
+`last_30_days` ranges **0 to 2** (1,083 rows at 0, 877 at 1, 1 at 2);
+`last_7_days` is always 0 or 1. This is a genuinely low-volume, near-binary
+dataset today, which is why momentum is computed with a plain "was there any
+activity in the 30d window" guard (`last_30_days > 0`, not a minimum-sample
+threshold — an earlier draft gated on `total_mentions < 3` and returned
+`None`/"Not enough data" for every single row; verified fixed below) and the
+page renders it as a directional chip ("picking up" / "steady" / "cooling
+off"), never a literal percentage that would overstate a 1-to-2-mention jump
+as "+100%". **878 of 1,961 rows (44.8%) get a real momentum value** on live
+data as of this fix. There is **no `created_at`** on this table (it's a
+rolling aggregate keyed on `(signal_family, signal)`, recomputed in place) —
+the date-range filter here scopes `updated_at` instead.
+
+**Steps:**
+1. Open `/ci-market-signals`. Confirm the page subtitle and layout read as
+   a "trending" view, not a raw list — each card should lead with a
+   **momentum chip** ("↑ Picking up" / "→ Steady" / "↓ Cooling off" / "Not
+   enough data"), not just a bare mention count.
+2. Sort by Momentum (the default) and scan the first couple pages — confirm
+   you see a genuine **mix** of "↑ Picking up" and "↓ Cooling off" chips, not
+   "Not enough data" on every single card (that was the pre-fix bug: the
+   guard checked `total_mentions < 3`, which is never satisfied by real data,
+   so every card showed "Not enough data" and the stat strip always read
+   0 picking up / 0 cooling off). With the corrected guard, ~45% of all
+   signals get a real chip.
+3. Confirm the filter row has: **Search**, **Insight Type**, **Signal
+   Family** dropdowns (real distinct values only), a **Min Mentions**
+   number input, an **Updated** date-range pair, and a **Sort By** select
+   whose default is **Momentum**.
+4. Confirm a stat strip appears between the filter row and the card grid
+   showing total signals tracked, how many are picking up, and how many are
+   cooling off (on the current page) — these should be non-zero now.
+5. Set Min Mentions = `2` — confirm the shown count narrows (audit found
+   **6** signals with `total_mentions >= 2`) and every visible card's total
+   mentions is ≥ 2.
+6. Switch Sort By to **Last 7 Days**, then **Last 30 Days**, then back to
+   **Momentum** — confirm the card order changes each time via a fresh
+   server call (not a client-side re-sort of stale data), and confirm
+   Momentum sort still responds quickly (it's a single indexed `ORDER BY` in
+   SQL now, not a fetch-everything-then-sort-in-Python pass).
+7. Confirm `best_marketing_angle` renders as a highlighted callout (💡
+   marker) above the example quote, not buried below it.
+8. Find a card whose `example_quote` is long — confirm it's truncated with
+   a "Read more" toggle rather than dumped in full; click it and confirm it
+   expands in place (no modal, no native dialog).
+9. Clear all filters — confirm the page returns to the unfiltered set
+   (**1,961** total) and Sort By resets to Momentum.
+10. With a filter combination that matches nothing, confirm the empty state
+    is quiet (icon + one short message), not a jarring blank page or error.
+
+**Pass:** momentum reads as plain language, never a bare/misleading
+percentage; filters (search, insight type, signal family, min mentions,
+updated range) all narrow the set correctly via server round-trips; sort
+changes always re-fetch rather than silently reordering cached data;
+`best_marketing_angle` is visually prominent; long quotes collapse behind a
+toggle; empty states are quiet. **Fail:** a momentum chip showing a raw
+percentage on a 1-to-2-mention signal, a filter option with 0 real matches,
+sort appearing to do nothing, or a raw unbounded quote dump.
+
+## Marketing — Funnels (real data, deliverable 3) (2026-08-04)
+
+**Feature:** `/marketing/funnels` no longer shows the seed-data
+`funnel_events`/`funnel_stats` funnels (`coaching-program-v2`,
+`webinar-apr-2026` — those tables are empty dead scaffolding, left in place
+untouched). The page now derives the real funnel from the `lead_journey`
+mirror (1 row per lead, 12,820 rows) via a new `GET /funnels/overview`
+endpoint: leads → registered → watched → booked appt → discovery held →
+closed, sliceable by channel using the same resolver machinery
+(`build_resolver` / `bucket_channel_combos`) the Leads and Sales pages use.
+
+**How to locate:** `/marketing/funnels` — under Marketing in the sidebar.
+
+**Before you start:** unfiltered totals as of 2026-08-04 are **12,820
+leads → 11,557 registered (90.1%) → 6,872 watched (53.6%) → 1,289 booked
+appt (10.1%) → 183 discovery held (1.4%) → 83 closed (0.6%)**. These numbers
+must match exactly (they're a direct predicate count over `lead_journey`,
+not an estimate).
+
+**Steps:**
+1. Open `/marketing/funnels`. Confirm the old two-funnel selector
+   (`coaching-program-v2` / `webinar-apr-2026`) is gone — there's a single
+   funnel visual now, no dropdown.
+2. Confirm the **Funnel Stages** card shows six horizontal bars in order
+   (Leads, Registered, Watched, Booked Appt, Discovery Held, Closed), each
+   with a count, a "% of Leads" figure, and a "step conversion" figure
+   (conversion from the immediately preceding stage). Leftmost/top bar
+   (Leads) shows 12,820 with no step-conversion figure (there's no previous
+   stage). Closed shows 83 (0.6% of leads).
+3. Confirm the **Funnel by Channel** table below lists channel chips (reusing
+   the same chip styling as `/leads` — amber tint for `unmapped:*`/"other
+   unmapped" dialects) with per-channel stage counts and a lead→close %
+   column. Rows are ordered by leads count descending. The sum of the
+   `leads` column across all rows should equal 12,820; the sum of `closed`
+   should equal 83.
+4. Use the **Entered** date-range filter (top right) to pick a narrower
+   window (e.g. 2026-01-01 to 2026-06-30). Confirm the funnel bars and
+   channel table re-fetch and show smaller, internally consistent numbers
+   (each stage's count is always ≤ the previous stage's — a 2026 H1 slice
+   was manually verified at 2,882 leads → 2,653 registered → 1,530 watched →
+   347 booked → 81 discovery held → 13 closed). Click "Clear" to return to
+   the unfiltered view.
+5. Reload the page and watch the loading state — skeleton bars/rows render
+   briefly, never a spinner-only or blank screen, never native
+   `alert()`/`confirm()` dialogs.
+
+**Pass:** the old seed-funnel selector is gone; unfiltered stage counts
+match 12,820 / 11,557 / 6,872 / 1,289 / 183 / 83 exactly; the channel table's
+`leads` and `closed` columns sum to the same unfiltered totals; the date
+filter narrows both the overall funnel and the channel table consistently;
+empty/loading states are quiet. **Fail:** any stage count off from the
+discovery numbers, a channel table that doesn't sum to the overall totals,
+the date filter affecting only one of the two sections, or a crash/blank
+page on an empty range.
+
+## Marketing — Offers (real WGR catalog, deliverable 5) (2026-08-04)
+
+**Feature:** `/marketing/offers` no longer lists CI's own `offers` table
+(18 rows of app-CRUD test data — "This is a new offer", "just checking").
+The main listing now shows the **real** WGR offer catalog (11 offers),
+mirrored 2026-08-04 into two new tables (`wgr_offers` / `wgr_offer_mappings`)
+via a new `GET /offers/catalog` endpoint, with per-offer sales count and
+revenue rolled up from `closed_sales`. The **"+ Create Offer"** button and
+its target page (`/marketing/offers/builder` — real form + real AI
+generation trigger) are unchanged and still work exactly as before; only the
+fake, non-functional "Offer Builder" sidebar stub on the main listing page
+(Save/AI Suggestions buttons with no click handlers) was removed.
+
+**How to locate:** `/marketing/offers` — under Marketing in the sidebar.
+The builder is at `/marketing/offers/builder`, reached via the "+ Create
+Offer" button.
+
+**Before you start:** live counts as of 2026-08-04: **11 real offers**
+(e.g. "Agent Infopreneur Accelerator - PIF" / Coaching / $10,000 / Active),
+**15 payment-level mapping rows**, **83 closed sales totaling $471,250**.
+Every one of the 83 sales' `offer_id` resolves to one of the 11 catalog
+offers today, so no "Unattributed" row is expected right now — that's
+correct, not a missing feature (the row appears automatically the moment a
+sale's `offer_id` is null or unrecognized).
+
+**Steps:**
+1. Open `/marketing/offers`. Confirm the KPI row shows **Active Offers**,
+   **Total Offers** (11), **Total Sales** (83), and **Total Revenue**
+   (formatted currency, $471,250) — not "—".
+2. Confirm the **Offer Catalog** table lists 11 real offer names (not
+   "This is a new offer" test rows), each with type ("Coaching"), price
+   (or "Custom" for the two offers with a null price — "…Custom" named
+   offers), a status chip ("Active"), a sales count, and a revenue figure.
+   Confirm "Agent Infopreneur Accelerator - PIF" shows the highest revenue
+   (41 sales, $320,750).
+3. Sum the **Revenue** column down the whole table (including any
+   "Unattributed" row, shown with an amber chip, if present). Confirm the
+   total equals **$471,250** — the same figure shown in the Total Revenue
+   KPI tile.
+4. Confirm the **Payment Levels** sidebar card groups rows by program
+   (accelerator / mastery / jumpstart), each showing its payment-level
+   labels (pif, monthly, 2 pay, 3 pay, etc.) and amount collected.
+5. Click **"+ Create Offer"**. Confirm it still navigates to
+   `/marketing/offers/builder` and that page's form + "Generate with AI"
+   button still work exactly as before (unchanged by this work).
+6. Reload `/marketing/offers` and watch the loading state — skeleton tiles/
+   rows render briefly, never a spinner-only or blank screen, never native
+   `alert()`/`confirm()` dialogs.
+
+**Pass:** KPI tiles + catalog table show real WGR data (11 offers, not the
+18 test rows); the Revenue column sums to $471,250; the Payment Levels card
+shows all 15 mapping rows grouped by program; the Create Offer button and
+builder page still work unchanged. **Fail:** the old test-data offer names
+("This is a new offer") still appear, the revenue sum doesn't reconcile
+with $471,250, a fabricated Unattributed figure appears despite full
+attribution, or the Create Offer / builder flow is broken.
+
+## Analyze with AI — interactive follow-up chat (deliverable 8) (2026-08-04)
+
+**Feature:** the "Analyze with AI" drawer (available on `/leads` and other
+filtered list surfaces) is no longer a one-shot, read-only result. After the
+initial grounded analysis renders, an "Ask a follow-up" thread appears below
+it with a text input ("Ask a follow-up about this data…"). Follow-up
+questions are answered by a new `POST /api/v1/analyze/{surface_key}/chat`
+endpoint, which recomputes the surface's aggregates from the SAME filters
+currently applied (fresh grounding, not a stale snapshot) and answers using
+only that data plus the running conversation — same hypothesize-never-
+fabricate contract as the initial analysis. The thread is ephemeral: it
+dies with the drawer (closing it, or clicking "Re-run", clears it), nothing
+is persisted server-side.
+
+**How to locate:** open any list page with an "Analyze with AI" button
+(e.g. `/leads`), apply a filter set, click the button to open the drawer.
+Once the initial analysis renders, the follow-up thread + input appear
+below it in the same drawer.
+
+**Steps:**
+1. Go to `/leads`, apply a filter (e.g. a specific channel or date range).
+2. Click **"Analyze with AI"**. Confirm the existing one-shot analysis
+   (narrative, highlights, hypotheses, "Show the data this is based on")
+   still renders exactly as before — unchanged by this work.
+3. Below the analysis, confirm an "Ask a follow-up" section with a text
+   input reading "Ask a follow-up about this data…".
+4. Type a question referencing the visible data, e.g. "which channel
+   drives the most closed revenue?", and press Enter (not Shift+Enter —
+   that should insert a newline instead of sending).
+5. Confirm your question appears immediately as a right-aligned bubble,
+   a typing indicator appears, and the input disables while the reply is
+   pending.
+6. Confirm the assistant's reply appears left-aligned, and that every
+   number it cites (counts, percentages, revenue figures) matches a number
+   visible in the "Show the data this is based on" panel or the narrative
+   above — no invented figures. If the data can't answer the question, the
+   reply should say so rather than guess.
+7. Ask a second follow-up referencing the first answer (e.g. "and what
+   about last month?") — confirm the full local thread (not just the new
+   message) is sent each time, so the assistant can use prior context.
+8. Trigger an error path (e.g. stop the backend briefly, or a network
+   hiccup) — confirm an inline error state appears in the thread area, not
+   a native `alert()`/`confirm()` dialog and not a silent failure.
+9. Click "Re-run" on the analysis, or close and reopen the drawer — confirm
+   the follow-up thread is cleared (ephemeral, matches the analysis's own
+   lifecycle).
+
+**Pass:** the initial analysis is unchanged; the follow-up thread sends on
+Enter, disables while pending, shows user/assistant bubbles distinctly
+styled (right/left), and every number in a reply is traceable to the
+drawer's own displayed aggregates; the thread clears on re-run/close.
+**Fail:** the initial analysis regresses, the follow-up call 500s or hangs
+without an inline error, a reply contains a number not present anywhere in
+the drawer's data, or the thread survives a drawer close/re-run.
+
+**Backend proof (2026-08-04):** a real Anthropic API call was attempted
+first via `chat_view_analysis(...)` with a minimal hand-built aggregates
+dict and the question "Which channel drives the most closed revenue?" — it
+failed with `anthropic.BadRequestError: ... credit balance is too low ...`
+(environment/billing issue, not a code defect). Fell back to the same call
+with `_call_claude_chat` monkeypatched to a canned response: verified the
+system prompt sent to the LLM contained the aggregates JSON verbatim
+(`"18000"` present), the filters echo (`"status=closed_won,
+date_range=last_30_days"`), and that the full message history was passed
+through unmodified as the `messages` list. 13 new unit tests
+(`backend/tests/test_analyze_chat.py`) cover message-role/length/count
+validation and pure prompt assembly with no DB/network — backend suite is
+271 passing (258 baseline + 13 new).
+
+## Marketing — Social (Greg-spec rebuild) (deliverable 1) (2026-08-04)
+
+**Feature:** `/marketing/social` main page rebuilt 1:1 from Greg's own
+tracking app (`central-intelligence-greg/index.html`, `view-mkt-social` —
+the client's spec, per the deliverable: "using his version as the spec —
+layout, metrics, structure — mirroring it 1:1"). A new `GET /social/overview`
+endpoint serves every widget Greg's page renders from a **queryable**
+data source; widgets his page renders from a live Instagram Graph API
+connection are omitted (documented gap, not faked).
+
+**Extracted spec (from `view-mkt-social`, lines 2163–2357 of his `index.html`):**
+- Status/filter bar: date-from, date-to, type filter (All/Reels/Photos/
+  Videos/Carousels), Refresh button. (His "Connect & Load"/"Refresh"/"Demo"
+  buttons talk to a live Graph API connection — no equivalent DB state to
+  mirror; see gaps below.)
+- Summary stat cards: Posts in Range, Reels, Carousels, Watch Time (reels
+  only), Total Views (reels only), Total Reach, Total Likes, Total Saves.
+- Dynamic per-keyword lead stat cards (never hardcoded — driven by whatever
+  keywords exist in the data) + a Total Leads card.
+- **Leads by Day** table — comment-arrival date frame (any post, any
+  platform), reads WGR's `comment_leads_by_day()` RPC on his page.
+- **Posts** table — thumbnail, type badge (Reel/Carousel/Video/Photo),
+  caption, date, likes, comments, per-keyword lead columns, views, watch
+  time, reach, saves, shares, avg watch, skip rate, permalink — every
+  column sortable (nulls always last), paginated via "Load More".
+- A separate "Meta Ads" view (`view-meta-ads`, Hook%/Hold%/CTR% ad
+  performance table) looks similar (Hook Rate KPI) but is a **different**
+  specialist page (paid ads, not organic social) — confirmed out of scope
+  by checking `showView()` wiring; not touched.
+
+**Data audit performed (2026-08-04, live queries against both DBs):**
+- CI's own `instagram_posts` mirror: **2,754 rows**, already covers post
+  identity + engagement + reel metrics (no new mirror needed for posts).
+- WGR source additionally has `ig_account_benchmarks` (1 row),
+  `ig_format_performance` (2 rows), `ig_hook_performance` (0 rows),
+  `ig_mission_performance` (0 rows), `creator_scrapes` (0 rows) — **none
+  of these are rendered anywhere in `view-mkt-social`** (confirmed via
+  grep across `index.html`); not mirrored, per the deliverable's "mirror
+  ONLY tables his social section renders" instruction.
+- WGR's comment-lead attribution tables ARE rendered (via his page's
+  `/api/social/comment-leads` + `/api/social/comment-leads-by-day` Express
+  routes) and ARE real, substantial data: `comment_events` (15,856 rows),
+  `post_comment_leads` (2,754 rows, precomputed rollup) — both mirrored as
+  `wgr_comment_events` / `wgr_post_comment_leads` (see CHANGELOG /
+  INTEGRATIONS.md for the migration/mapper/sync details).
+
+**How to locate:** `/marketing/social` — under Marketing in the sidebar.
+
+**Before you start:** live counts as of 2026-08-04 (unfiltered):
+**2,754 posts** (2,122 reels, 511 carousels), **36,427,303 total reach**,
+**966,287 total likes**, **423,822 total saves**, **45,166,566 total
+views** (reels only), **14,363 total comment-leads** (agent: 6,883,
+info: 7,480), **150 distinct Leads-by-Day rows** across the mirrored
+`wgr_comment_events` history.
+
+**Steps:**
+1. Open `/marketing/social`. Confirm the gap notice (amber, collapsible)
+   lists 4 documented gaps and the summary stat cards show real numbers
+   (not "—") once loaded — Posts in Range **2,754**, Reels **2,122**,
+   Carousels **511**, Total Reach **36,427,303**, Total Likes **966,287**.
+2. Confirm the per-keyword lead cards show **Agent Leads: 6,883** and
+   **Info Leads: 7,480** (or current live numbers) plus **Total Leads:
+   14,363**, with no keyword name hardcoded (cards render from whatever
+   keywords the data contains).
+3. Confirm the **Leads by Day** table lists day rows (most recent first)
+   with a per-keyword column per discovered keyword and a Total column.
+4. Confirm the **Posts** table lists real captions/dates/engagement (not
+   "This is a new offer"-style test rows), with a Reel/Carousel/Video/Photo
+   badge per row and per-keyword lead columns.
+5. Click a sortable column header (e.g. "Likes") — confirm the sort order
+   flips on a second click and nulls always sort last, and that Reels-only
+   columns (Views/Avg Watch/Shares) show "—" for non-reel rows.
+6. Change the date-range filter to a narrow window — confirm the stat
+   cards, per-keyword cards, and Posts table all react together (same
+   filtered set), and Reels/Carousels counts change accordingly.
+7. Filter Type to "Reels" — confirm every row in the Posts table shows the
+   Reel badge and the stat cards' Reels count equals Posts in Range.
+8. Reload — confirm the loading skeleton renders briefly, never a
+   spinner-only or blank screen, never a native `alert()`/`confirm()`.
+
+**Pass:** every summary/keyword/leads-by-day/posts-table number is
+traceable to a direct SQL count against `instagram_posts` /
+`wgr_comment_events` / `wgr_post_comment_leads`; filters/sort all apply
+consistently across every widget; the gap notice is present and accurate.
+**Fail:** any stat card shows a fabricated or hardcoded number, a keyword
+name is hardcoded anywhere in the frontend, sort/filter desyncs between
+widgets, or a widget silently renders data for a live-Graph-API feature
+that isn't actually backed by either database.
+
+**Backend proof (2026-08-04):** in-process call to `get_social_overview(...)`
+(no HTTP server) against the real CI DB, cross-checked against direct SQL
+in the same session:
+
+| Metric | `/social/overview` | Direct SQL | Match |
+|---|---|---|---|
+| `posts_total` | 2,754 | `SELECT count(*) FROM instagram_posts` → 2,754 | ✅ |
+| `summary.reels_count` | 2,122 | `... WHERE is_reel` → 2,122 | ✅ |
+| `summary.carousels_count` | 511 | `... WHERE media_type='CAROUSEL_ALBUM'` → 511 | ✅ |
+| `summary.total_reach` | 36,427,303 | `SUM(reach)` → 36,427,303 | ✅ |
+| `summary.total_likes` | 966,287 | `SUM(likes_count)` → 966,287 | ✅ |
+| `summary.total_leads` | 14,363 | `SUM(total_leads)` on `wgr_post_comment_leads` → 14,363 | ✅ |
+
+A second, filtered call (`media_type=REELS`, `date_from`/`date_to` spanning
+2026, `sort_col=views`, `sort_dir=desc`) returned 565 posts, all with
+`is_reel=True`, correctly sorted by `views` descending. Pure-helper suite:
+21 new tests (`backend/tests/test_social_stats.py`), backend total
+**297 passing (276 baseline + 21 new)**.
+
+**Backfill (2026-08-04):** one-off `_sync_snapshot_reconcile` invocation
+(bypassing Celery/Redis — pure DB-to-DB) upserted **15,856 rows** into
+`wgr_comment_events` and **2,754 rows** into `wgr_post_comment_leads`.

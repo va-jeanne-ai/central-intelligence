@@ -1,16 +1,22 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnalyzeViewButton } from "@/components/analyze/AnalyzeViewButton";
 import { AnalyzeViewDrawer } from "@/components/analyze/AnalyzeViewDrawer";
-import type { Lead, LeadStatus, LeadSource } from "@/types";
+import type { Lead, LeadStatus } from "@/types";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagination } from "@/hooks/use-pagination";
 import { Pagination } from "@/components/ui";
+import {
+  STATUS_CONFIG,
+  resolveStatus,
+  channelLabel,
+  channelBadgeClasses,
+} from "@/lib/lead-display";
 
 // ─── API response types ───────────────────────────────────────────────────────
 
@@ -31,8 +37,37 @@ interface LeadsStatsResponse {
     avg_deal_value: number; // avg amount_collected per closed sale (in range)
   };
   lead_volume: { label: string; value: number }[];
-  source_breakdown: { source: string; count: number; percentage: number }[];
+  // `source` is transitional (source === channel today, per Task 3/4 notes);
+  // the donut now reads `channel`, the canonical attribution bucket label.
+  // `platform`/`reportable` aren't rendered yet but are part of the contract.
+  source_breakdown: {
+    source: string;
+    channel: string;
+    platform: string | null;
+    reportable: boolean;
+    count: number;
+    percentage: number;
+  }[];
   funnel: { stage: string; count: number; percentage: number }[];
+  // Revenue-by-channel (deliverable 9b) — closed_sales revenue attributed to
+  // marketing channel, scoped by close_date via the SAME entry_from/entry_to
+  // params this page already sends (see backend get_leads_stats docstring
+  // for why: one coherent date filter for both the lead funnel and revenue).
+  // Same bucket labels as source_breakdown.channel, different axis (revenue
+  // + sales_count, not lead count).
+  revenue_by_channel: {
+    channel: string;
+    platform: string | null;
+    reportable: boolean;
+    sales_count: number;
+    revenue: number;
+    revenue_percentage: number;
+  }[];
+  // Distinct provenance `source` values present in the DB (lowercased,
+  // count-desc). Part of the API contract; the list UI no longer renders a
+  // Source filter (Channel is the meaningful axis), so this is currently
+  // unconsumed here.
+  available_sources: string[];
 }
 
 // ─── Color maps ───────────────────────────────────────────────────────────────
@@ -101,6 +136,8 @@ const EMPTY_STATS: LeadsStatsResponse = {
   lead_volume: [],
   source_breakdown: [],
   funnel: [],
+  revenue_by_channel: [],
+  available_sources: [],
 };
 
 const EMPTY_LEADS: LeadsListResponse = {
@@ -110,98 +147,9 @@ const EMPTY_LEADS: LeadsListResponse = {
   per_page: 50,
 };
 
-// ─── Status / Source display config ──────────────────────────────────────────
-
-const STATUS_CONFIG: Record<
-  LeadStatus,
-  { label: string; dotColor: string; badgeClasses: string }
-> = {
-  new: {
-    label: "New",
-    dotColor: "#3B82F6",
-    badgeClasses: "bg-blue-50 text-blue-700",
-  },
-  contacted: {
-    label: "Active",
-    dotColor: "#F97316",
-    badgeClasses: "bg-orange-50 text-orange-700",
-  },
-  qualified: {
-    label: "Applied",
-    dotColor: "#8B5CF6",
-    badgeClasses: "bg-violet-50 text-violet-700",
-  },
-  appointment_set: {
-    label: "Booked",
-    dotColor: "#0D9488",
-    badgeClasses: "bg-teal-50 text-teal-700",
-  },
-  closed_won: {
-    label: "Closed Won",
-    dotColor: "#10B981",
-    badgeClasses: "bg-green-50 text-green-700",
-  },
-  closed_lost: {
-    label: "Lost",
-    dotColor: "#9CA3AF",
-    badgeClasses: "bg-gray-100 text-gray-500",
-  },
-  stale: {
-    label: "Stale",
-    dotColor: "#F59E0B",
-    badgeClasses: "bg-accent-50 text-accent-700",
-  },
-};
-
-const SOURCE_CONFIG: Record<
-  LeadSource,
-  { label: string; badgeClasses: string }
-> = {
-  webinar: { label: "Webinar", badgeClasses: "bg-accent-50 text-accent-700" },
-  vsl: { label: "VSL", badgeClasses: "bg-blue-50 text-blue-700" },
-  "opt-in": { label: "Opt-in", badgeClasses: "bg-green-50 text-green-700" },
-  ads: { label: "Ads", badgeClasses: "bg-gray-100 text-gray-600" },
-  referral: { label: "Referral", badgeClasses: "bg-violet-50 text-violet-700" },
-  other: { label: "Other", badgeClasses: "bg-gray-100 text-gray-500" },
-};
-
-// Fallback resolvers — leads now arrive from real integrations (GHL pushes
-// e.g. source='facebook_ads', 'instagram_ads', 'podcast_referral'; status
-// can be anything the upstream system uses). Looking those up in the
-// enum-keyed records above returns undefined and the row render crashes
-// on `.badgeClasses`. These helpers always return a sane shape so the
-// page renders any string the backend hands us.
-
-function _humanise(value: string | null | undefined): string {
-  // 'facebook_ads' → 'Facebook Ads'. Best-effort prettifier for unknown
-  // values; falls back to the raw string for anything weird. Real WGR leads
-  // can arrive with a null/empty source or status, so guard before .split().
-  if (!value) return "Unknown";
-  return value
-    .split(/[_\-\s]+/)
-    .filter(Boolean)
-    .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1).toLowerCase()))
-    .join(" ");
-}
-
-function resolveSource(raw: string | null | undefined) {
-  return (
-    (raw ? SOURCE_CONFIG[raw as LeadSource] : undefined) ?? {
-      label: _humanise(raw),
-      badgeClasses: "bg-gray-100 text-gray-600",
-    }
-  );
-}
-
-function resolveStatus(raw: string | null | undefined) {
-  return (
-    (raw ? STATUS_CONFIG[raw as LeadStatus] : undefined) ?? {
-      label: _humanise(raw),
-      dotColor: "#9CA3AF",
-      badgeClasses: "bg-gray-100 text-gray-600",
-    }
-  );
-}
+// Status display config and the resolveStatus fallback resolver live in
+// @/lib/lead-display.ts (shared with the lead detail page, which still
+// renders the provenance `source` in its Contact card).
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
@@ -454,7 +402,7 @@ function SourceDonutChart({
   segments,
   total,
 }: {
-  segments: { source: string; count: number; percentage: number }[];
+  segments: { channel: string; count: number; percentage: number }[];
   total: number;
 }) {
   const cx = 80;
@@ -465,12 +413,15 @@ function SourceDonutChart({
   const midR = (r + innerR) / 2;
   const circumference = 2 * Math.PI * midR;
 
-  // Resolve color + label once per segment (label via the shared resolver so
-  // unknown sources like 'wgr' get prettified instead of shown raw).
+  // Resolve color + label once per segment. `channel` is an open string set
+  // (canonical channels + "No attribution" + "Non-marketing" + "other
+  // unmapped" + "unmapped:<src>/<med>" dialects) — shown verbatim via
+  // channelLabel, NOT routed through the closed-enum SOURCE_CONFIG/
+  // resolveSource (those are for the legacy per-lead `source` field only).
   const items = segments.map((seg) => ({
     ...seg,
-    color: colorForSource(seg.source),
-    label: resolveSource(seg.source).label,
+    color: colorForSource(seg.channel),
+    label: channelLabel(seg.channel),
   }));
 
   // A single segment at (near) 100% can't be drawn as one SVG arc — the start
@@ -574,8 +525,8 @@ function SourceDonutChart({
           {items.length === 0 ? (
             <p className="text-xs text-gray-400">No source data.</p>
           ) : (
-            items.map((item) => (
-              <div key={item.source} className="flex items-center justify-between gap-2">
+            items.map((item, i) => (
+              <div key={`${item.channel}-${i}`} className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span
                     className="w-2.5 h-2.5 rounded-full flex-shrink-0"
@@ -595,6 +546,91 @@ function SourceDonutChart({
             ))
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Revenue by Channel ───────────────────────────────────────────────────────
+
+function formatRevenue(n: number): string {
+  return `$${Math.round(n).toLocaleString("en-US")}`;
+}
+
+function RevenueByChannelCard({
+  rows,
+}: {
+  rows: {
+    channel: string;
+    platform: string | null;
+    reportable: boolean;
+    sales_count: number;
+    revenue: number;
+    revenue_percentage: number;
+  }[];
+}) {
+  const totalRevenue = rows.reduce((sum, r) => sum + r.revenue, 0);
+  const totalSales = rows.reduce((sum, r) => sum + r.sales_count, 0);
+
+  // Hidden/quiet empty state — no sales in the selected range is a normal,
+  // expected outcome (not an error), so this renders a muted one-liner
+  // rather than a loud "no data" block matching the donut's empty pattern.
+  if (rows.length === 0) {
+    return (
+      <div
+        className="bg-white rounded-xl border border-gray-200 shadow-sm p-5"
+        aria-label="Revenue by channel"
+      >
+        <h2 className="text-sm font-bold text-gray-900 mb-1">Revenue by Channel</h2>
+        <p className="text-xs text-gray-400">No closed sales in this range.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="bg-white rounded-xl border border-gray-200 shadow-sm p-5"
+      aria-label="Revenue by channel breakdown"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-bold text-gray-900">Revenue by Channel</h2>
+        <span className="text-xs text-gray-400">
+          {formatRevenue(totalRevenue)} · {totalSales.toLocaleString()} sales
+        </span>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {rows.map((row, i) => {
+          const label = channelLabel(row.channel);
+          const color = colorForSource(label);
+          return (
+            <div key={`${row.channel}-${i}`} className="flex items-center gap-3">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 min-w-0 max-w-[40%] ${channelBadgeClasses(row.channel)}`}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="truncate">{label}</span>
+              </span>
+              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden min-w-[40px]">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${row.revenue_percentage}%`, backgroundColor: color }}
+                />
+              </div>
+              <span className="text-xs text-gray-400 tabular-nums w-14 text-right flex-shrink-0">
+                {row.sales_count} {row.sales_count === 1 ? "sale" : "sales"}
+              </span>
+              <span className="text-xs font-bold text-gray-900 tabular-nums w-20 text-right flex-shrink-0">
+                {formatRevenue(row.revenue)}
+              </span>
+              <span className="text-xs text-gray-400 tabular-nums w-10 text-right flex-shrink-0">
+                {row.revenue_percentage.toFixed(1)}%
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -752,10 +788,18 @@ function ScoreBar({ score }: { score: number }) {
 // ─── Table Row ────────────────────────────────────────────────────────────────
 
 function LeadTableRow({ lead }: { lead: Lead }) {
-  // Use the resolver helpers so unknown values (e.g. GHL pushing
-  // source='facebook_ads') get a sensible default instead of crashing.
+  // Use the resolver helper so unknown status values get a sensible
+  // default instead of crashing. (The provenance `source` column was
+  // removed from this table — channel is the meaningful axis; `source`
+  // still exists on the API payload and the lead detail page.)
   const status = resolveStatus(lead.status);
-  const source = resolveSource(lead.source);
+  // Channel is an open string set — never routed through the legacy
+  // source config. Colored via the same hash palette as the donut
+  // (colorForSource) keyed on `channel ?? "No attribution"`; `unmapped:*`
+  // dialects get an amber warning tint instead so they surface loudly.
+  const channelValue = lead.channel ?? null;
+  const channelText = channelLabel(channelValue);
+  const channelColor = colorForSource(channelText);
   const date = new Date(lead.createdAt);
   const formattedDate = date.toLocaleDateString("en-US", {
     month: "short",
@@ -793,12 +837,16 @@ function LeadTableRow({ lead }: { lead: Lead }) {
         </div>
       </td>
 
-      {/* Source */}
+      {/* Channel */}
       <td className="px-5 py-3.5">
         <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${source.badgeClasses}`}
+          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${channelBadgeClasses(channelValue)}`}
         >
-          {source.label}
+          <span
+            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+            style={{ backgroundColor: channelColor }}
+          />
+          {channelText}
         </span>
       </td>
 
@@ -834,14 +882,22 @@ function LeadTableRow({ lead }: { lead: Lead }) {
 // funnel's Applications stage and the matching dropdown option — not a real
 // per-lead status, so it's added on top of LeadStatus.
 type FilterStatus = "all" | LeadStatus | "applications";
-type FilterSource = "all" | LeadSource;
+// Channel filter values are exactly the bucket labels the /leads/stats
+// source_breakdown emits ("No attribution", "Non-marketing", canonical
+// channels, "unmapped:*", "other unmapped"). Selection is sent to the server
+// as the `channel` query param, which filters the whole dataset (the backend
+// inverts the bucket back to its UTM combos), so pagination and totals are
+// correct — unlike the earlier page-local client-side filter.
+type FilterChannel = "all" | string;
 
 // ─── Column sort ──────────────────────────────────────────────────────────────
 
 // Backend-whitelisted sort columns. "Date Added" sorts on entry_date (the lead's
 // displayed date); "Score" has no DB column and is derived from status, so the
 // Score header sorts by status — same ordering the score reflects.
-type SortColumn = "name" | "source" | "entry_date" | "status";
+// "source" stays backend-sortable but has no header anymore (the Source
+// column was removed from this table in favor of Channel).
+type SortColumn = "name" | "entry_date" | "status";
 type SortDir = "asc" | "desc";
 
 function SortableHeader({
@@ -882,8 +938,9 @@ function FilterBar({
   onSearchChange,
   statusFilter,
   onStatusChange,
-  sourceFilter,
-  onSourceChange,
+  channelFilter,
+  onChannelChange,
+  channelOptions,
   entryFrom,
   onEntryFromChange,
   entryTo,
@@ -895,8 +952,13 @@ function FilterBar({
   onSearchChange: (v: string) => void;
   statusFilter: FilterStatus;
   onStatusChange: (v: FilterStatus) => void;
-  sourceFilter: FilterSource;
-  onSourceChange: (v: FilterSource) => void;
+  channelFilter: FilterChannel;
+  onChannelChange: (v: FilterChannel) => void;
+  /** Channel bucket options from the stats source_breakdown (the same
+   * buckets the donut shows, with dataset-wide counts). The raw bucket
+   * label is the select's `value` — it's sent verbatim as the server-side
+   * `channel` query param. */
+  channelOptions: { value: string; label: string }[];
   entryFrom: string;
   onEntryFromChange: (v: string) => void;
   entryTo: string;
@@ -907,7 +969,7 @@ function FilterBar({
   const hasFilters =
     search !== "" ||
     statusFilter !== "all" ||
-    sourceFilter !== "all" ||
+    channelFilter !== "all" ||
     entryFrom !== "" ||
     entryTo !== "";
 
@@ -937,16 +999,17 @@ function FilterBar({
         />
       </div>
 
-      {/* Source */}
+      {/* Channel — options are the breakdown buckets (with counts); the
+          selected bucket filters server-side across the whole dataset. */}
       <select
-        value={sourceFilter}
-        onChange={(e) => onSourceChange(e.target.value as FilterSource)}
+        value={channelFilter}
+        onChange={(e) => onChannelChange(e.target.value as FilterChannel)}
         className="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-600"
       >
-        <option value="all">All Sources</option>
-        {(Object.keys(SOURCE_CONFIG) as LeadSource[]).map((key) => (
-          <option key={key} value={key}>
-            {SOURCE_CONFIG[key].label}
+        <option value="all">All Channels</option>
+        {channelOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
           </option>
         ))}
       </select>
@@ -1091,20 +1154,19 @@ function TableSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="grid grid-cols-6 gap-4 px-5 py-3.5 border-b border-gray-50 items-center"
+          className="grid grid-cols-5 gap-4 px-5 py-3.5 border-b border-gray-50 items-center"
         >
           <div className="space-y-1.5">
             <Skeleton className="h-3.5 w-28" />
             <Skeleton className="h-2.5 w-32" />
           </div>
-          <Skeleton className="h-5 w-16 rounded-full" />
+          <Skeleton className="h-5 w-20 rounded-full" />
           <Skeleton className="h-3 w-16" />
           <Skeleton className="h-5 w-20 rounded-full" />
           <div className="flex items-center gap-2">
             <Skeleton className="h-1.5 w-20 rounded-full" />
             <Skeleton className="h-3 w-6" />
           </div>
-          <Skeleton className="h-6 w-12 rounded-md" />
         </div>
       ))}
     </div>
@@ -1120,7 +1182,10 @@ export default function LeadsPage() {
   const [leadsData, setLeadsData] = useState<LeadsListResponse>(EMPTY_LEADS);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
-  const [sourceFilter, setSourceFilter] = useState<FilterSource>("all");
+  // Channel filter is CLIENT-SIDE only — it narrows the already-loaded page
+  // by lead.channel and does not touch the /leads request params (no
+  // server-side channel filter exists per Task 3 scope).
+  const [channelFilter, setChannelFilter] = useState<FilterChannel>("all");
   // Entry-date range filter (YYYY-MM-DD strings from <input type="date">).
   // Defaults to the current week (Mon–Sun) so the funnel/KPIs/table open scoped
   // to "this week" rather than all-time; cleared via Clear filters.
@@ -1203,7 +1268,7 @@ export default function LeadsPage() {
       async function fetchLeads(): Promise<void> {
         const params = new URLSearchParams();
         if (statusFilter !== "all") params.set("status", statusFilter);
-        if (sourceFilter !== "all") params.set("source", sourceFilter);
+        if (channelFilter !== "all") params.set("channel", channelFilter);
         if (search) params.set("search", search);
         if (entryFrom) params.set("entry_from", entryFrom);
         if (entryTo) params.set("entry_to", entryTo);
@@ -1243,14 +1308,13 @@ export default function LeadsPage() {
     }
 
     return doFetch();
-  }, [authLoading, statusFilter, sourceFilter, search, entryFrom, entryTo, sortBy, sortDir, page, pageSize]);
+  }, [authLoading, statusFilter, channelFilter, search, entryFrom, entryTo, sortBy, sortDir, page, pageSize]);
 
   // Mirrors the list-fetch params in fetchLeads above, minus sort/pagination —
   // snapshot for "Analyze this view".
   const openAnalyze = () => {
     const params = new URLSearchParams();
     if (statusFilter !== "all") params.set("status", statusFilter);
-    if (sourceFilter !== "all") params.set("source", sourceFilter);
     if (search) params.set("search", search);
     if (entryFrom) params.set("entry_from", entryFrom);
     if (entryTo) params.set("entry_to", entryTo);
@@ -1263,7 +1327,7 @@ export default function LeadsPage() {
   useEffect(() => {
     resetToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, sourceFilter, search, entryFrom, entryTo, sortBy, sortDir]);
+  }, [statusFilter, channelFilter, search, entryFrom, entryTo, sortBy, sortDir]);
 
   // Build KPI cards from live stats
   const kpiCards = [
@@ -1306,10 +1370,27 @@ export default function LeadsPage() {
   const handleClearFilters = () => {
     setSearch("");
     setStatusFilter("all");
-    setSourceFilter("all");
+    setChannelFilter("all");
     setEntryFrom("");
     setEntryTo("");
   };
+
+  // Distinct channel values on the currently-loaded page, each with its
+  // display label + count. Options come from the stats source_breakdown —
+  // the same buckets the donut shows, covering the whole dataset — kept in
+  // the breakdown's order (count-desc from the backend).
+  const channelOptions = useMemo(
+    () =>
+      stats.source_breakdown.map((item) => ({
+        value: item.channel,
+        label: `${item.channel} (${item.count.toLocaleString()})`,
+      })),
+    [stats.source_breakdown]
+  );
+
+  // Channel filtering is server-side now (the `channel` query param in
+  // fetchLeads) — the loaded page already reflects the selected bucket.
+  const visibleLeads = leadsData.leads;
 
   return (
     <>
@@ -1391,6 +1472,12 @@ export default function LeadsPage() {
           </div>
         )}
 
+        {/* Revenue by Channel — closed-sales revenue attributed to marketing
+            channel (deliverable 9b), scoped by the same date range as the
+            charts above. Its own full-width row below the donut/volume
+            charts keeps each channel row legible (chip + bar + counts). */}
+        {!isLoading && <RevenueByChannelCard rows={stats.revenue_by_channel} />}
+
         {/* Sales Funnel */}
         {isLoading ? (
           <FunnelSkeleton />
@@ -1417,7 +1504,7 @@ export default function LeadsPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-bold text-gray-900">Lead Records</h2>
               <span className="text-xs text-gray-400">
-                Showing {leadsData.leads.length} of {leadsData.total.toLocaleString()}
+                Showing {visibleLeads.length} of {leadsData.total.toLocaleString()}
               </span>
             </div>
 
@@ -1428,8 +1515,9 @@ export default function LeadsPage() {
                 onSearchChange={setSearch}
                 statusFilter={statusFilter}
                 onStatusChange={setStatusFilter}
-                sourceFilter={sourceFilter}
-                onSourceChange={setSourceFilter}
+                channelFilter={channelFilter}
+                onChannelChange={setChannelFilter}
+                channelOptions={channelOptions}
                 entryFrom={entryFrom}
                 onEntryFromChange={setEntryFrom}
                 entryTo={entryTo}
@@ -1450,13 +1538,11 @@ export default function LeadsPage() {
                     sortDir={sortDir}
                     onSort={handleSort}
                   />
-                  <SortableHeader
-                    label="Source"
-                    column="source"
-                    sortBy={sortBy}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                  />
+                  {/* Not backend-sortable — channel is computed at read
+                      time, so there is no DB column to sort on. */}
+                  <th className="px-5 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    Channel
+                  </th>
                   <SortableHeader
                     label="Date Added"
                     column="entry_date"
@@ -1477,7 +1563,7 @@ export default function LeadsPage() {
                 </tr>
               </thead>
               <tbody>
-                {leadsData.leads.length === 0 ? (
+                {visibleLeads.length === 0 ? (
                   <tr>
                     <td
                       colSpan={5}
@@ -1487,7 +1573,7 @@ export default function LeadsPage() {
                     </td>
                   </tr>
                 ) : (
-                  leadsData.leads.map((lead) => (
+                  visibleLeads.map((lead) => (
                     <LeadTableRow key={lead.id} lead={lead} />
                   ))
                 )}
@@ -1507,7 +1593,7 @@ export default function LeadsPage() {
             {/* Table footer */}
             <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/50">
               <span className="text-xs text-gray-400">
-                Showing {leadsData.leads.length} of {leadsData.total.toLocaleString()} leads
+                Showing {visibleLeads.length} of {leadsData.total.toLocaleString()} leads
               </span>
               <button
                 type="button"

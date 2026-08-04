@@ -35,8 +35,7 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 
 | Surface | What it shows |
 |---|---|
-| [`/marketing/email`](frontend/src/app/(app)/marketing/email/page.tsx) | KPI cards (avg open/click rate) + the list of recent campaigns with per-row metrics, provenance badge, and click-to-expand showing subject / audience / segment / rendered body (sandboxed iframe) / Open-in-Mailchimp link |
-| [`/marketing/email/compose`](frontend/src/app/(app)/marketing/email/compose/page.tsx) | Mailchimp-style **page-builder** compose flow: pick campaign type (Regular/Plain text/Template) → pick one of 3 starter templates (Newsletter, Promo, Welcome) → three-column page builder: **left palette** of 6 block types (Hero, Heading, Paragraph, Image, Button, Divider), **center canvas** showing the email faithfully with click-to-select + per-block ↑/↓/✕ toolbar, **right edit panel** with typed form controls per block. AI Fill rewrites the block list as `[heading, ...paragraphs, button]`. Save Draft writes the deterministic HTML output (via `renderBlocksToHtml`) to `email_campaigns` (source='manual', status='draft'). Sending via Mailchimp deferred. |
+| [`/marketing/email`](frontend/src/app/(app)/marketing/email/page.tsx) | Rebuilt 2026-08-03 (deliverable 2): filter row (search, sent-date range, campaign type, status, sort-by-metric — all data-driven off `GET /email/campaigns`'s `filter_options`), a sortable campaigns table (name/subject, type, sent date, recipients, opens+open_rate, clicks+click_rate, unsubs, bounces) with a per-row `ScoreBar` + Top/Mid/Low tercile chip as the at-a-glance performance indicator, and a "Top campaigns" ranking card showing the top 5 by the selected sort metric within the current filtered range. The Compose Email feature (page-builder UI) was removed per client request; the 0-row drafts/archived sections (only ever populated by that flow) were removed with it. |
 | [`/marketing`](frontend/src/app/(app)/marketing/page.tsx) | Marketing overview hub — pulls aggregate email KPIs |
 | [`/integrations/mailchimp`](frontend/src/app/(app)/integrations/[slug]/page.tsx) | "Last synced" timestamp + last sync error if any |
 
@@ -46,11 +45,9 @@ Pulls sent-email campaign metrics into the `email_campaigns` table on a schedule
 - **Marketing Director chat awareness** — `/marketing-director` chat could reference real campaign performance ("Last week's newsletter pulled 38% opens — keep doing X").
 - **Lead-level email engagement** — Mailchimp returns per-recipient open/click data via `/reports/{id}/email-activity`. Joining that to `leads.email` would surface "Lead X opened 3 of your last 5 emails" on the lead detail page.
 - **Cohort analysis** — newsletter vs broadcast vs sequence performance over time. Schema supports it via `campaign_type`; needs a chart.
-- **Re-send / variant suggestions** — the email compose page (`/marketing/email/compose`) could draft a follow-up specifically tuned for non-openers of a prior campaign.
 - **Anomaly alerts** — when open rate on a new campaign is materially lower than the rolling baseline, surface a warning ("This send is tracking 12% below your 30-day average").
-- **Send manual drafts via Mailchimp** — `/marketing/email/compose` writes drafts locally today (source='manual'). Wiring `POST /3.0/campaigns` + `/actions/send` (with a "send test only" guardrail + confirm dialog) would let Greg compose AND send from CI instead of bouncing to Mailchimp's UI.
-- **User-saved templates** — the 3 starter templates are hardcoded in `frontend/src/lib/email-templates.ts`. A future `email_templates` table + CRUD would let Greg save his own.
-- **Image upload to storage** — compose currently accepts image URLs only. Adding S3 / Supabase Storage uploads is its own task.
+- **Marketing Director chat awareness** — `/marketing-director` chat could reference the new filtered/ranked view directly instead of just the free-form `POST /email` analysis.
+- **Compose** — removed 2026-08-03 per client request (deliverable 2). The backend CRUD endpoints (`POST/GET/PATCH/DELETE /email/campaigns/{id}`, duplicate, archive/unarchive) are left intact but unused by any UI; re-adding a compose surface would need a new frontend page pointed at them.
 
 **Operational notes**
 
@@ -127,7 +124,81 @@ A second inbound endpoint `POST /api/v1/webhooks/ghl/{webhook_token}/appointment
 - **`public_api_base_url` setting** — defaults to `http://localhost:8000`. In prod, set this in `.env` to the externally-reachable URL (e.g. `https://api.centralintelligence.ai`) or the URL the user copies won't be reachable from GHL's servers.
 - **What's stored encrypted:** `{"webhook_token": "...", "api_access_token": "...", "location_id": "..."}` in a single Fernet-encrypted blob on `integrations.credentials_encrypted`. The webhook_token is server-generated on first save (regenerable via Update); api_access_token + location_id are user-supplied. Disconnecting clears all three.
 
+**Appointments — rep attribution (added 2026-07-09)**
+
+The WGR mirror's `appointments` table carries `rep_id` + `appointment_owner` (raw display name) that CI's sync previously dropped. `map_appointment` (`backend/app/services/wgr_sync/mapping.py`) now maps both onto new `appointments.rep_id` / `appointments.appointment_owner` columns (migration `w4b5c6d7e8f9`); `GET /appointments` filters by `rep` (rep_id) and returns `rep_id`/`rep_name` per row (`sales_reps.full_name` when the rep_id resolves, else the raw `appointment_owner` string — covers reps no longer on the roster). `GET /ci/calls` gained the equivalent for `calls.call_owner`, resolved against the `sales_reps` roster + `historical_aliases` (handles messy variants like "Colton"/"Colton  Lindsay"/"Colton Lindsay" all resolving to one rep) rather than a new stored column. Both endpoints also gained `start`/`end` date-range params. New light `GET /reps` endpoint (`backend/app/routes/sales.py`) feeds the rep filter dropdowns on `/appointments` and `/sales-calls`. Existing appointment rows need one backfill re-run (`scripts/backfill_wgr.py --yes`) before `rep_id` is populated — the WGR sync only writes forward, it doesn't retroactively touch already-synced rows outside that CLI backfill (appointments' bulk-load path already delete+re-inserts every `source='wgr'` row per run, so the columns land automatically once the loader has the new mapping).
+
 ---
+
+## WGR client database mirror — attribution expansion ✅ (2026-07-26)
+
+The hourly read-only WGR→CI sync now also mirrors Greg's attribution-era data
+(feature branch `feature/wgr-attribution-sync`; spec
+`docs/superpowers/specs/2026-07-26-wgr-attribution-sync-design.md`):
+
+- **`leads` UTM columns** — `utm_{source,medium,campaign,content}_{first,last}`
+  + `ghl_contact_id`, mirrored verbatim (presence-conditional: a column absent
+  upstream never null-overwrites CI values). Canonical channel is **resolved at
+  read time** via [`backend/app/services/attribution.py`](backend/app/services/attribution.py)
+  — never stored.
+- **`attribution_taxonomy`** — snapshot + delete-reconciliation each run
+  (upstream edits AND deletions propagate; deletion is count-guarded +
+  circuit-breakered, audit-logged to `sync_log`).
+- **`lead_engagements`** — attribution touches; empty upstream at ship time,
+  fills when Greg's email-attribution flow produces.
+- **`meta_campaigns` / `meta_ads`** (snapshot-reconciled) and
+  **`meta_ad_performance`** (watermarked) — real Meta Ads data for the Ads
+  surface (probe 2026-07-26: 29/472/635 rows). **Live since 2026-08-03:**
+  `GET /ads/overview` renders these three tables directly on
+  `/marketing/ads` — KPIs, a per-campaign spend/leads/CPL rollup, and the
+  top 15 ads by spend. The hardcoded platform-breakdown widget it replaced
+  is gone. `meta_ad_performance.snapshot_type` is uniformly `"Daily"`, so
+  spend/impressions/leads sum across snapshots; `kpi_status`/`ctr` use each
+  ad's latest snapshot instead (not summable). See `CHANGELOG.md` for the
+  full aggregation rationale.
+- **`lead_journey`** (snapshot-reconciled, added 2026-08-03) — WGR's
+  per-lead journey summary (one row per lead: webinar registration/watch
+  behavior, appointment history + qualification, call counts, discovery,
+  close date / amount collected / days to close). Upstream rebuilds it (no
+  PK, no watermark — `lead_id` verified unique/non-null on 12,818 rows), so
+  it syncs via snapshot reconcile with `page_size=50k` (must fit one page
+  for the MVCC delete guard). Join contract: `leads.external_id` first,
+  `ghl_contact_id` fallback — same as `lead_engagements`. Powers the
+  **Journey card** on `/leads/{id}` and the **Funnels** page (see below).
+- **`wgr_offers` / `wgr_offer_mappings`** (snapshot-reconciled, added
+  2026-08-04) — the real WGR product catalog (11 offers) and per-program
+  payment-level mapping rows (15 rows: program/payment_level/offer_id/
+  amount_collected/revenue_earned), distinct from CI's own app-CRUD
+  `offers` table (18 rows of test data, untouched). `offer_mappings` has no
+  upstream primary key — `(program, payment_level, offer_id)` is verified
+  unique across all 15 rows, used as CI's composite `id`. Powers
+  `GET /offers/catalog` and the **Offers** page (see below).
+
+Connection runs as the dedicated SELECT-only `ci_reader` Postgres role
+(provisioned 2026-07-26; the old write-capable DSN is pending rotation by the
+client). Open policy gap: these new tables are not yet embedded into the RAG
+vector store.
+
+**Read-time channel now surfaces in the UI (2026-08-03, ClickUp 86d3u65cb).**
+Channel is resolved per-request from `attribution_taxonomy` via
+[`backend/app/services/attribution.py`](backend/app/services/attribution.py)
+— never stored, so taxonomy edits retroactively change every surface below
+on the next page load:
+
+| Surface | What it shows |
+|---|---|
+| [`/leads`](frontend/src/app/(app)/leads/page.tsx) | **Channel** column (hash-colored chip per canonical channel; amber tint for `unmapped:*`/"other unmapped") on every row; the breakdown donut groups by resolved channel; the **Channel filter**'s options are the breakdown buckets with dataset-wide counts and filter **server-side** (`GET /leads?channel=` — the backend inverts the bucket back to its UTM combos via `bucket_channel_combos`). The legacy provenance Source column + filter were removed from this page 2026-08-03 (API untouched). |
+| [`/leads/{id}`](frontend/src/app/(app)/leads/[lead_id]/page.tsx) | **Channel** row on the Contact card (always visible); full-width **Attribution** card with first/last-touch raw UTM rows (hidden when all 8 UTM fields are null); full-width **Journey** card from the `lead_journey` mirror (webinar watch stats, appointment history, sales progression — hidden when the journey row shows no activity). |
+| `GET /leads` + `GET /leads/{id}` | Response gains `channel` and 8 camelCase UTM fields (`utmSourceFirst` … `utmContentLast`). |
+| `GET /leads/stats` | Breakdown buckets are now canonical channels + `"No attribution"` + `"Non-marketing"` + `unmapped:*` (top-8, then `"other unmapped"`) instead of raw `leads.source` values; counts still sum to `total_leads`. Also gains `revenue_by_channel` (deliverable 9b, 2026-08-03) — closed-sales revenue attributed to the same channel buckets, scoped by `close_date` via this route's existing `entry_from`/`entry_to` params. |
+| [`/sales`](frontend/src/app/(app)/sales/page.tsx) → `GET /sales/summary` | `/sales` is a redirect to `/leads` (pre-existing); `/sales/summary` shares `compute_lead_stats` with `/leads/stats`, so it inherits the same channel breakdown automatically — this is a lead-count distribution ("lead channel mix"), not the revenue-by-channel breakdown. **Update (2026-08-03):** the revenue-by-channel breakdown now exists — `GET /sales/summary` also returns `revenue_by_channel` (`compute_revenue_by_channel`, unscoped here), and `/leads` shows it as a "Revenue by Channel" card. See the Lead & Sales Source Attribution row below for the join contract and coverage caveats. |
+| [`/leads`](frontend/src/app/(app)/leads/page.tsx) — **Revenue by Channel card (deliverable 9b, 2026-08-03)** | New card below the Source Breakdown donut: per-channel sales count, revenue ($, no decimals), and % of range-scoped revenue, sourced from `revenue_by_channel` on `GET /leads/stats`. Revenue source of truth is `closed_sales.amount_collected` (NOT the disagreeing `lead_journey` mirror total). Join: a `LEFT JOIN LATERAL` matching `closed_sales.lead_id = leads.external_id` OR `ghl_contact_id` (email-merged leads keep their original external_id and are only reachable through the GHL id), preferring the external_id match and capped at one lead row per sale — same "OR + preference + LIMIT 1" shape as the `lead_journey` lookup, but structurally fan-out-safe (LATERAL, not two independent LEFT JOINs) since `ghl_contact_id` carries no DB-level uniqueness constraint. A closed sale whose lead can't be found at all still counts toward revenue, bucketed as `"No attribution"`. Coverage reality: only 11 of the 83 buying leads have any UTMs, so `"No attribution"` dominates revenue (~79%) by design, not a bug. |
+| [`/marketing/funnels`](frontend/src/app/(app)/marketing/funnels/page.tsx) — **rebuilt on `lead_journey` (deliverable 3, 2026-08-04)** | Replaces the seed-data `funnel_events`/`funnel_stats` two-funnel selector (those tables stay empty, untouched dead scaffolding). `GET /funnels/overview` derives six ordered stages per lead directly from `lead_journey` (leads → registered → watched → booked appt → discovery held → closed: 12,820 / 11,557 / 6,872 / 1,289 / 183 / 83 unfiltered), optionally scoped by `entry_date`, plus a channel-sliced breakdown built on the same `bucket_channel_combos`/`build_resolver` machinery the Leads/Sales pages use. Pure aggregation lives in `backend/app/repositories/funnel_stats.py` (`stage_flags_for_row`, `aggregate_overall_stages`, `aggregate_by_channel`) — no DB, unit-tested. |
+| [`/marketing/offers`](frontend/src/app/(app)/marketing/offers/page.tsx) — **real catalog from `wgr_offers` (deliverable 5, 2026-08-04)** | Main listing replaced: `GET /offers/catalog` returns the 11 real WGR offers LEFT JOINed with `closed_sales` (grouped by `offer_id`) for a per-offer sales count + revenue, plus the 15 `wgr_offer_mappings` payment-level rows grouped by program. A synthetic **"Unattributed"** row (amber chip, same visual language as unmapped channels) absorbs any revenue whose `offer_id` is null or unrecognized, so the revenue column always reconciles with `closed_sales`'s true total ($471,250, currently zero unattributed). Pure rollup lives in `backend/app/repositories/offer_stats.py` (`build_offer_catalog`, `build_payment_level_rollup`) — no DB, unit-tested. **CRUD preserved:** the "+ Create Offer" button still opens `/marketing/offers/builder`, whose real `POST /offers` + `POST /offer-generate` AI flow is untouched; only the non-functional "Offer Builder" sidebar stub (no click handlers) on the main listing was removed. |
+
+Coverage reality at ship time: of 12,656 `source='wgr'` leads, only ~87 have
+first-touch UTMs and ~2,447 have last-touch UTMs (~20%) — `"No attribution"`
+is expected to be the largest bucket by design, not a bug.
 
 ## Google Workspace (Gmail + Drive + Calendar + RAG) ✅
 
@@ -318,7 +389,12 @@ Pulls live organic metrics for one Instagram Business/Creator account from the M
 
 **Surfaces it powers**
 
-- **`/marketing/social`** — live IG followers, posts, reach, impressions, engagement once a sync runs.
+- **`/marketing/social`** (legacy top-of-page platform breakdown) — live IG followers, posts, reach, impressions, engagement once a sync runs.
+- **`/marketing/social` main page — rebuilt 1:1 from Greg's own tracking page (deliverable 1, 2026-08-04):** `GET /social/overview` (`backend/app/routes/social.py`) serves the per-post Instagram table, summary stat cards, per-keyword comment-lead cards, and a "Leads by Day" table straight from the WGR mirrors — `instagram_posts` (2,754 posts, existing mirror) joined against two **new** mirror tables:
+  - **`wgr_comment_events`** (15,856 rows, snapshot-reconciled) — mirrors WGR's `comment_events`: one row per IG/FB comment matching a configured lead keyword, with `occurred_at` for day-bucketing. Feeds "Leads by Day" (arrival-date frame — any post, any platform), reproducing WGR's own `comment_leads_by_day()` RPC semantics server-side in `backend/app/repositories/social_stats.py::build_leads_by_day`.
+  - **`wgr_post_comment_leads`** (2,754 rows, snapshot-reconciled) — mirrors WGR's precomputed `post_comment_leads` rollup (`keyword_counts` jsonb + `total_leads` per `ig_media_id`). Feeds the per-post/per-keyword lead columns and the per-keyword + Total Leads stat cards, scoped to whatever date/type filter is active (`build_keyword_totals`).
+  - Migration: `alembic/versions/c2df94038d03_add_comment_lead_mirrors.py` (chained on `e79cc79ec06b`, the `wgr_offers` head). Sync wiring: two new `_sync_snapshot_reconcile` calls in `backend/app/services/wgr_sync/upsert.py::sync_all` (natural upstream PKs — `comment_events.id`, `post_comment_leads.ig_media_id` — both verified unique/non-null, probe 2026-08-04). Mappers: `mapping.map_wgr_comment_event` / `mapping.map_wgr_post_comment_lead`.
+  - Pure rollup logic (`filter_posts`, `build_summary_stats`, `build_keyword_totals`, `attach_post_lead_counts`, `sort_posts`, `build_leads_by_day`) lives in `backend/app/repositories/social_stats.py` — no DB, unit-tested (21 tests, `tests/test_social_stats.py`).
 
 **Auth / setup** — manual token (paste a long-lived token + IG account ID on `/integrations/instagram`; the page has a collapsible **Setup steps** panel walking through both):
 
@@ -330,6 +406,7 @@ Pulls live organic metrics for one Instagram Business/Creator account from the M
 
 - **"Connect with Meta" OAuth button** (one-click connect + token auto-refresh) — built then deferred to ship the manual connector first; lives in git history (branch `feat/instagram-social-integration`).
 - No story/profile-visit metrics. IG comments → `social_comments` still seed-only (separate collector).
+- **Documented gaps in the deliverable-1 rebuild** (see `FEATURE-VERIFICATION.md` "Marketing — Social (Greg-spec rebuild)" for the full list): no live Graph API connect/refresh state to mirror (omitted, not faked); `instagram_posts` has no Skip Rate / Follows columns (reel-only Graph API insights Greg's page shows — omitted); Total Watch Time is approximated as the sum of `avg_watch_time_sec` per reel (the mirror has no total-watch-time column); Leads by Day buckets in UTC rather than the tenant's configured timezone (WGR's RPC uses `ac_timezone`, default America/Denver) — a minor day-boundary difference.
 
 ---
 

@@ -16,11 +16,23 @@ cd "$(dirname "$0")/.."          # repo root
 cd backend
 
 if [[ ! -d .venv ]]; then
-  echo "ERROR: backend/.venv missing — run python -m venv .venv && pip install -r requirements.txt first."
+  echo "ERROR: backend/.venv missing — run python -m venv --copies .venv && .venv/bin/pip install -r requirements-dev.txt first."
+  echo "NOTE: if the repo directory ever moves, the venv's script shebangs break (bad interpreter) — rebuild it the same way."
   exit 1
 fi
 
-# Trap propagates SIGINT so all child processes die when the user hits Ctrl+C.
+# Refuse to start on a busy port instead of silently colliding — an orphaned
+# uvicorn holding :8000 makes every later "restart" die with "Address already
+# in use" while the stale server keeps serving old code (bit us 2026-08-04).
+if lsof -ti :8000 >/dev/null 2>&1; then
+  echo "ERROR: port 8000 is already in use (PIDs: $(lsof -ti :8000 | tr '\n' ' '))."
+  echo "       Kill the stale backend first: kill \$(lsof -ti :8000)"
+  exit 1
+fi
+
+# Trap propagates shutdown so all child processes die with this script —
+# EXIT included, so a plain SIGTERM to the parent (how supervisors/tools stop
+# it) also reaps the children instead of orphaning uvicorn on the port.
 pids=()
 cleanup() {
   echo
@@ -29,9 +41,8 @@ cleanup() {
     kill "$pid" 2>/dev/null || true
   done
   wait 2>/dev/null || true
-  exit 0
 }
-trap cleanup INT TERM
+trap cleanup INT TERM EXIT
 
 run_prefixed() {
   local name=$1
@@ -43,7 +54,10 @@ run_prefixed() {
 
 echo ">>> backend dev stack starting (Ctrl+C to stop all)"
 
-run_prefixed "backend" .venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# --reload-dir app: without it the watcher covers all of backend/ including
+# .venv — a fresh venv writes __pycache__ bytecode on first imports, each
+# write retriggers the watcher, and uvicorn restart-loops indefinitely.
+run_prefixed "backend" .venv/bin/uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8000
 # --concurrency=2 matches prod (docker-compose.yml). Unbounded, celery forks one
 # child per CPU core and each child opens its own DB pool — enough to exhaust the
 # Supabase session pooler's 15-client cap alongside the production droplet

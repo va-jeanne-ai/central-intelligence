@@ -27,26 +27,40 @@ from typing import Any, Callable, Iterable, Optional
 
 from datetime import date
 
-from sqlalchemy import func, insert, inspect, select, update
+from sqlalchemy import delete, func, insert, inspect, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.marketing import (
     EmailCampaign, InstagramPost, OptInEvent, SocialComment, WebinarEngagement,
 )
+from app.models.marketing import AttributionTaxonomy, LeadEngagement
+from app.models.meta_ads import MetaAd, MetaAdPerformance, MetaCampaign
 from app.models.intelligence import (
     BusinessProfile, InsightTag, MarketSignal, Offer, TagDictionary,
+    WgrCommentEvent, WgrOffer, WgrOfferMapping, WgrPostCommentLead,
 )
-from app.models.operational import Appointment, ContentIdea, Insight, Lead, Call
+from app.models.operational import Appointment, ContentIdea, Insight, Lead, LeadJourney, Call
 from app.models.sales import (
     CallScore, ClosedSale, CoachingStrike, EodReport, SalesActivity, SalesRep,
     ScorecardCategory, StrikeAction, StrikeEvidence, StrikeRule,
 )
+from app.config import settings
+from app.models.audit import SyncLog
 from app.services.wgr_sync import mapping, reader
 
 logger = logging.getLogger(__name__)
 
 BATCH = 500
+
+# Per-table nullable-FK orphan checks applied inside the native-PK loop.
+# sales_coaching_strikes.resolved_by: Greg's 2026-07 revalidation writes
+# system sentinels ('system_revalidation') that aren't reps; the FK is
+# SET NULL by design, so null the orphan and keep the row (the sentinel
+# context survives in resolution_notes).
+_NATIVE_ORPHAN_CHECKS: dict[str, list] = {
+    "sales_coaching_strikes": [("resolved_by", SalesRep.rep_id)],
+}
 
 
 def _attr_to_column_map(model) -> dict[str, str]:
@@ -128,20 +142,29 @@ async def _sync_native_pk(
     map_fn: Callable[[dict], Optional[dict]], since: Optional[str],
 ) -> int:
     """Generic sync for WGR-native-PK tables, batched + ON CONFLICT."""
+    orphan_checks = _NATIVE_ORPHAN_CHECKS.get(wgr_table)
     batch: list[dict[str, Any]] = []
     total = 0
+
+    async def flush(rows: list[dict[str, Any]]) -> int:
+        if orphan_checks:
+            nulled = await _null_orphan_fks(session, rows, orphan_checks)
+            if nulled:
+                logger.info("wgr_sync %s: nulled orphan FKs %s", wgr_table, nulled)
+        n = await _on_conflict_upsert(session, model, pk_col, rows)
+        await session.commit()
+        return n
+
     for raw in reader.read_table(wgr_table, since=since):
         mapped = map_fn(raw)
         if mapped is None:
             continue
         batch.append(mapped)
         if len(batch) >= BATCH:
-            total += await _on_conflict_upsert(session, model, pk_col, batch)
-            await session.commit()
+            total += await flush(batch)
             batch = []
     if batch:
-        total += await _on_conflict_upsert(session, model, pk_col, batch)
-        await session.commit()
+        total += await flush(batch)
     logger.info("wgr_sync %s: upserted %d", wgr_table, total)
     return total
 
@@ -260,7 +283,20 @@ async def sync_leads(session: AsyncSession, *, since: Optional[str] = None) -> i
         await session.commit()
         return len(new_rows) + len(updates)
 
+    drift_checked = False
     for raw in reader.read_table("leads", since=since):
+        if not drift_checked:
+            drift_checked = True
+            if "utm_source_first" not in raw:
+                # Schema-drift tripwire (attribution spec): .get() would make a
+                # dropped upstream column indistinguishable from null; the
+                # presence-conditional mapper protects the data, this line is
+                # the loud signal for the manual schema-update workflow.
+                logger.warning(
+                    "wgr_sync leads: upstream rows lack utm_source_first — "
+                    "WGR schema drift? UTM columns will stop updating until "
+                    "the mapper/migration is updated (attribution spec)."
+                )
         mapped = mapping.map_lead(raw)
         if mapped is None:
             continue
@@ -539,6 +575,8 @@ _NATIVE_PLAN: list[tuple] = [
     ("sales_activities", SalesActivity, "activity_id", mapping.map_sales_activity),
     ("webinar_engagements", WebinarEngagement, "engagement_id", mapping.map_webinar_engagement),
     ("lead_opt_in_events", OptInEvent, "opt_in_event_id", mapping.map_opt_in_event),
+    ("lead_engagements", LeadEngagement, "engagement_id", mapping.map_lead_engagement),
+    ("meta_ad_performance", MetaAdPerformance, "perf_id", mapping.map_meta_ad_performance),
     # insight_tags handled by sync_insight_tags (FK-orphan resolution like evidence).
 ]
 
@@ -629,6 +667,142 @@ async def _seed_tag_dictionary(session: AsyncSession) -> int:
     return len(tags)
 
 
+async def _sync_snapshot_reconcile(
+    session: AsyncSession, *, wgr_table: str, model, pk_attr: str,
+    wgr_pk: str, map_fn: Callable[[dict], Optional[dict]],
+    raw_invalid_fn: Optional[Callable[[dict], bool]] = None,
+    raw_keep_fn: Optional[Callable[[dict], Any]] = None,
+    page_size: int = 10_000,
+) -> int:
+    """Full-snapshot mirror WITH delete-reconciliation, count-guarded.
+
+    Unlike the _NATIVE_PLAN tables, upstream deletes matter for snapshot
+    tables (a removed taxonomy rule that lingers in CI keeps winning channel
+    resolution; a deleted ad/campaign stays "active").
+
+    Deletion set = ids successfully read from WGR (raw AND mapped PK forms) —
+    a mapper bug or upstream type drift degrades to "row kept + loud skip
+    count", never to mass deletion. Guards, in order: page-overflow tripwire
+    (single-statement MVCC consistency only holds within one page); source
+    COUNT(*) vs rows read (advisory, separate connection — skips are the safe
+    direction); deletion circuit breaker (wipe of a populated table at any
+    size, or >10 rows AND >20%, requires the table-scoped override
+    WGR_SYNC_MASS_DELETE_TABLE). Every deletion writes a sync_log audit row
+    carrying the deleted ids — the rollback artifact for this destructive
+    step. A read failure raises out of reader/wgr_client, aborting before any
+    reconciliation. A successful, count-confirmed pull of 0 rows empties CI
+    only through the breaker override (wipe case).
+
+    ``wgr_pk`` doubles as (a) the column checked for null (skip that row) and
+    (b) — by default — the raw-form value added to ``keep_ids``. Every caller
+    except ``wgr_offer_mappings`` has ``wgr_pk == pk_attr`` (a true 1:1
+    upstream/CI key), so the raw value IS the keep-id. ``offer_mappings`` has
+    no single-column upstream PK — its CI ``pk_attr`` (``id``) is a composite
+    of three columns. ``raw_keep_fn``, when given, computes the raw-form
+    keep-id from the whole row instead of ``raw[wgr_pk]`` — everything else
+    (null-check column, mapper skip/invalidate accounting) is unchanged.
+    """
+    keep_ids: set = set()   # raw AND mapped PK forms — anything here survives
+    rows: list[dict[str, Any]] = []
+    rows_read = 0            # every row seen, incl. pk-null + invalidated —
+                             # this (not keep_ids) is what COUNT(*) must match
+    skipped = 0
+    invalidated = 0
+    pk_null = 0
+    for raw in reader.read_table(wgr_table, page_size=page_size):
+        rows_read += 1
+        if raw.get(wgr_pk) is None:
+            pk_null += 1
+            continue
+        if raw_invalid_fn is not None and raw_invalid_fn(raw):
+            # Source-data statement (e.g. taxonomy canonical_channel nulled):
+            # deliberately invalid upstream → excluded from keep_ids so
+            # reconciliation DELETES it — a disabled rule must stop resolving
+            # (distinct from mapper-skip below).
+            invalidated += 1
+            continue
+        keep_ids.add(raw_keep_fn(raw) if raw_keep_fn is not None else raw[wgr_pk])
+        m = map_fn(raw)
+        if m is None:
+            skipped += 1
+        else:
+            rows.append(m)
+            # Also keep the MAPPED pk form: mapping _clean()s text PKs; a
+            # padded upstream id (" X" → "X") would otherwise be upserted as
+            # "X" and deleted in the same run by not_in(raw-form ids).
+            keep_ids.add(m[pk_attr])
+    if invalidated:
+        logger.info("wgr_sync %s: %d rows invalid upstream — reconciled away",
+                    wgr_table, invalidated)
+    if skipped:
+        logger.warning("wgr_sync %s: %d rows present upstream but unmappable "
+                       "— kept in CI, NOT deleted; investigate mapper/schema",
+                       wgr_table, skipped)
+    written = 0
+    # Dedup on the MAPPED pk before upserting: two upstream rows whose text
+    # PKs differ only by padding collapse to one mapped PK, and Postgres
+    # rejects two conflicting rows in a single INSERT..ON CONFLICT statement
+    # ("cannot affect row a second time") — last wins, matching
+    # _sync_source_external's convention. Chunked per the module's
+    # statement_timeout lesson.
+    rows = list({r[pk_attr]: r for r in rows}.values())
+    for i in range(0, len(rows), BATCH):
+        written += await _on_conflict_upsert(
+            session, model, pk_attr, rows[i:i + BATCH])
+    if rows_read >= page_size:
+        logger.error("wgr_sync %s: snapshot table hit page size — skipping "
+                     "delete-reconciliation; raise page_size or move to "
+                     "keyset pagination", wgr_table)
+        await session.commit()
+        return written
+    source_count = reader.count_table(wgr_table)
+    if source_count != rows_read:
+        logger.warning("wgr_sync %s: read %d rows but source counts %d — "
+                       "skipping delete-reconciliation this run",
+                       wgr_table, rows_read, source_count)
+        await session.commit()
+        return written
+    pk_col = getattr(model, pk_attr)
+    existing = (await session.execute(
+        select(func.count()).select_from(model)
+    )).scalar() or 0
+    doomed_q = select(pk_col)
+    if keep_ids:
+        doomed_q = doomed_q.where(pk_col.not_in(keep_ids))
+    doomed_ids = list((await session.execute(doomed_q)).scalars())
+    doomed = len(doomed_ids)
+    override = settings.wgr_sync_mass_delete_table == wgr_table
+    wipe = doomed > 0 and not keep_ids
+    if (wipe or (doomed > 10 and doomed > 0.2 * existing)) and not override:
+        logger.error("wgr_sync %s: reconciliation wants to delete %d of %d CI "
+                     "rows%s — circuit breaker OPEN, skipping deletion. Verify "
+                     "the source, then run once with "
+                     "WGR_SYNC_MASS_DELETE_TABLE=%s (via docker compose "
+                     "exec -e; never .env).",
+                     wgr_table, doomed, existing,
+                     " (FULL WIPE)" if wipe else "", wgr_table)
+        await session.commit()
+        return written
+    if doomed_ids:
+        await session.execute(delete(model).where(pk_col.in_(doomed_ids)))
+        # Audit record: the deleted ids are the rollback artifact for this
+        # destructive step — recoverable by re-inserting from WGR or, if WGR
+        # moved on, from this row's details.
+        session.add(SyncLog(
+            id=uuid.uuid4(), operation="wgr_snapshot_reconcile",
+            table_name=model.__tablename__, record_count=doomed,
+            status="ok",
+            details={"deleted_ids": [str(i) for i in doomed_ids[:1000]],
+                     "upserted": written, "rows_read": rows_read,
+                     "override_used": override},
+        ))
+    await session.commit()
+    logger.info("wgr_sync %s: upserted %d, kept %d ids "
+                "(%d unmappable kept, %d invalidated, %d deleted)",
+                wgr_table, written, len(keep_ids), skipped, invalidated, doomed)
+    return written
+
+
 async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dict[str, int]:
     """Full WGR → CI sync in dependency order. Idempotent. Returns counts."""
     counts: dict[str, int] = {}
@@ -656,6 +830,87 @@ async def sync_all(session: AsyncSession, *, since: Optional[str] = None) -> dic
     # 4. appointments (needs leads) + market_signals.
     counts["appointments"] = await sync_appointments(session, since=since)
     counts["market_signals"] = await sync_market_signals(session)
+    # 4b. snapshot-reconciled mirrors (upstream edits AND deletions propagate).
+    counts["attribution_taxonomy"] = await _sync_snapshot_reconcile(
+        session, wgr_table="attribution_taxonomy", model=AttributionTaxonomy,
+        pk_attr="id", wgr_pk="id", map_fn=mapping.map_attribution_row,
+        # A taxonomy row whose canonical_channel is nulled upstream is a
+        # deliberate disable → reconcile it away. Other mapper skips (type
+        # drift/bugs) stay kept-and-warned.
+        raw_invalid_fn=lambda raw: not (raw.get("canonical_channel") or "").strip(),
+    )
+    counts["meta_campaigns"] = await _sync_snapshot_reconcile(
+        session, wgr_table="meta_campaigns", model=MetaCampaign,
+        pk_attr="campaign_id", wgr_pk="campaign_id", map_fn=mapping.map_meta_campaign,
+    )
+    counts["meta_ads"] = await _sync_snapshot_reconcile(
+        session, wgr_table="meta_ads", model=MetaAd,
+        pk_attr="ad_id", wgr_pk="ad_id", map_fn=mapping.map_meta_ad,
+    )
+    # lead_journey is rebuilt upstream (no watermark, no upstream PK — lead_id
+    # verified unique/non-null, probe 2026-08-03), so snapshot reconcile keeps
+    # the mirror exact, including rows WGR drops on rebuild.
+    # page_size=50k: one row per lead (12.8k today) — must fit ONE page for
+    # the reconcile's MVCC consistency guard; revisit if leads approach 50k.
+    counts["lead_journey"] = await _sync_snapshot_reconcile(
+        session, wgr_table="lead_journey", model=LeadJourney,
+        pk_attr="lead_id", wgr_pk="lead_id", map_fn=mapping.map_lead_journey,
+        page_size=50_000,
+    )
+    # 4c. wgr_offers / wgr_offer_mappings (deliverable 5) — the real WGR
+    # product catalog, distinct from the app-CRUD `offers` table (test data,
+    # untouched). Tiny tables (11 + 15 rows) — default page_size is fine.
+    # offer_mappings has no upstream PK, so map_wgr_offer_mapping builds a
+    # deterministic composite id from (program, payment_level, offer_id),
+    # verified unique across all 15 rows.
+    counts["wgr_offers"] = await _sync_snapshot_reconcile(
+        session, wgr_table="offers", model=WgrOffer,
+        pk_attr="offer_id", wgr_pk="offer_id", map_fn=mapping.map_wgr_offer,
+    )
+    counts["wgr_offer_mappings"] = await _sync_snapshot_reconcile(
+        session, wgr_table="offer_mappings", model=WgrOfferMapping,
+        pk_attr="id", wgr_pk="offer_id", map_fn=mapping.map_wgr_offer_mapping,
+        # offer_mappings has no single-column upstream PK; wgr_pk="offer_id"
+        # only serves the null-check (a row with no offer_id is unusable).
+        # raw_keep_fn recomputes the SAME composite key map_wgr_offer_mapping
+        # builds, from the raw row — keeping deletion in sync with the
+        # mapper's actual CI identity instead of the (colliding) raw offer_id.
+        raw_keep_fn=lambda raw: (
+            f"{(raw.get('program') or '').strip()}|"
+            f"{(raw.get('payment_level') or '').strip()}|"
+            f"{(raw.get('offer_id') or '').strip()}"
+        ),
+        # raw_invalid_fn mirrors map_wgr_offer_mapping's actual invalid rule
+        # (all three of program/payment_level/offer_id null) so the two
+        # agree wherever raw_invalid_fn is reached. NOTE: the generic
+        # `raw.get(wgr_pk) is None` null-check above (wgr_pk="offer_id")
+        # still runs first and `continue`s before raw_invalid_fn is checked
+        # — so a row with offer_id=None but program/payment_level set would
+        # still be dropped here even though the mapper would accept it. No
+        # real row hits this today (probe 2026-08-04); documented rather than
+        # silently left to diverge, since fixing it needs a per-row null-key
+        # column this table doesn't have (see _sync_snapshot_reconcile's
+        # wgr_pk docstring) — restructuring that is out of scope here.
+        raw_invalid_fn=lambda raw: (
+            not (raw.get("program") or "").strip()
+            and not (raw.get("payment_level") or "").strip()
+            and not (raw.get("offer_id") or "").strip()
+        ),
+    )
+    # 4d. wgr_comment_events / wgr_post_comment_leads (deliverable 1 — social
+    # page rebuild) — comment-lead attribution feeding the "Leads by Day"
+    # table and per-post/keyword lead counts. Natural upstream PKs, no
+    # watermark reliance here (snapshot reconcile always full-pulls).
+    counts["wgr_comment_events"] = await _sync_snapshot_reconcile(
+        session, wgr_table="comment_events", model=WgrCommentEvent,
+        pk_attr="id", wgr_pk="id", map_fn=mapping.map_wgr_comment_event,
+        page_size=20_000,
+    )
+    counts["wgr_post_comment_leads"] = await _sync_snapshot_reconcile(
+        session, wgr_table="post_comment_leads", model=WgrPostCommentLead,
+        pk_attr="ig_media_id", wgr_pk="ig_media_id",
+        map_fn=mapping.map_wgr_post_comment_lead,
+    )
     # 5. (source, external_id)-deduped marketing/social mirrors.
     for wgr_table, model, map_fn in _SOURCE_EXTERNAL_PLAN:
         counts[wgr_table] = await _sync_source_external(

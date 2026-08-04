@@ -26,6 +26,8 @@ WATERMARK_COLUMN: dict[str, str] = {
     "sales_eod_reports": "generated_at",
     "webinar_engagements": "created_at",
     "lead_opt_in_events": "occurred_at",
+    "lead_engagements": "created_at",
+    "meta_ad_performance": "created_at",
     "sales": "created_at",
     "email_campaigns": "synced_at",
     "comment_events": "created_at",

@@ -7,138 +7,174 @@ import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard, KpiRow } from "@/components/ui/kpi-card";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { ScoreBar } from "@/components/ui/score-bar";
 import { Button } from "@/components/ui/button";
-import { FormField, FormInput, FormTextarea } from "@/components/ui/form-field";
-import { SuggestionPanel } from "@/components/ui/suggestion-panel";
-import type { OfferListResponse, OfferItem } from "@/types";
+import { formatCurrency } from "@/lib/format";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── API response types (GET /offers/catalog — deliverable 5) ──────────────
 
-type OfferStatus = "active" | "draft" | "archived";
+interface OfferCatalogItem {
+  offer_id: string | null;
+  name: string | null;
+  offer_type: string | null;
+  description: string | null;
+  price: number | null;
+  status: string | null;
+  url: string | null;
+  sales_count: number;
+  revenue: number;
+}
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+interface OfferPaymentLevelRow {
+  program: string | null;
+  payment_level: string | null;
+  offer_id: string | null;
+  amount_collected: number;
+  revenue_earned: number;
+}
 
-const AI_SUGGESTIONS = [
-  {
-    title: "Add a time-based bonus",
-    body: "Offers with urgency bonuses convert 23% higher. Consider: 'Book this week and get a free 1:1 strategy session.'",
-  },
-  {
-    title: "Strengthen your guarantee",
-    body: "Your ICP values risk reduction. Try: 'Double your leads in 90 days or your next month is free.'",
-  },
-  {
-    title: "Price anchoring opportunity",
-    body: "Position against the VIP Day ($4,997) to make the Accelerator ($2,997) feel like a better deal.",
-  },
-  {
-    title: "Missing social proof",
-    body: "Add a 'X coaches enrolled' counter. Templates with social proof see 31% more conversions.",
-  },
-];
+interface OfferCatalogResponse {
+  offers: OfferCatalogItem[];
+  payment_levels: OfferPaymentLevelRow[];
+  total_revenue: number;
+  total_sales_count: number;
+  generated_at: string;
+}
 
-// ─── Status config ────────────────────────────────────────────────────────────
+const UNATTRIBUTED_LABEL = "Unattributed";
 
-const STATUS_BORDER: Record<string, string> = {
-  active: "#10B981",
-  draft: "#4F46E5",
-  archived: "#D1D5DB",
+// ─── Status chip — real WGR statuses ("Active"), same local-chip pattern
+// as /marketing/ads (real values don't map cleanly onto the closed-enum
+// shared StatusBadge). ────────────────────────────────────────────────────
+
+const STATUS_CHIP_CLASSES: Record<string, string> = {
+  active: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  inactive: "bg-gray-100 text-gray-500 border-gray-200",
+  archived: "bg-gray-100 text-gray-500 border-gray-200",
 };
 
-// ─── Offer card ───────────────────────────────────────────────────────────────
-
-function OfferCard({ offer }: { offer: OfferItem }) {
-  const status = offer.status as OfferStatus;
-  const borderLeftColor = STATUS_BORDER[status] ?? "#D1D5DB";
-  const isArchived = status === "archived";
-  const isDraft = status === "draft";
-  const opacity = isArchived ? 0.6 : isDraft ? 0.85 : undefined;
-  const priceColor = isArchived || isDraft ? "text-gray-400" : "text-gray-900";
-
+function StatusChip({ status }: { status: string | null }) {
+  if (!status) {
+    return <span className="text-xs text-gray-400">—</span>;
+  }
+  const key = status.trim().toLowerCase();
+  const classes = STATUS_CHIP_CLASSES[key] ?? "bg-gray-100 text-gray-500 border-gray-200";
   return (
-    <Card borderLeftColor={borderLeftColor} opacity={opacity}>
-      <div className="p-5 flex flex-col gap-3">
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className={`text-sm font-bold ${isArchived ? "text-gray-500" : "text-gray-900"}`}
-            >
-              {offer.name}
-            </span>
-            <StatusBadge status={status} />
-          </div>
-          <span className={`text-lg font-bold tabular-nums flex-shrink-0 ${priceColor}`}>
-            {/* price is null for custom-priced offers (e.g. "… - Custom" synced from WGR) */}
-            {offer.price != null ? `$${offer.price.toLocaleString()}` : "Custom"}
-          </span>
-        </div>
-
-        {/* Description */}
-        {offer.description !== null && offer.description !== "" && (
-          <p className="text-xs text-gray-500 leading-relaxed">{offer.description}</p>
-        )}
-
-        {/* ICP Alignment bar — using offer_type as a proxy label */}
-        <ScoreBar
-          value={75}
-          label="ICP Alignment"
-          color={isArchived ? "gray" : "emerald"}
-        />
-      </div>
-    </Card>
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border capitalize ${classes}`}
+    >
+      {status}
+    </span>
   );
 }
 
-// ─── Offer Builder card ───────────────────────────────────────────────────────
+// ─── Offer catalog table ─────────────────────────────────────────────────────
 
-function OfferBuilderCard() {
+function OfferCatalogTable({ offers }: { offers: OfferCatalogItem[] }) {
+  if (offers.length === 0) {
+    return (
+      <p className="text-sm text-gray-400 text-center py-8">
+        No offers found in the catalog.
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm" aria-label="Real offer catalog with sales and revenue">
+        <thead>
+          <tr className="border-b border-gray-100">
+            <th className="text-left font-semibold text-gray-500 text-[11px] uppercase tracking-wider px-5 py-2">Offer</th>
+            <th className="text-left font-semibold text-gray-500 text-[11px] uppercase tracking-wider px-3 py-2">Type</th>
+            <th className="text-right font-semibold text-gray-500 text-[11px] uppercase tracking-wider px-3 py-2">Price</th>
+            <th className="text-left font-semibold text-gray-500 text-[11px] uppercase tracking-wider px-3 py-2">Status</th>
+            <th className="text-right font-semibold text-gray-500 text-[11px] uppercase tracking-wider px-3 py-2">Sales</th>
+            <th className="text-right font-semibold text-gray-500 text-[11px] uppercase tracking-wider px-5 py-2">Revenue</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {offers.map((o) => {
+            const isUnattributed = o.name === UNATTRIBUTED_LABEL;
+            return (
+              <tr
+                key={o.offer_id ?? UNATTRIBUTED_LABEL}
+                className={`hover:bg-gray-50 transition-colors ${isUnattributed ? "bg-amber-50/40" : ""}`}
+              >
+                <td className="px-5 py-3 font-medium text-gray-800 max-w-xs truncate" title={o.name ?? undefined}>
+                  {isUnattributed ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200">
+                      {o.name}
+                    </span>
+                  ) : (
+                    o.name ?? "Untitled offer"
+                  )}
+                </td>
+                <td className="px-3 py-3 text-gray-500 text-xs">{o.offer_type ?? "—"}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-gray-700">
+                  {o.price != null ? formatCurrency(o.price) : isUnattributed ? "—" : "Custom"}
+                </td>
+                <td className="px-3 py-3">
+                  <StatusChip status={o.status} />
+                </td>
+                <td className="px-3 py-3 text-right tabular-nums text-gray-700">
+                  {o.sales_count.toLocaleString()}
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums font-semibold text-gray-900">
+                  {formatCurrency(o.revenue)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Payment-level breakdown card ────────────────────────────────────────────
+
+function PaymentLevelsCard({ rows }: { rows: OfferPaymentLevelRow[] }) {
+  // Group rows by program for a lightly-nested display.
+  const byProgram = new Map<string, OfferPaymentLevelRow[]>();
+  for (const row of rows) {
+    const key = row.program ?? "—";
+    const arr = byProgram.get(key) ?? [];
+    arr.push(row);
+    byProgram.set(key, arr);
+  }
+
   return (
     <Card>
-      <CardHeader title="Offer Builder" />
+      <CardHeader
+        title="Payment Levels"
+        action={<span className="text-xs text-gray-400">{rows.length} rows</span>}
+      />
       <CardBody className="flex flex-col gap-4">
-        <FormField label="Offer Name">
-          <FormInput
-            type="text"
-            placeholder="e.g. 90-Day Coaching Accelerator"
-          />
-        </FormField>
-
-        <FormField label="Price">
-          <FormInput type="text" placeholder="e.g. $2,997" />
-        </FormField>
-
-        <FormField label="Core Features (one per line)">
-          <FormTextarea
-            rows={3}
-            placeholder={"Weekly coaching calls\nCommunity access\nDone-for-you templates"}
-          />
-        </FormField>
-
-        <FormField label="Bonuses">
-          <FormTextarea
-            rows={2}
-            placeholder="e.g. Free strategy call for this week only"
-          />
-        </FormField>
-
-        <FormField label="Guarantee">
-          <FormInput
-            type="text"
-            placeholder="e.g. Full refund if no results in 30 days"
-          />
-        </FormField>
-
-        <div className="flex items-center gap-2 pt-1">
-          <Button variant="primary" className="flex-1">
-            Save Offer
-          </Button>
-          <Button variant="ghost" className="flex-1">
-            AI Suggestions
-          </Button>
-        </div>
+        {byProgram.size === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">No payment-level data.</p>
+        ) : (
+          Array.from(byProgram.entries()).map(([program, programRows]) => (
+            <div key={program} className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                {program}
+              </span>
+              <div className="flex flex-col divide-y divide-gray-100 rounded-lg border border-gray-100">
+                {programRows.map((row) => (
+                  <div
+                    key={`${row.program}-${row.payment_level}-${row.offer_id}`}
+                    className="flex items-center justify-between px-3 py-2 text-xs"
+                  >
+                    <span className="text-gray-700 font-medium capitalize">
+                      {row.payment_level ?? "—"}
+                    </span>
+                    <span className="text-gray-500 tabular-nums">
+                      {formatCurrency(row.amount_collected)} collected
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
       </CardBody>
     </Card>
   );
@@ -149,16 +185,11 @@ function OfferBuilderCard() {
 function OffersPageSkeleton() {
   return (
     <main className="flex-1 overflow-y-auto p-7 space-y-6">
-      {/* Top bar skeleton */}
       <div className="flex items-center justify-between gap-4">
         <Skeleton className="h-6 w-24" />
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-8 w-28 rounded-lg" />
-          <Skeleton className="h-8 w-32 rounded-lg" />
-        </div>
+        <Skeleton className="h-8 w-32 rounded-lg" />
       </div>
 
-      {/* KPI tiles skeleton */}
       <div className="grid grid-cols-4 gap-4">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col gap-2">
@@ -168,29 +199,20 @@ function OffersPageSkeleton() {
         ))}
       </div>
 
-      {/* Two-column skeleton */}
       <div className="flex gap-6 items-start">
         <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <Skeleton className="h-4 w-28" />
             <Skeleton className="h-3 w-16" />
           </div>
-          <div className="p-5 flex flex-col gap-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-3">
-                <div className="flex items-start justify-between">
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-6 w-16" />
-                </div>
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-2 w-full rounded-full" />
-              </div>
+          <div className="p-5 flex flex-col gap-3">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-8 w-full" />
             ))}
           </div>
         </div>
-        <div className="w-[380px] flex-shrink-0 flex flex-col gap-5">
+        <div className="w-[320px] flex-shrink-0">
           <Skeleton className="h-72 rounded-xl" />
-          <Skeleton className="h-48 rounded-xl" />
         </div>
       </div>
     </main>
@@ -201,9 +223,8 @@ function OffersPageSkeleton() {
 
 export default function OffersPage() {
   const { isLoading: authLoading } = useAuth();
-  const [data, setData] = useState<OfferListResponse | null>(null);
+  const [data, setData] = useState<OfferCatalogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<"all" | OfferStatus>("all");
 
   useEffect(() => {
     if (authLoading) return;
@@ -212,7 +233,9 @@ export default function OffersPage() {
 
     async function fetchData(): Promise<void> {
       try {
-        const result = await apiClient.get<OfferListResponse>("/offers", { silent: true });
+        const result = await apiClient.get<OfferCatalogResponse>("/offers/catalog", {
+          silent: true,
+        });
         if (!cancelled) setData(result);
       } catch {
         // On error, data stays null — page renders with empty state.
@@ -234,13 +257,9 @@ export default function OffersPage() {
     );
   }
 
-  const allOffers: OfferItem[] = data?.offers ?? [];
-  const filteredOffers =
-    statusFilter === "all" ? allOffers : allOffers.filter((o) => o.status === statusFilter);
-
-  const activeCount = allOffers.filter((o) => o.status === "active").length;
-  const draftCount = allOffers.filter((o) => o.status === "draft").length;
-  const archivedCount = allOffers.filter((o) => o.status === "archived").length;
+  const offers = data?.offers ?? [];
+  const realOfferCount = offers.filter((o) => o.name !== UNATTRIBUTED_LABEL).length;
+  const activeCount = offers.filter((o) => (o.status ?? "").trim().toLowerCase() === "active").length;
 
   return (
     <>
@@ -249,24 +268,15 @@ export default function OffersPage() {
       <main className="flex-1 overflow-y-auto p-7 space-y-6">
         {/* Top bar */}
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-bold text-gray-900">Offers</h1>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <Button variant="ghost">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as "all" | OfferStatus)}
-                className="bg-transparent text-sm font-medium text-gray-700 cursor-pointer focus:outline-none"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="draft">Draft</option>
-                <option value="archived">Archived</option>
-              </select>
-            </Button>
-            <Button variant="primary" href="/marketing/offers/builder">
-              + Create Offer
-            </Button>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Offers</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Real offer catalog synced from WGR, with sales count and revenue per offer.
+            </p>
           </div>
+          <Button variant="primary" href="/marketing/offers/builder">
+            + Create Offer
+          </Button>
         </div>
 
         {/* KPI row */}
@@ -274,57 +284,46 @@ export default function OffersPage() {
           <KpiCard
             label="Active Offers"
             value={data ? activeCount.toLocaleString() : "—"}
-            sub={data ? `${draftCount} drafts, ${archivedCount} archived` : undefined}
+            sub={data ? `${realOfferCount} in catalog` : undefined}
             borderColor="#10B981"
           />
           <KpiCard
             label="Total Offers"
-            value={data ? (data.total ?? allOffers.length).toLocaleString() : "—"}
+            value={data ? realOfferCount.toLocaleString() : "—"}
             borderColor="#F59E0B"
           />
           <KpiCard
-            label="Conversion Rate"
-            value="—"
+            label="Total Sales"
+            value={data ? data.total_sales_count.toLocaleString() : "—"}
             borderColor="#3B82F6"
           />
           <KpiCard
-            label="Revenue / Offer"
-            value="—"
+            label="Total Revenue"
+            value={data ? formatCurrency(data.total_revenue) : "—"}
             borderColor="#F97316"
           />
         </KpiRow>
 
-        {/* Two-column layout */}
+        {/* Two-column layout: catalog table + payment-level breakdown */}
         <div className="flex gap-6 items-start">
-          {/* Left column: Offer Library */}
           <div className="flex-1 min-w-0">
             <Card>
               <CardHeader
-                title="Offer Library"
+                title="Offer Catalog"
                 action={
                   <span className="text-xs text-gray-400">
-                    {data ? `${data.total ?? allOffers.length} offers` : "—"}
+                    {data ? `${realOfferCount} offers` : "—"}
                   </span>
                 }
               />
-              <CardBody className="flex flex-col gap-4">
-                {filteredOffers.length > 0 ? (
-                  filteredOffers.map((offer) => (
-                    <OfferCard key={offer.offer_id} offer={offer} />
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-400 text-center py-8">
-                    {data ? "No offers match this filter." : "No offers found."}
-                  </p>
-                )}
+              <CardBody noPadding>
+                <OfferCatalogTable offers={offers} />
               </CardBody>
             </Card>
           </div>
 
-          {/* Right column: sidebar */}
-          <div className="w-[380px] flex-shrink-0 flex flex-col gap-5">
-            <OfferBuilderCard />
-            <SuggestionPanel items={AI_SUGGESTIONS} />
+          <div className="w-[320px] flex-shrink-0">
+            <PaymentLevelsCard rows={data?.payment_levels ?? []} />
           </div>
         </div>
       </main>

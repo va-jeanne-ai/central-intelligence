@@ -59,6 +59,20 @@ class Lead(Base, TimestampMixin, SoftDeleteMixin):
         nullable=True,
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Cross-system master identifier from GHL, mirrored from WGR. Nullable —
+    # only WGR-sourced leads have it.
+    ghl_contact_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    # Raw UTM attribution mirrored from WGR (first = write-once first touch,
+    # last = latest-wins). Never rewritten; channel is computed at read time
+    # via attribution_taxonomy. Text, not String(n): upstream is unbounded.
+    utm_source_first: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    utm_medium_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_campaign_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_content_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_source_last: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_medium_last: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_campaign_last: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_content_last: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
     calls: Mapped[list["Call"]] = relationship("Call", back_populates="lead", lazy="select")
@@ -88,6 +102,58 @@ class Lead(Base, TimestampMixin, SoftDeleteMixin):
         order_by="EmailThread.last_message_at.desc()",
         lazy="select",
     )
+
+
+class LeadJourney(Base):
+    """Per-lead journey summary mirrored read-only from WGR's `lead_journey`
+    (a table WGR rebuilds upstream — no watermark, synced via snapshot
+    reconcile). One row per WGR lead. No FK on purpose (mirror data): join
+    to CI leads via leads.external_id (source='wgr') FIRST, falling back to
+    leads.ghl_contact_id — same join contract as LeadEngagement."""
+
+    __tablename__ = "lead_journey"
+
+    lead_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    ghl_contact_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    entry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    utm_source_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_medium_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_content_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    channel_first: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attr_derived_from: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attr_order_evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_source_last: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_medium_last: Mapped[str | None] = mapped_column(Text, nullable=True)
+    channel_last: Mapped[str | None] = mapped_column(Text, nullable=True)
+    commenter_link_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    first_comment_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    comment_keyword: Mapped[str | None] = mapped_column(Text, nullable=True)
+    webinar_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    webinar_registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    watched_live: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    watched_replay: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    watch_seconds_total: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    last_opted_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    appt_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    first_appt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_appt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_appt_outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_appt_booked_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_appt_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    call_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    first_call_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    discovery_occurred: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    discovery_held: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    sale_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    close_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    amount_collected: Mapped[float | None] = mapped_column(Float, nullable=True)
+    days_to_close: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    journey_gap: Mapped[str | None] = mapped_column(Text, nullable=True)
+    appt_qualified: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    appt_flagged: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    appt_qual_grade: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Member(Base, TimestampMixin, SoftDeleteMixin):

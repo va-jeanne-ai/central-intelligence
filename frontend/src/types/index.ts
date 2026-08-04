@@ -80,6 +80,23 @@ export interface Lead {
   createdAt: string;
   /** Lead quality score 0–100 */
   score?: number;
+  /**
+   * Resolved attribution channel — an open string set (canonical channels
+   * plus "No attribution", "Non-marketing", "other unmapped", and
+   * "unmapped:<src>/<med>" dialects for UTM combos the taxonomy hasn't
+   * mapped yet). Null means no attribution data was resolvable; render as
+   * "No attribution", not as this different-interface `channel` at
+   * WebSocketMessage above (conversation medium — unrelated).
+   */
+  channel?: string | null;
+  utmSourceFirst?: string | null;
+  utmMediumFirst?: string | null;
+  utmCampaignFirst?: string | null;
+  utmContentFirst?: string | null;
+  utmSourceLast?: string | null;
+  utmMediumLast?: string | null;
+  utmCampaignLast?: string | null;
+  utmContentLast?: string | null;
 }
 
 // ─── API Error ──────────────────────────────────────────────────────────────
@@ -180,12 +197,22 @@ export interface CIInsight {
   signal_family: string;
   signal: string;
   signal_strength: string;
+  pain_layer: string | null;
   raw_quote: string;
   marketing_translation: string;
   hook_angle_example: string;
   best_use_case: string;
   quote_confidence: string;
   frequency_score: number;
+  created_at: string | null;
+  // Source attribution — every insight resolves to the call it was extracted
+  // from (100% call_id coverage); lead fields are null when the call has no
+  // linked lead.
+  call_date: string | null;
+  call_type: string | null;
+  lead_id: string | null;
+  lead_name: string | null;
+  tags: string[];
 }
 
 export interface CIInsightsResponse {
@@ -201,11 +228,17 @@ export interface CIInsightsResponse {
 }
 
 /** Distinct filterable values present in the insights table — drives the
- * insights-page filter dropdowns so options can't drift from the data. */
+ * insights-page filter dropdowns so options can't drift from the data.
+ * `best_use_case` and `tag` aren't exposed here (1,019 / 2,774 distinct
+ * values respectively — free-text cardinality, not dropdown material). */
 export interface CIInsightFacets {
   insight_type: string[];
   signal_family: string[];
   signal_strength: string[];
+  pain_layer: string[];
+  // Source labels ("Call · <call_type>", "Other") — optional: defaulted
+  // server-side, tolerate absence against an older backend.
+  source?: string[];
 }
 
 /** The company-level health assessment shown atop /insights. Synthesized daily by
@@ -243,6 +276,11 @@ export interface CIInsightDistribution {
   by_insight_type: CIInsightCount[];
   by_signal_family: CIInsightCount[];
   by_signal_strength: CIInsightCount[];
+  by_pain_layer: CIInsightCount[];
+  // Where the insights came from — "Call · <call_type>" labels ("Other" for
+  // future non-call sources). Optional: defaulted server-side, so tolerate
+  // absence against an older backend.
+  by_source?: CIInsightCount[];
   top_signals: CIInsightTopSignal[];
 }
 
@@ -256,11 +294,21 @@ export interface CIMarketSignal {
   last_30_days: number;
   last_7_days: number;
   example_quote: string;
+  example_call_id: string | null;
   best_marketing_angle: string;
+  notes: string | null;
+  updated_at: string | null;
+  /** 7d mention rate vs. the prior-23d average rate within the 30d window.
+   * >0 = accelerating, <0 = cooling off, null only when there was zero
+   * activity in the 30d window at all. Live data caps last_30_days at 2, so
+   * this is a coarse directional signal — render as a plain-language chip,
+   * never as a literal percentage. */
+  momentum: number | null;
 }
 
 export interface CIMarketSignalsResponse {
   data: CIMarketSignal[];
+  total: number;
 }
 
 /** Distinct filterable values present in the market_signals table — drives
@@ -280,19 +328,65 @@ export interface CICallFacets {
 
 // ─── Ads ─────────────────────────────────────────────────────────────────────
 
-export interface AdsData {
-  campaigns: number;
-  avg_roas: number;
-  total_spend: number;
-  top_ads: { campaign_name: string; platform: string; roas: number; spend: number }[];
-  generated_at: string;
-}
-
 export interface AdsAnalyzeResponse {
   analysis: string;
   ad_copy: string;
   recommendations: string[];
   data_used: Record<string, unknown>;
+}
+
+// ─── Ads overview (real data — GET /ads/overview) ───────────────────────────
+
+export interface AdsOverviewKpis {
+  total_spend: number;
+  total_impressions: number;
+  total_leads: number;
+  total_booked_calls: number;
+  avg_cost_per_lead: number;
+  avg_ctr: number;
+  active_campaigns: number;
+  total_campaigns: number;
+  total_ads: number;
+}
+
+export interface AdsOverviewCampaign {
+  campaign_id: string;
+  name: string | null;
+  status: string | null;
+  objective: string | null;
+  campaign_type: string | null;
+  daily_budget: number | null;
+  lifetime_budget: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  ads_count: number;
+  spend: number;
+  leads: number;
+  booked_calls: number;
+  cost_per_lead: number;
+}
+
+export interface AdsOverviewTopAd {
+  ad_id: string;
+  name: string | null;
+  campaign_name: string | null;
+  ad_format: string | null;
+  status: string | null;
+  hook_text: string | null;
+  kpi_status: string | null;
+  spend: number;
+  leads: number;
+  cost_per_lead: number;
+  ctr: number | null;
+  launched_date: string | null;
+  kill_date: string | null;
+  kill_reason: string | null;
+}
+
+export interface AdsOverviewResponse {
+  kpis: AdsOverviewKpis;
+  campaigns: AdsOverviewCampaign[];
+  top_ads: AdsOverviewTopAd[];
 }
 
 // ─── DM ──────────────────────────────────────────────────────────────────────
@@ -325,24 +419,61 @@ export interface SocialAnalyzeResponse {
   data_used: Record<string, unknown>;
 }
 
-// ─── Offers ──────────────────────────────────────────────────────────────────
+// ─── Social Overview — Greg-spec rebuild (deliverable 1) ────────────────────
 
-export interface OfferItem {
-  offer_id: string;
-  name: string;
-  offer_type: string;
-  description: string | null;
-  /** null for custom-priced offers (e.g. "… - Custom" synced from WGR). */
-  price: number | null;
-  status: string;
-  url: string | null;
-  notes: string | null;
+export interface SocialOverviewSummary {
+  posts_in_range: number;
+  reels_count: number;
+  carousels_count: number;
+  total_watch_time_sec: number;
+  total_views: number;
+  total_reach: number;
+  total_likes: number;
+  total_saves: number;
+  total_leads: number;
+  per_keyword_leads: Record<string, number>;
+  keywords: string[];
 }
 
-export interface OfferListResponse {
-  offers: OfferItem[];
+export interface SocialOverviewPost {
+  id: string;
+  ig_media_id: string | null;
+  permalink: string | null;
+  media_type: string | null;
+  is_reel: boolean;
+  caption: string | null;
+  posted_at: string | null;
+  likes_count: number | null;
+  comments_count: number | null;
+  views: number | null;
+  reach: number | null;
+  saves_count: number | null;
+  shares_count: number | null;
+  avg_watch_time_sec: number | null;
+  engagement_rate: number | null;
+  lead_counts: Record<string, number>;
+  lead_total: number;
+}
+
+export interface SocialOverviewLeadDay {
+  day: string;
   total: number;
+  per_keyword: Record<string, number>;
 }
+
+export interface SocialOverviewResponse {
+  summary: SocialOverviewSummary;
+  posts: SocialOverviewPost[];
+  posts_total: number;
+  leads_by_day: SocialOverviewLeadDay[];
+  keywords: string[];
+  date_from: string | null;
+  date_to: string | null;
+  generated_at: string;
+  gaps: string[];
+}
+
+// ─── Offers ──────────────────────────────────────────────────────────────────
 
 export interface OfferGenerateResponse {
   task_id: string;

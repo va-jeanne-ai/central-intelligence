@@ -36,6 +36,74 @@ logger = logging.getLogger(__name__)
 
 SYNC_OPERATION = "wgr_sync"
 
+# ---------------------------------------------------------------------------
+# Run lock (plan Task 5b): serializes hourly beat, user trigger, and manual
+# full pulls. Redis, not Postgres advisory locks — the app DB sits behind
+# Supabase's pooler, where session-scoped advisory locks are unreliable.
+# ---------------------------------------------------------------------------
+
+import redis as _redis_lib  # noqa: E402 — grouped with its constants
+
+LOCK_KEY = "wgr_sync:run_lock"
+# Generous vs. minutes-long runs — avoids TTL-renewal machinery while still
+# self-clearing if a worker dies mid-run.
+LOCK_TTL_SECONDS = 2 * 60 * 60
+
+# Compare-and-delete: only the owner's token may release the lock (a naive
+# DELETE could release a successor's lock after our TTL expired).
+_RELEASE_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+end
+return 0
+"""
+
+
+def _redis():
+    # settings.redis_url — the same source Celery uses (celery_app.py).
+    return _redis_lib.Redis.from_url(settings.redis_url)
+
+
+def _acquire_lock(token: str) -> bool:
+    # Fail CLOSED — but ONLY on real connectivity errors. Programming errors
+    # must crash loudly, never masquerade as "lock held".
+    try:
+        return bool(_redis().set(LOCK_KEY, token, nx=True, ex=LOCK_TTL_SECONDS))
+    except (_redis_lib.exceptions.RedisError, OSError):
+        logger.error("wgr_sync: redis unreachable for run lock — skipping run")
+        return False
+
+
+def _release_lock(token: str) -> None:
+    try:
+        _redis().eval(_RELEASE_LUA, 1, LOCK_KEY, token)
+    except Exception:
+        pass  # TTL expiry is the backstop
+
+
+def advances_watermark(since_override: str | None) -> bool:
+    """Only scheduled/incremental (None) and full pulls own the canonical
+    watermark. A manual partial pull (since=<ISO>) repairs a window; it must
+    never advance the cursor past unpulled history (an operator running
+    since=now would otherwise skip everything behind it, forever)."""
+    return since_override in (None, FORCE_FULL)
+
+
+def pick_watermark(details_rows) -> datetime | None:
+    """Latest row that actually CARRIES a watermark — walks past
+    watermark-held rows (manual partial pulls) so one manual pull doesn't
+    degrade the next hourly run into a surprise full pull. Pure — no I/O."""
+    for row in details_rows:
+        raw = row.get("watermark") if isinstance(row, dict) else None
+        if not raw:
+            continue
+        try:
+            return datetime.fromisoformat(raw)
+        except (ValueError, TypeError):
+            logger.warning("wgr_sync: unparseable stored watermark %r — skipping", raw)
+            continue
+    return None
+
 # Overlap subtracted from the stored watermark before pulling, to catch rows that
 # were committed on the WGR side during the previous run or under clock skew.
 # Idempotent upserts make the re-pull harmless.
@@ -46,23 +114,16 @@ FORCE_FULL = "full"
 
 
 async def _read_watermark(session) -> datetime | None:
-    """Return the watermark from the latest successful wgr_sync run, or None."""
-    row = (await session.execute(
+    """Return the watermark from the latest successful wgr_sync run that
+    carries one (manual partial pulls write watermark_held rows — skip them),
+    or None."""
+    rows = (await session.execute(
         select(SyncLog.details)
         .where(SyncLog.operation == SYNC_OPERATION, SyncLog.status == "ok")
         .order_by(SyncLog.created_at.desc())
-        .limit(1)
-    )).scalar_one_or_none()
-    if not row:
-        return None
-    raw = row.get("watermark") if isinstance(row, dict) else None
-    if not raw:
-        return None
-    try:
-        return datetime.fromisoformat(raw)
-    except (ValueError, TypeError):
-        logger.warning("wgr_sync: unparseable stored watermark %r — full pull", raw)
-        return None
+        .limit(20)
+    )).scalars()
+    return pick_watermark(rows)
 
 
 def resolve_since(
@@ -117,22 +178,25 @@ async def _run(since_override: str | None) -> dict:
 
         total = sum(counts.values())
         # Persist the new watermark only on a clean run, so a failed run never
-        # advances it and the next run safely re-pulls the same window.
+        # advances it — and only for runs that OWN the cursor (incremental /
+        # full); manual partial pulls write watermark_held instead.
+        details = {"since": since, "source": source, "counts": counts}
+        if advances_watermark(since_override):
+            details["watermark"] = new_watermark.isoformat()
+        else:
+            details["watermark_held"] = True
         session.add(SyncLog(
             id=uuid.uuid4(),
             operation=SYNC_OPERATION,
             table_name=None,
             record_count=total,
             status="ok",
-            details={
-                "since": since,
-                "source": source,
-                "watermark": new_watermark.isoformat(),
-                "counts": counts,
-            },
+            details=details,
         ))
         await session.commit()
-        return {"total": total, "counts": counts, "since": since, "watermark": new_watermark.isoformat()}
+        return {"total": total, "counts": counts, "since": since,
+                "watermark": details.get("watermark"),
+                "watermark_held": details.get("watermark_held", False)}
 
 
 @celery_app.task(name="app.tasks.wgr_sync.sync_wgr")
@@ -147,12 +211,23 @@ def sync_wgr(since: str | None = None) -> dict:
         logger.info("wgr_sync: skipped — client_sync_enabled is False")
         return {"status": "skipped", "reason": "client_sync_enabled is False"}
 
-    started = datetime.now(timezone.utc)
-    result = asyncio.run(_run(since))
+    # Run lock: acquired BEFORE _run() reads the watermark, so no two runs
+    # (hourly beat / user trigger / manual pull) can interleave.
+    lock_token = str(uuid.uuid4())
+    if not _acquire_lock(lock_token):
+        logger.info("wgr_sync: skipped — run lock not acquired")
+        return {"status": "skipped",
+                "reason": "run lock not acquired (held, or redis unreachable — check logs)"}
+    try:
+        started = datetime.now(timezone.utc)
+        result = asyncio.run(_run(since))
+    finally:
+        _release_lock(lock_token)
     logger.info(
         "wgr_sync: done in %.1fs — %d rows across %d tables (watermark=%s)",
         (datetime.now(timezone.utc) - started).total_seconds(),
-        result["total"], len(result["counts"]), result["watermark"],
+        result["total"], len(result["counts"]),
+        result["watermark"] or "held",
     )
 
     # Feed newly-synced rows into the RAG corpus (project RAG-everything policy):

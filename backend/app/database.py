@@ -15,6 +15,13 @@ if "supabase" in settings.database_url:
     _ssl_ctx.check_hostname = False
     _ssl_ctx.verify_mode = _ssl.CERT_NONE
     _connect_args["ssl"] = _ssl_ctx
+    # Supabase poolers are pgbouncer: the transaction pooler (:6543, local
+    # dev) swaps server backends between transactions, so asyncpg's
+    # prepared-statement cache collides intermittently
+    # (DuplicatePreparedStatementError: "__asyncpg_stmt_N__ already exists").
+    # Disable the cache — same remedy as alembic/env.py:109 and asyncpg's
+    # own pgbouncer guidance. Harmless on the session pooler (:5432, prod).
+    _connect_args["statement_cache_size"] = 0
 
 # Supabase's session pooler admits at most `pool_size` clients per user/db
 # (15 on this project) and rejects the rest with EMAXCONNSESSION. A NullPool

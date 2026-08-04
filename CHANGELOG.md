@@ -6,6 +6,612 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Social page rebuilt 1:1 from Greg's tracker spec (deliverable 1)
+
+- **New endpoint `GET /social/overview`** (`backend/app/routes/social.py`)
+  rebuilds the Social Media page directly from Greg's own tracking app
+  (`central-intelligence-greg/index.html`, `view-mkt-social`) as the spec:
+  same sections, same metrics, same structure/ordering — summary stat cards
+  (Posts in Range / Reels / Carousels / Watch Time / Total Views / Total
+  Reach / Total Likes / Total Saves), dynamic per-keyword comment-lead cards
+  + Total Leads, a "Leads by Day" table (comment-arrival frame), and a
+  sortable/paginated Posts table with per-keyword lead columns. Injection-safe
+  sort/filter (`_parse_date_param` idiom from `routes/ads.py`), defaulted
+  schemas. Existing `GET /social` (platform-breakdown summary used elsewhere)
+  is untouched.
+- **Two new WGR mirror tables**, following the `wgr_offers` precedent exactly
+  (model + alembic migration chained on the then-current head + mapper +
+  `_sync_snapshot_reconcile` wiring + `alembic upgrade head` + one-off
+  backfill):
+  - `wgr_comment_events` (15,856 rows) mirrors WGR's `comment_events` — one
+    row per IG/FB comment matching a configured lead keyword; feeds "Leads
+    by Day" (bucketed in UTC by `occurred_at`, reproducing WGR's
+    `comment_leads_by_day()` RPC semantics server-side).
+  - `wgr_post_comment_leads` (2,754 rows) mirrors WGR's precomputed
+    `post_comment_leads` rollup (`keyword_counts` jsonb + `total_leads` per
+    `ig_media_id`); feeds the per-post/keyword lead columns and stat cards.
+  - Migration `alembic/versions/c2df94038d03_add_comment_lead_mirrors.py`
+    (down_revision `e79cc79ec06b`). New model classes `WgrCommentEvent` /
+    `WgrPostCommentLead` in `app/models/intelligence.py`; new mappers
+    `map_wgr_comment_event` / `map_wgr_post_comment_lead` in
+    `app/services/wgr_sync/mapping.py`; two new `_sync_snapshot_reconcile`
+    calls in `app/services/wgr_sync/upsert.py::sync_all`.
+- **Pure rollup helpers** in `backend/app/repositories/social_stats.py`
+  (`filter_posts`, `build_summary_stats`, `build_keyword_totals`,
+  `attach_post_lead_counts`, `sort_posts`, `build_leads_by_day`) — no DB,
+  unit-tested (21 new tests, `tests/test_social_stats.py`; 297 total passing,
+  up from the 276 baseline).
+- **Frontend**: `frontend/src/app/(app)/marketing/social/page.tsx` fully
+  rebuilt against `GET /social/overview` in CI's design language (light
+  mode, shared `Card`/`KpiCard`/`FilterBar`/`Pagination`/`EmptyState` atoms)
+  — same sections/metrics/ordering as Greg's page, not a pixel clone of his
+  dark theme. New types in `frontend/src/types/index.ts`
+  (`SocialOverview*`).
+- **Documented gaps** (things Greg's page renders from a LIVE Instagram
+  Graph API connection or a metric absent from both DBs — omitted, not
+  faked; surfaced via the endpoint's `gaps` array and rendered in the page):
+  no live connect/refresh state to mirror; `instagram_posts` has no Skip
+  Rate / Follows columns (reel-only Graph API insights); Total Watch Time
+  is approximated as the sum of `avg_watch_time_sec` per reel (no
+  total-watch-time column in the mirror); Leads by Day buckets in UTC, not
+  the tenant's `ac_timezone` (default America/Denver).
+- See `INTEGRATIONS.md` (Instagram section) and `FEATURE-VERIFICATION.md`
+  ("Marketing — Social (Greg-spec rebuild)") for full detail and concrete
+  audit numbers.
+
+### Added — Interactive follow-up chat on Analyze with AI (deliverable 8)
+
+- **New endpoint `POST /analyze/{surface_key}/chat`** (`backend/app/routes/analyze.py`)
+  — sibling of the existing one-shot `POST /analyze/{surface_key}`. Accepts
+  the SAME surface filter query params plus a JSON body of the running
+  message history (`{messages: [{role, content}, ...]}`, capped at 20
+  messages / 4000 chars each via new Pydantic validators in
+  `app/schemas/analyze.py`). Recomputes the surface's aggregates from the
+  CURRENT filters (same `get_surface` → `surface.aggregate` path as the
+  initial analysis, so the chat is never grounded in a stale snapshot) and
+  answers via a new `chat_view_analysis(...)` in
+  `app/analytics/view_analysis/narrative.py`. Auth matches the existing
+  `analyze_view` route — no per-route dependency; the global
+  `AuthMiddleware` already covers all `/api/v1` routes.
+- **`chat_view_analysis` is a free-text, multi-turn sibling of
+  `synthesize_view_analysis`**, not a reuse of `call_claude_for_json` (that
+  helper is single-turn and forces a strict JSON-object response — doesn't
+  fit a conversational reply). It builds the Anthropic `messages` list
+  directly using the same client/model conventions
+  (`settings.anthropic_model_default`, the shared `MODEL` constant from
+  `app.analytics.overall_insight`). The system prompt embeds the surface
+  label, the active filters echo, and the aggregates JSON, with the same
+  hypothesize-never-fabricate contract as the initial analysis (every
+  number must appear verbatim in the aggregates; speculation must be
+  flagged as a hypothesis). Prompt assembly is factored into a pure
+  `build_chat_system_prompt(...)` function so it's unit-testable without a
+  DB or a live LLM call.
+- **Frontend — `AnalyzeViewDrawer.tsx`** now renders a follow-up thread
+  below the existing (unchanged) analysis: user messages right-aligned
+  (blue bubble), assistant replies left-aligned (white/bordered bubble,
+  matching the app's existing chat-bubble styling from `MessageBubble`
+  without importing the full chat machinery), a typing indicator while
+  pending, Enter-to-send (Shift+Enter for a newline), the input disabled
+  while a reply is pending, and an inline error state on failure. The
+  thread is ephemeral — it's cleared on drawer close and on "Re-run" (a
+  new analysis run invalidates the aggregates the old thread was grounded
+  in). New `analyzeViewChat(...)` client function in
+  `frontend/src/lib/analyze-client.ts` sends the full local message history
+  each call (no server-side session).
+- **Tests:** 13 new unit tests in `backend/tests/test_analyze_chat.py`
+  covering message validation (role whitelist, content-length cap,
+  message-count cap, boundary values) and pure prompt assembly (aggregates
+  JSON present, filters echo present, surface label present, deterministic
+  output) — no DB, no network. Backend suite: 271 passing (258 baseline +
+  13 new).
+- **Manual proof:** a real Anthropic call was attempted first (minimal
+  hand-built aggregates, one short question) and failed with `credit
+  balance is too low` (billing/env issue, not a code defect). Fell back to
+  the same call path with the LLM call monkeypatched: confirmed the
+  aggregates JSON and filters echo land verbatim in the system prompt sent
+  to the model, and the full message history is passed through unmodified.
+
+### Added — Real WGR offers + revenue per offer (deliverable 5)
+
+- **Discovery:** CI's own `offers` table (18 rows) is app-CRUD test data
+  ("This is a new offer", "just checking") — the real offers were never
+  synced into it. WGR's real catalog: `offers` (11 rows — e.g. "Agent
+  Infopreneur Accelerator - PIF" / Coaching / $10,000 / Active) and
+  `offer_mappings` (15 rows: program/payment_level/offer_id/
+  amount_collected/revenue_earned). `closed_sales.offer_id` (83 sales,
+  $471,250 total) references WGR offer ids — revenue per offer is a join
+  away.
+- **New mirror tables `wgr_offers` + `wgr_offer_mappings`** — follows the
+  `lead_journey` snapshot-reconcile precedent exactly. The app-CRUD
+  `offers` table (and its `Offer` model / `routes/offers.py` POST/GET flow)
+  is left completely untouched — a new `WgrOffer`/`WgrOfferMapping` model
+  pair lives in `app/models/intelligence.py`, migration
+  `e79cc79ec06b_add_wgr_offers_mirror.py` (chained after
+  `c0d1e2f3a4b5`, the actual `alembic heads` at start), mapper functions
+  `map_wgr_offer`/`map_wgr_offer_mapping` in `app/services/wgr_sync/
+  mapping.py`, wired into `sync_all` via `_sync_snapshot_reconcile` (tiny
+  tables — default page_size fine).
+  - **`offer_mappings` has no upstream primary key** — `(program,
+    payment_level, offer_id)` is verified unique across all 15 rows (probe
+    2026-08-04), so `map_wgr_offer_mapping` builds a deterministic composite
+    `id` from that triple. This broke `_sync_snapshot_reconcile`'s existing
+    assumption that `wgr_pk` (used both for the null-check AND as the
+    raw-form delete-reconciliation keep-id) equals the CI `pk_attr` — true
+    for every other caller, false here since the CI pk is a 3-column
+    composite. Added an optional `raw_keep_fn` parameter (default `None`,
+    zero behavior change for existing callers) that recomputes the same
+    composite from the raw row when the 1:1 assumption doesn't hold.
+  - **Pre-existing alembic debris found and cleared:** an untracked stray
+    duplicate `c0d1e2f3a4b5_add_lead_journey_mirror 2.py` (byte-identical to
+    the tracked migration, confirmed via `diff` + `git status`) caused
+    `alembic heads`/`upgrade` to raise `CycleDetected` the moment a second
+    migration chained off `c0d1e2f3a4b5` — tolerated silently (just a
+    warning) as long as only one migration pointed at that revision.
+    Removed the untracked stray copy only; the tracked original file is
+    unmodified.
+  - Ran `alembic upgrade head` then an in-process one-off backfill (same
+    pattern as `scripts/backfill_wgr.py`) — verified 11 + 15 rows landed.
+- **`app/repositories/offer_stats.py`** (new) — pure, no-DB helpers:
+  `build_offer_catalog` (merges the real catalog with a per-offer sales/
+  revenue rollup; appends a synthetic **"Unattributed"** row for any
+  revenue whose `offer_id` is null or doesn't match a known offer, so total
+  revenue always reconciles regardless of catalog coverage gaps) and
+  `build_payment_level_rollup` (deterministic program/payment_level
+  ordering). 11 unit tests in `tests/test_offer_stats.py`.
+- **`GET /offers/catalog`** (`backend/app/routes/offers.py`, extended in
+  place — existing `GET`/`POST /offers` and `POST /offer-generate`
+  untouched) — real offers (name/type/price/status/url) LEFT JOINed with
+  `closed_sales` grouped by `offer_id`, plus `payment_levels` from
+  `wgr_offer_mappings`. All schema fields defaulted.
+- **`frontend/src/app/(app)/marketing/offers/page.tsx`** rebuilt around
+  `GET /offers/catalog`. The prior page rendered the 18 app-CRUD test rows
+  as offer cards with a fake sidebar "Offer Builder" mini-form (Save/AI
+  Suggestions buttons with no `onClick` — pure decoration duplicating the
+  real builder page) — both replaced. **CRUD affordances kept**: the
+  top-bar **"+ Create Offer"** button still links to the fully-functional
+  `/marketing/offers/builder` page (real `POST /offers` + real
+  `POST /offer-generate` AI flow) — that page and its backend routes are
+  untouched. The main listing now shows the real catalog as a table (name,
+  type, price, status chip, sales count, revenue), an "Unattributed" row
+  (amber tint, same visual language as unmapped channels elsewhere) when
+  applicable, and a Payment Levels sidebar card grouped by program.
+- **Verified:** catalog shows all 11 real offers; revenue rows sum to
+  **$471,250** exactly, matching `closed_sales`'s true total (no
+  Unattributed row needed today — every one of the 83 sales' `offer_id`
+  resolves to a known offer, confirmed via direct query).
+- Backend: 258 passing (247 after deliverable 3 + 11 new). Frontend: lint
+  clean, 23 tests passing, `next build` succeeds.
+- See `FEATURE-VERIFICATION.md` → "Marketing — Offers (real WGR catalog,
+  deliverable 5)" for the full verification steps, and `INTEGRATIONS.md`
+  → WGR mirror section for the new mirrored tables + surface update.
+
+### Added — Funnels from lead_journey, sliceable by channel (deliverable 3)
+
+- **Discovery:** CI's own `funnel_events`/`funnel_stats` tables are empty —
+  dead scaffolding, left in place. The real synced funnel lives in the
+  `lead_journey` mirror (1 row per lead, 12,820 rows): stages are derivable
+  per-lead — leads (all) → registered (`webinar_registered_at` not null:
+  11,557) → watched (`watched_live` OR `watched_replay`: 6,872) → booked
+  appt (`appt_count`>0: 1,289) → discovery held (`discovery_held`: 183) →
+  closed (`sale_id` not null: 83).
+- **`app/repositories/funnel_stats.py`** (new) — pure, no-DB aggregation
+  helpers: `stage_flags_for_row` (six stage predicates over a
+  `lead_journey`-like row), `aggregate_overall_stages` (ordered stage
+  counts + `pct_of_leads` + `conversion_from_previous`), `aggregate_by_channel`
+  (per-bucket stage counts + lead→close %, built on the shared
+  `bucket_channel_combos`/`build_resolver` machinery from
+  `app/services/attribution.py` — bucket rules are never reimplemented).
+  14 unit tests in `tests/test_funnel_stats.py`, SimpleNamespace-fake style
+  matching `tests/test_leads_channel.py`.
+- **`GET /funnels/overview`** (`backend/app/routes/funnels.py`, extended in
+  place — existing `POST /funnels` webhook + legacy `GET /funnels` summary
+  untouched) — optional `entry_from`/`entry_to` (scopes
+  `lead_journey.entry_date`, validated via the `_parse_date_param` idiom in
+  `routes/ads.py`, 422 on malformed input). Response: `overall` (the six
+  ordered stages) and `by_channel` (per resolved channel bucket, same six
+  stage counts + lead→close rate, ordered by leads descending). Taxonomy is
+  loaded once per request, same idiom as `compute_lead_stats`.
+  **Schema note:** `lead_journey` carries 5 UTM/channel fields upstream, not
+  6 — there is no `utm_content_last` column. The route passes `None`
+  explicitly for that slot into the 6-tuple resolver signature rather than
+  inventing a column; this is exactly the resolver's documented null/wildcard
+  semantics, not a workaround.
+- **`frontend/src/app/(app)/marketing/funnels/page.tsx`** — full rebuild
+  around `GET /funnels/overview`. The prior page (seed-data two-funnel
+  selector reading `funnel_events`/`funnel_stats`) is replaced entirely:
+  horizontal stage bars (count + % of leads + step conversion) in the
+  existing emerald visual language, no new chart libraries, plus a channel
+  breakdown table below (channel chip via the shared `channelLabel`/
+  `channelBadgeClasses` from `@/lib/lead-display` — amber tint for unmapped
+  dialects — stage counts, lead→close %). An `entry_from`/`entry_to` date
+  range filter row mirrors the `/leads` page's date-input pattern. Quiet
+  empty states + skeletons; no native `alert`/`confirm`/`prompt`.
+- **Verified:** unfiltered overall matches the discovery counts exactly —
+  12,820 / 11,557 / 6,872 / 1,289 / 183 / 83 — via a direct in-process DB
+  query against the new pure helpers. A 2026-01-01..2026-06-30 date-scoped
+  call returns 2,882 / 2,653 / 1,530 / 347 / 81 / 13, internally consistent
+  (each stage ≤ the previous). Channel breakdown sums (12,820 leads, 83
+  closed) reconcile with the overall totals.
+- Backend: 247 passing (233 baseline + 14 new). Frontend: lint clean,
+  23 tests passing, `next build` succeeds.
+- See `FEATURE-VERIFICATION.md` → "Marketing — Funnels (real data,
+  deliverable 3)" for the full verification steps, and `INTEGRATIONS.md`
+  → WGR mirror section for the `lead_journey` surface update.
+
+### Added — CI Insights + Market Signals full filters, source attribution, informative redesign (deliverables 6+7)
+
+Extends both marketing-department CI pages (`/ci-insights`, `/ci-market-signals`) —
+note there is a separate, unrelated `/insights` page (core department health
+metrics/recommendations engine) that this work does **not** touch.
+
+- **Audited `insights` (1,932 rows) and `market_signals` (1,961 rows)
+  read-only** (asyncpg, `statement_cache_size=0`) before building filters —
+  same data-driven-filter philosophy as the leads/email pages. `insight_type`
+  has 8 distinct values (Pain 948, Goal 510, Objection 275, Trigger 191, Win 3,
+  Identity 2, Belief 2, Buying Signal 1). `signal_family` has 30 distinct
+  values. `signal_strength` has 4 (Strong 1024, Moderate 826, Weak 80, Medium
+  2). `pain_layer` has 7 real values once NULLs are excluded (958 rows are
+  NULL; Structural 352, Emotional 192, Identity 184, Belief 157, Tactical 53,
+  Social 31, Strategic 5) — all four got dropdowns. `best_use_case` has 1,019
+  distinct values across ~1,932 rows — free-text cardinality, **not** given a
+  dropdown. `insight_tags` has 4,051 rows over 2,774 distinct tags — also too
+  high-cardinality for a dropdown; exposed as a free-text exact-match filter
+  instead. `call_id` is 100% populated on `insights` — source attribution
+  today always resolves to the linked call (and, where the call has one, its
+  lead) — no other source type exists yet.
+- **`GET /ci/insights`** (`backend/app/routes/ci.py`) extended in place:
+  `insight_type`, `signal_family`, `signal_strength`, `pain_layer` (exact
+  match), `tag` (exact match, joined via `insight_tags`), `search`
+  (ILIKE on `signal`/`raw_quote`), `created_from`/`created_to` (new canonical
+  names; `date_from`/`date_to` kept as deprecated aliases for backward
+  compat), all injection-safe (bind params only, whitelisted columns). New
+  `_parse_datetime_param` helper mirrors the `_parse_date_param` idiom in
+  `routes/ads.py` — 422 on a malformed date instead of an opaque asyncpg 500.
+  Response rows now carry source attribution (`call_date`, `call_type`,
+  `lead_id`, `lead_name` — batch-resolved per page to avoid N+1) and `tags`
+  (batch-resolved the same way), plus `pain_layer` and `created_at`.
+  `GET /ci/insights/facets` now also returns `pain_layer`.
+  `GET /ci/insights/summary` shares the same filter builder as the list
+  endpoint (extracted into `_build_insight_filters`) so the charts always
+  reflect exactly what the table shows, and gained a `by_pain_layer`
+  distribution.
+- **`GET /ci/market-signals`** extended in place: `search` (ILIKE on
+  `signal`/`example_quote`), `min_mentions`, `updated_from`/`updated_to`
+  (there's no `created_at` on this table — it's a rolling aggregate keyed on
+  `(signal_family, signal)` and recomputed in place, so the date range scopes
+  `updated_at`), `sort_dir`, and pagination (`page` — was previously a flat
+  `limit`-only list). Added a `momentum` sort option and a computed
+  `momentum` field per row: 7-day mention rate vs. the prior-23-day average
+  rate within the 30-day window (`(recent_rate - prior_rate) / prior_rate`);
+  returns `null` only when `last_30_days` is 0 — no activity in the window at
+  all, nothing to compare against. Live data audit found `last_30_days` caps
+  at **2** across all 1,961 rows (1,083 rows at 0, 877 at 1, 1 at 2) and
+  `last_7_days` is always 0 or 1 — a low-volume, near-binary dataset, so the
+  guard is deliberately just "was there any activity in the window", not a
+  minimum-sample-size threshold (an earlier draft gated on
+  `total_mentions < 3`, which — since `total_mentions` isn't even an input to
+  the momentum calculation — returned `None` for every row; caught before
+  ship and rewritten). With the corrected guard, **878 of 1,961 rows (44.8%)**
+  get a real momentum value on live data; momentum itself is coarse
+  (effectively ±1.0 given the data's ceiling) so the frontend renders it as a
+  directional chip, never a literal percentage. Momentum sorting runs as a
+  single `ORDER BY`/`LIMIT`/`OFFSET` in SQL via a new `_momentum_sql_expr()`
+  (a SQL twin of the Python `_momentum()`, kept in lockstep and covered by
+  the same test cases) — not an unbounded fetch-then-sort-in-Python, which an
+  earlier draft did (comment claimed it was "bounded"; it wasn't — every
+  default-sort page load would have pulled every filtered row). `GET
+  /ci/market-signals/facets` unchanged in shape.
+- **Frontend types** (`frontend/src/types/index.ts`): `CIInsight` gained
+  `pain_layer`, `created_at`, `call_date`, `call_type`, `lead_id`,
+  `lead_name`, `tags`; `CIInsightFacets` gained `pain_layer`;
+  `CIInsightDistribution` gained `by_pain_layer`; `CIMarketSignal` gained
+  `example_call_id`, `notes`, `updated_at`, `momentum`;
+  `CIMarketSignalsResponse` gained `total`.
+- **`/ci-insights`** (`frontend/src/app/(app)/ci-insights/page.tsx`) — this
+  is the routed, sidebar-linked page (`Marketing → CI Insights`); the
+  separate `frontend/src/app/(app)/insights/` directory backs the unrelated
+  `/insights` core-department page and was left untouched. Filter row now
+  has: search, Insight Type, Signal Family, Signal Strength, Pain Layer
+  (all data-driven dropdowns), a free-text Tag filter, and a "Generated"
+  date-range pair (mirrors the leads page's `entry_from`/`entry_to` date
+  pattern) — all server-side, debounced on the free-text inputs. Each
+  insight row now shows a source-attribution line (📞 call type · lead name ·
+  call date) linking to `/sales-calls/{call_id}` or `/coaching-calls/{call_id}`
+  depending on the call's `call_type`, plus up to 4 tag chips. Charts
+  (`insights-charts.tsx`) kept and extended: added a "Pain layer breakdown"
+  horizontal-bar chart alongside the existing insight-type donut,
+  signal-strength bars, signal-family bars, and top-signals bars — same
+  Recharts/Card/skeleton/empty-state conventions as the existing charts, no
+  new chart library.
+- **`/ci-market-signals`** (`frontend/src/app/(app)/ci-market-signals/page.tsx`)
+  redesigned for informativeness rather than a raw list: default sort is now
+  "Momentum"; each card leads with a plain-language **momentum chip**
+  ("↑ Picking up" / "→ Steady" / "↓ Cooling off" / "Not enough data") instead
+  of a raw percentage — the underlying volumes are small enough that a
+  literal "+400%" would overstate a jump from 1 mention to 2. `best_marketing_angle`
+  is surfaced above the fold with a 💡 marker; `example_quote` is collapsed
+  behind a "Read more" toggle past 120 characters instead of a raw dump. Added
+  a stat strip (signals tracked / picking up / cooling off on the current
+  page), a Min Mentions filter, an Updated date-range pair, and a search box
+  (signal/quote) — same FilterBar/FormSelect/Badge-style atoms and debounce
+  pattern as the leads and insights pages. Empty states stayed quiet (icon +
+  one-line message), no native dialogs anywhere.
+
+### Added — Email campaigns page overhaul (deliverable 2)
+
+Rebuilds `/marketing/email` around real metrics instead of the Compose flow.
+
+- **Removed the Compose Email feature** per client request: deleted
+  `frontend/src/app/(app)/marketing/email/compose/`, its exclusive support
+  code (`frontend/src/components/email/` — the page-builder + block
+  components, `frontend/src/lib/email-templates.ts`), and every link/CTA
+  pointing at it. Backend CRUD endpoints for campaign drafts
+  (`POST/GET/PATCH/DELETE /email/campaigns/{id}`, duplicate, archive,
+  unarchive) are left intact (not asked to be removed) but are now unused
+  by any UI.
+- **Audited `email_campaigns` read-only** before building filters (asyncpg,
+  `statement_cache_size=0`, mirroring the repo's existing proof-script
+  idiom): **2,426 rows**, all `deleted_at IS NULL`. `status` has exactly
+  **one** distinct value (`sent`) across every row — no drafts/archived
+  campaigns exist outside the (now-removed) compose flow, which is why
+  those two sections are gone from the rebuilt page rather than kept.
+  `campaign_type` has **12 distinct, well-distributed values** (Value/
+  Education 648, Weekly Nurture 441, Story-led 366, Launch 312,
+  Transactional 307, Promotional Offer 160, Client Win 94, Welcome/
+  Onboarding 41, Re-engagement 35, Unclassifiable 17, `regular` 2, plus 3
+  NULLs) — a real filter. `sent_at` spans 2016-07-25 to 2026-08-02 — a
+  real date-range filter. `bounce_count` is always 0 today (kept in the
+  row shape as a real column; just nothing to show yet).
+- **New `GET /email/campaigns`** (`backend/app/routes/email.py`) — raw-SQL,
+  auth-gated like its siblings. Params: `sent_from`/`sent_to` (ISO dates,
+  `_parse_campaigns_date_param` mirrors `ads._parse_date_param` — 422 on a
+  malformed date instead of an opaque 500 from the asyncpg driver),
+  `campaign_type`, `status`, `search` (name/subject ILIKE), `sort_by`
+  (whitelisted against `_CAMPAIGNS_SORTABLE_COLUMNS` — sent_at,
+  recipients_count, open_count, click_count, open_rate, click_rate,
+  unsubscribe_count, bounce_count — same injection-safe idiom as
+  `leads._SORTABLE_COLUMNS`), `sort_dir`. Returns `campaigns` (id, name,
+  subject, campaign_type, status, sent_at, audience_name, recipient/open/
+  click/unsub/bounce counts, open_rate, click_rate, archive_url),
+  `summary` (count, total_recipients, total_opens, total_clicks,
+  avg_open_rate, avg_click_rate — computed over the **filtered** set, not
+  the whole table), and `filter_options` (distinct campaign_types/statuses
+  actually present — same data-driven-filter philosophy as the leads
+  page). New Pydantic schemas in `backend/app/schemas/email.py`
+  (`EmailCampaignListRow`, `EmailCampaignsSummary`,
+  `EmailCampaignsFilterOptions`, `EmailCampaignsResponse`), everything
+  defaulted. Fixed a latent bug as a byproduct: `HTTPException` was used
+  by five existing routes in this file (404s on campaign CRUD) but was
+  never imported — now imported alongside the new endpoint's needs.
+- **Frontend** (`frontend/src/app/(app)/marketing/email/page.tsx`,
+  rebuilt): FilterBar-style row (search, sent-date range, campaign type
+  select, status select, and a "Sort by" metric select — the metric-filter
+  ask — all server-driven via the new endpoint); a sortable campaigns
+  table with clickable metric headers (click toggles server-side sort
+  direction, same idiom as the leads table); a per-row **visual
+  performance indicator** — the shared `ScoreBar` atom on open_rate
+  normalized against the filtered set's max, plus a Top/Mid/Low tercile
+  chip computed client-side against the same filtered set (no fabricated
+  scores); and a **"Top campaigns" ranking card** showing the top 5 by
+  whichever metric is currently selected, within the current date range —
+  satisfies the ranking ask by re-slicing the same fetched response
+  rather than a second query. KPI row now reflects the filtered set
+  (campaigns / avg open rate / avg click rate / total recipients) instead
+  of the old all-time totals.
+- **Docs:** `FEATURE-VERIFICATION.md` gained a "Marketing — Email
+  Campaigns" section with concrete manual-test steps against the real
+  audit numbers above; `INTEGRATIONS.md`'s Mailchimp entry updated to
+  describe the new surface and mark Compose as removed.
+
+### Added — Revenue by channel for closed sales (deliverable 9b — sales half of Source Attribution)
+
+Completes the "Leads & Sales — Source Attribution" deliverable: leads got
+channel attribution 2026-08-03 (see the read-time channel entries below);
+this adds the SALES half — revenue attributed to marketing channel.
+
+- **New `compute_revenue_by_channel`** (`backend/app/repositories/sales_stats.py`)
+  — aggregates `closed_sales.amount_collected` (the revenue source of truth;
+  existing sales KPIs already read it) into the same canonical channel
+  buckets `bucket_channel_combos` produces for leads, scoped by
+  `close_date` (optional `date_from`/`date_to`). Joins `closed_sales` to
+  `leads` via `external_id` first (covers all 83 closed sales today), with
+  a `ghl_contact_id` fallback for email-merged leads — same join contract
+  as `lead_engagements`/`lead_journey`. A closed sale whose lead row can't
+  be found at all still counts toward revenue, bucketed as `"No
+  attribution"`. Verified read-only against the live DB: unscoped buckets
+  sum to **$471,250 across 83 sales**; only 11 of those 83 buying leads
+  carry any UTMs, so `"No attribution"` is the dominant bucket (~79% of
+  revenue) by design, not a bug — `closed_sales` disagrees with the
+  `lead_journey` mirror's total ($422,750); per the discovery brief we do
+  not reconcile that here and treat `closed_sales` as authoritative.
+- **New `GET /sales/summary`** key `revenue_by_channel` (unscoped) and new
+  `GET /leads/stats` field `revenue_by_channel` (`RevenueByChannelItem` in
+  `backend/app/schemas/leads.py`), scoped by the route's existing
+  `entry_from`/`entry_to` params applied to `close_date` — a deliberate
+  choice (documented in `get_leads_stats`) so the page's one date filter
+  coherently scopes both the lead funnel and the revenue breakdown, even
+  though revenue's real date axis is `close_date`, not `entry_date`.
+- **Frontend** (`frontend/src/app/(app)/leads/page.tsx`) — new "Revenue by
+  Channel" card below the Source Breakdown donut: channel chip (reusing
+  `channelLabel`/`channelBadgeClasses`, amber for unmapped dialects), sales
+  count, revenue (formatted, no decimals), and a % bar. Header shows total
+  revenue + sales count for the selected range. Quiet empty state when no
+  sales fall in range.
+- **Tests:** `backend/tests/test_revenue_by_channel_breakdown.py` — pure
+  no-DB tests for `_revenue_buckets_to_breakdown` (bucket merge, revenue
+  sums preserved, deterministic ordering) plus an integration-lite test
+  exercising the real `bucket_channel_combos` mapping re-aggregation,
+  including the missing-lead → `"No attribution"` case.
+
+### Changed — Ads page rebuilt from real Meta Ads mirror data (deliverable 4)
+
+`/marketing/ads` no longer shows the hardcoded platform-breakdown widget
+(Google/Facebook/Instagram/TikTok rows that were always "—") — it now
+renders directly from the WGR Meta Ads mirror (`meta_campaigns` /
+`meta_ads` / `meta_ad_performance`; 29 / 472 / 647 rows live).
+
+- **New `GET /ads/overview`** (`backend/app/routes/ads.py`, schemas in
+  `backend/app/schemas/ads.py`) — KPIs (spend, impressions, leads, booked
+  calls, cost/lead, CTR, active/total campaigns, total ads), a per-campaign
+  rollup (`campaigns`), and the top 15 ads by spend (`top_ads`). Optional
+  `snapshot_from`/`snapshot_to` scope the performance aggregates;
+  campaign/ad identity lists stay unfiltered. The legacy `GET /ads` (backed
+  by `ads_stats`) and `POST /ads` (analyze/ad-copy) are unchanged.
+- **Aggregation choice, verified read-only against the live DB:**
+  `meta_ad_performance.snapshot_type` is uniformly `"Daily"` and each ad's
+  spend/impressions genuinely vary day to day (not a restated cumulative
+  total), so spend/impressions/leads/booked_calls are **summed** across the
+  snapshot range. `kpi_status` and `ctr` are point-in-time quality signals
+  and are NOT summable — those come from each ad's **latest** snapshot in
+  range instead. Only 7 of 472 ads currently carry any performance rows
+  (647 rows total); the other 465 show identity-only with zero performance.
+- **Frontend** (`frontend/src/app/(app)/marketing/ads/page.tsx`) —
+  `PlatformBreakdownCard` and the hardcoded `AD_PLATFORMS` constant are
+  deleted. New KPI row (marketing green `#10B981`), a Campaigns table
+  (status chip, objective, budget, spend, leads, CPL, ads count), and a Top
+  Ads table (hook text truncated with a tooltip, KPI-status chip, killed
+  ads surface `kill_reason` in the row tooltip). The Analyze-with-AI CTA
+  (`POST /ads` → ad-copy generator) is preserved unchanged. Empty states are
+  quiet placeholders, not fake data.
+
+### Added — Lead Journey card (WGR lead_journey mirror)
+
+The lead detail page gains a **Journey** card: webinar registration/watch
+behavior (live vs replay, watch time), appointment history (count,
+first/last, outcome, booked by), and sales progression (calls, discovery,
+close date, amount collected, days to close). Hidden when the lead's journey
+shows no activity; a green "Closed $X" chip heads the card for won leads.
+
+- **New mirror `lead_journey`** (migration `c0d1e2f3a4b5`) — WGR's per-lead
+  journey summary, one row per lead (12,818 backfilled 2026-08-03; coverage:
+  11,556 webinar, 1,289 appointments, 318 calls, 83 sales). Upstream
+  rebuilds the table (no PK/watermark; `lead_id` verified unique/non-null),
+  so it syncs via snapshot reconcile in `sync_all` with `page_size=50_000`
+  — `_sync_snapshot_reconcile` gained a `page_size` parameter (the previous
+  hardcoded 10k single-page guard would have skipped delete-reconciliation
+  every run at this table's size).
+- **`GET /leads/{id}`** — response gains a nullable `journey` object
+  (`LeadJourneyInfo`); join contract `leads.external_id` → `ghl_contact_id`
+  fallback, same as `lead_engagements` (12,813 of 12,818 join directly).
+
+### Added — Channel row on the lead detail Contact card
+
+Channel now shows on every lead detail page (Contact card, under Source) —
+"No attribution" for leads without UTMs, amber for `unmapped:*` — instead of
+only appearing inside the Attribution card (hidden when a lead has no UTMs).
+
+### Removed — Source column + Source filter on /leads (UI only)
+
+With the channel axis live, the provenance `source` column (uniformly "WGR")
+and its filter dropdown were redundant on the leads list — hidden from the
+UI. **API unchanged:** `GET /leads` still returns `source` and accepts the
+`source` filter param; `/leads/stats` still returns `available_sources`;
+the lead detail Contact card still shows source.
+
+### Changed — Channel filter driven by the breakdown, filters server-side
+
+The Channel filter on `/leads` previously offered only the channels visible
+on the loaded page and filtered client-side — it couldn't find e.g. the 714
+`meta_paid` leads spread across 12,656 rows.
+
+- **`GET /leads`** — new optional `channel` query param accepting exactly the
+  bucket labels the breakdown emits (canonical channels, `"No attribution"`,
+  `"Non-marketing"`, `unmapped:*`, `"other unmapped"`). Channel is computed,
+  not stored, so the backend inverts the bucket: it buckets all distinct UTM
+  combos with the same `bucket_channel_combos` logic the breakdown uses and
+  filters SQL-side on the matching combos (`IS NOT DISTINCT FROM`, so
+  NULL/empty combos match exactly). Unknown labels return zero rows.
+  Verified live: `meta_paid`=714, `No attribution`=10,187,
+  `Non-marketing`=1,100 — identical to the donut.
+- **`app/services/attribution.py`** — `summarize_channels` refactored on top
+  of new `bucket_channel_combos` (returns the per-combo → bucket mapping the
+  filter needs); breakdown behavior unchanged, covered by 4 new unit tests.
+- **Leads page (`/leads`)** — Channel filter options are now the breakdown
+  buckets with dataset-wide counts (e.g. `meta_paid (714)`), in the donut's
+  order; selection is sent server-side, so pagination and "Showing X of Y"
+  reflect the filtered dataset. Note: filtering by `Non-marketing` shows rows
+  whose chips carry the specific non-marketing value (e.g. `system_workflow`)
+  — the bucket is the rollup, the chip is the exact resolution.
+
+### Changed — Source filter reflects real data
+
+The Leads page Source dropdown was a hardcoded legacy enum (Webinar / VSL /
+Opt-in / Ads / Referral / Other) that didn't include `wgr` — the source on
+100% of current leads — so the filter could never match anything real.
+
+- **`GET /leads/stats`** — response gains `available_sources`: the distinct
+  `leads.source` values actually present (lowercased, count-desc, name
+  tie-break). Deliberately **not** scoped by the `entry_from`/`entry_to`
+  range, so applying a date range never removes filter options.
+- **Leads page (`/leads`)** — the Source filter options are built from
+  `available_sources` (labels via `resolveSource`, so legacy enum values
+  keep their curated labels and anything else is prettified, e.g.
+  `wgr` → "WGR"). New sources appearing in the DB show up automatically.
+  Falls back to the legacy enum list while stats are loading.
+
+### Added — Lead & sales channel attribution UI (ClickUp 86d3u65cb)
+
+The Leads and Sales surfaces now show Greg's canonical marketing channel,
+resolved read-time from the WGR attribution mirror (previous entry) — no new
+tables, no stored derived state.
+
+- **`backend/app/services/attribution.py`** — pure `channel_for_lead` (per-row
+  resolution) and `summarize_channels` (breakdown bucketing with a top-8
+  `unmapped:*` cap + `"other unmapped"` overflow, so an unbounded UTM dialect
+  can't blow up the donut).
+- **`compute_lead_stats` breakdown** — groups the six UTM fields and resolves
+  canonical channel via the taxonomy; buckets are canonical channels,
+  `"No attribution"`, `"Non-marketing"` (rows with
+  `include_in_channel_reporting=false`), and `unmapped:*`. Each item carries
+  `{source, channel, platform, reportable, count, percentage}` (`source ===
+  channel` transitionally, for frontend compatibility). Counts sum to
+  `total_leads` (verified live: 12656 == 12656 across 14 buckets). **Both**
+  `GET /leads/stats` and `GET /sales/summary` inherit this breakdown, since
+  both read `compute_lead_stats`.
+- **`GET /leads` + `GET /leads/{id}`** — responses gain `channel` and 8
+  camelCase UTM fields (`utmSourceFirst` … `utmContentLast`). The taxonomy
+  resolver loads once per request. No server-side channel filter (channel
+  isn't a stored column) — filtering by channel is client-side by design.
+- **Leads page (`/leads`)** — new Channel column (hash-colored chips, amber
+  tint for `unmapped:*`/"other unmapped"), the breakdown donut now reads
+  `.channel` instead of raw `leads.source`, and a client-side Channel filter
+  in the FilterBar. Shared display helpers hoisted to
+  `frontend/src/lib/lead-display.ts`.
+- **Lead detail page** — new full-width Attribution card (First touch / Last
+  touch raw UTM rows + resolved channel chip), hidden entirely when all 8
+  UTM fields are null. Migrated to the shared `lead-display.ts` helpers.
+- **Data reality (preflight, 2026-08-03):** taxonomy has 27 rows; of 12,656
+  `source='wgr'` leads, only 87 have first-touch and 2,447 have last-touch
+  UTMs (~20% coverage) — `"No attribution"` is the largest bucket **by
+  design**, not a bug.
+- `/sales` remains a frontend redirect to `/leads` — no distinct Sales
+  surface was built; `/sales/summary` gets the new channel breakdown purely
+  by sharing `compute_lead_stats` with `/leads/stats`.
+
+Test doc: see "Lead & Sales Source Attribution" in `FEATURE-VERIFICATION.md`.
+
+### Added — WGR attribution data sync (foundation, 2026-07-26)
+
+Mirrors Greg's attribution-era data into CI (spec:
+`docs/superpowers/specs/2026-07-26-wgr-attribution-sync-design.md`):
+
+- `leads` gains first/last-touch UTM columns + `ghl_contact_id`
+  (presence-conditional mapping — absent upstream columns never
+  null-overwrite; drift tripwire warns in logs).
+- New mirrors: `attribution_taxonomy` (snapshot + delete-reconciliation with
+  count guard, deletion circuit breaker, and `sync_log` audit rows),
+  `lead_engagements` (watermarked; empty upstream at ship time), and
+  `meta_campaigns` / `meta_ads` / `meta_ad_performance` (real Meta Ads data:
+  29/472/635 rows at backfill).
+- Read-time channel resolver (`app/services/attribution.py`) implementing
+  Greg's taxonomy contract — channel is computed, never stored.
+- Sync hardening shipped alongside: Redis run lock serializes hourly/manual
+  runs; manual partial pulls (`since=<ISO>`) hold the watermark instead of
+  advancing it; WGR connections run as the new SELECT-only `ci_reader` role
+  with statement timeout + keepalives; alembic works over the transaction
+  pooler (statement cache disabled).
+- No UI yet — deliverable-9 ticket (86d3u65cb) consumes this foundation.
+
 ### Added — Productization Phase 2: instance provisioning + fresh-instance safety
 
 A new company's CI instance can now be stood up from scratch with one script,

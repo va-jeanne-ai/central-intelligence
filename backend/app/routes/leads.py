@@ -42,7 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.database import get_session
 from app.repositories.list_filters import API_TO_DB_STATUSES, build_lead_where
-from app.repositories.sales_stats import compute_lead_stats
+from app.repositories.sales_stats import compute_lead_stats, compute_revenue_by_channel
 from app.schemas.appointments import AppointmentRecord, LeadAppointmentsResponse
 from app.schemas.leads import (
     ConversationMessageRow,
@@ -67,9 +67,11 @@ from app.schemas.leads import (
     LeadsKpiResponse,
     LeadsStatsResponse,
     LeadTagRow,
+    LeadJourneyInfo,
     LeadTagsResponse,
     LeadVolumePoint,
     NoteRow,
+    RevenueByChannelItem,
     SourceBreakdownItem,
     UpdateLeadRequest,
 )
@@ -78,6 +80,7 @@ from app.schemas.calendar import (
     CalendarEventRow,
     CalendarEventsResponse,
 )
+from app.services.attribution import bucket_channel_combos, build_resolver, channel_for_lead
 from app.services.audit import record_event
 
 logger = logging.getLogger(__name__)
@@ -184,6 +187,16 @@ def _week_label(weeks_ago: int) -> str:
 async def list_leads(
     status: str | None = Query(default=None, description="Filter by API status"),
     source: str | None = Query(default=None, description="Filter by source"),
+    channel: str | None = Query(
+        default=None,
+        description=(
+            "Filter by resolved channel bucket — accepts exactly the labels the "
+            "/leads/stats source_breakdown emits (canonical channels, "
+            "'No attribution', 'Non-marketing', 'unmapped:<src>/<med>', "
+            "'other unmapped'). Channel is computed at read time, so this "
+            "filters on the underlying UTM combos that resolve to the bucket."
+        ),
+    ),
     search: str | None = Query(default=None, description="Search name or email"),
     entry_from: str | None = Query(
         default=None, description="Filter: entry_date on/after this date (YYYY-MM-DD)"
@@ -211,6 +224,48 @@ async def list_leads(
         entry_from=entry_from, entry_to=entry_to,
     )
 
+    # Channel is resolved at read time (never stored) via the Task-1 helpers —
+    # load the taxonomy once per request, same idiom as compute_lead_stats
+    # (app/repositories/sales_stats.py).
+    taxonomy_rows = (await session.execute(text("SELECT * FROM attribution_taxonomy"))).fetchall()
+    resolver = build_resolver(taxonomy_rows)
+
+    # ---- Server-side channel filter -----------------------------------------
+    # A channel bucket isn't a column, so we invert it: bucket ALL distinct UTM
+    # combos (same base population + bucketing as the /leads/stats breakdown,
+    # via bucket_channel_combos) and filter SQL-side on the combos that map to
+    # the requested bucket. IS NOT DISTINCT FROM makes NULL/'' combos match
+    # exactly. Distinct-combo cardinality is small (dozens), so the OR-list
+    # stays bounded; an unknown bucket label simply matches zero rows.
+    if channel is not None:
+        combo_rows = (
+            await session.execute(
+                text(
+                    "SELECT utm_source_first, utm_medium_first, utm_content_first, "
+                    "utm_source_last, utm_medium_last, utm_content_last, COUNT(*) "
+                    "FROM leads WHERE deleted_at IS NULL GROUP BY 1,2,3,4,5,6"
+                )
+            )
+        ).fetchall()
+        mapping, _ = bucket_channel_combos(combo_rows, resolver)
+        matching = [key for key, label in mapping.items() if label == channel]
+        if matching:
+            combo_fields = (
+                "utm_source_first", "utm_medium_first", "utm_content_first",
+                "utm_source_last", "utm_medium_last", "utm_content_last",
+            )
+            clauses = []
+            for i, key in enumerate(matching):
+                parts = []
+                for j, field in enumerate(combo_fields):
+                    pname = f"ch{i}_{j}"
+                    parts.append(f"{field} IS NOT DISTINCT FROM :{pname}")
+                    params[pname] = key[j]
+                clauses.append("(" + " AND ".join(parts) + ")")
+            where_sql += " AND (" + " OR ".join(clauses) + ")"
+        else:
+            where_sql += " AND FALSE"
+
     # ---- COUNT total matching rows ------------------------------------------
     count_sql = text(f"SELECT COUNT(*) FROM leads WHERE {where_sql}")  # noqa: S608
     row = await session.execute(count_sql, params)
@@ -231,7 +286,15 @@ async def list_leads(
             status,
             source,
             entry_date,
-            created_at
+            created_at,
+            utm_source_first,
+            utm_medium_first,
+            utm_campaign_first,
+            utm_content_first,
+            utm_source_last,
+            utm_medium_last,
+            utm_campaign_last,
+            utm_content_last
         FROM leads
         WHERE {where_sql}
         ORDER BY {sort_by} {sort_dir} NULLS LAST, id ASC
@@ -243,12 +306,17 @@ async def list_leads(
     # ---- Map rows to response models ----------------------------------------
     leads: list[LeadRecord] = []
     for r in rows:
-        raw_id, name, email, phone, raw_status, source_val, entry_date, created_at = r
+        (
+            raw_id, name, email, phone, raw_status, source_val, entry_date, created_at,
+            utm_source_first, utm_medium_first, utm_campaign_first, utm_content_first,
+            utm_source_last, utm_medium_last, utm_campaign_last, utm_content_last,
+        ) = r
         api_status = _map_status(raw_status)
         score = _score_for_status(api_status)
         # The lead's date in the UI is the true funnel-entry date when known;
         # fall back to created_at (sync time) for leads with no upstream date.
         lead_date = entry_date or created_at
+        channel = channel_for_lead(resolver, r).channel
         leads.append(
             LeadRecord(
                 id=str(raw_id),
@@ -260,6 +328,15 @@ async def list_leads(
                 notes=None,
                 createdAt=lead_date.isoformat() if lead_date is not None else None,
                 score=score,
+                channel=channel,
+                utmSourceFirst=utm_source_first,
+                utmMediumFirst=utm_medium_first,
+                utmCampaignFirst=utm_campaign_first,
+                utmContentFirst=utm_content_first,
+                utmSourceLast=utm_source_last,
+                utmMediumLast=utm_medium_last,
+                utmCampaignLast=utm_campaign_last,
+                utmContentLast=utm_content_last,
             )
         )
 
@@ -305,19 +382,50 @@ async def get_leads_stats(
     KPI / volume / source / funnel aggregation has a single source of truth
     shared with the Sales department surfaces. This route just adapts the
     plain dict into the ``LeadsStatsResponse`` schema the frontend expects.
+
+    ``revenue_by_channel`` (deliverable 9b) is computed separately via
+    ``compute_revenue_by_channel`` — deliberately NOT folded into
+    ``compute_lead_stats``, because it scopes on a different date axis
+    (``closed_sales.close_date``, not ``leads.entry_date``). We reuse this
+    route's ``entry_from``/``entry_to`` params as the close_date range so the
+    page's single date filter coherently scopes both the lead funnel/KPIs
+    AND the revenue breakdown at once — the alternative (two independent
+    date filters on one page) would be confusing UX for a marginal semantic
+    gain, and Greg's brief explicitly calls for this scoping choice.
     """
     data = await compute_lead_stats(session, date_from=entry_from, date_to=entry_to)
+    revenue_by_channel = await compute_revenue_by_channel(
+        session, date_from=entry_from, date_to=entry_to
+    )
 
     kpis = LeadsKpiResponse(**data["kpis"])
     lead_volume = [LeadVolumePoint(**p) for p in data["lead_volume"]]
     source_breakdown = [SourceBreakdownItem(**s) for s in data["source_breakdown"]]
     funnel = [FunnelStage(**f) for f in data["funnel"]]
+    revenue_by_channel_items = [RevenueByChannelItem(**r) for r in revenue_by_channel]
+
+    # Distinct provenance sources actually present — feeds the Source filter
+    # dropdown. Deliberately NOT scoped by entry_from/entry_to: applying a date
+    # range must never remove options from the filter. Count-desc with a name
+    # tie-break, matching the breakdown's deterministic ordering.
+    source_rows = (
+        await session.execute(
+            text(
+                "SELECT LOWER(source) AS src, COUNT(*) AS cnt FROM leads "
+                "WHERE deleted_at IS NULL AND source IS NOT NULL AND source <> '' "
+                "GROUP BY 1 ORDER BY cnt DESC, src"
+            )
+        )
+    ).fetchall()
+    available_sources = [row[0] for row in source_rows]
 
     return LeadsStatsResponse(
         kpis=kpis,
         lead_volume=lead_volume,
         source_breakdown=source_breakdown,
         funnel=funnel,
+        revenue_by_channel=revenue_by_channel_items,
+        available_sources=available_sources,
     )
 
 
@@ -353,7 +461,9 @@ async def get_lead_detail(
     lead_row = (await session.execute(
         text("""
             SELECT id::text AS id, name, email, phone, status, source,
-                   notes, external_id, entry_date, created_at
+                   notes, external_id, ghl_contact_id, entry_date, created_at,
+                   utm_source_first, utm_medium_first, utm_campaign_first, utm_content_first,
+                   utm_source_last, utm_medium_last, utm_campaign_last, utm_content_last
             FROM leads
             WHERE id = :id AND deleted_at IS NULL
         """),
@@ -365,6 +475,58 @@ async def get_lead_detail(
 
     api_status = _map_status(lead_row["status"])
     score = _score_for_status(api_status)
+
+    # Channel is resolved at read time (never stored) via the Task-1 helper —
+    # per-request resolver, same idiom as list_leads / compute_lead_stats.
+    taxonomy_rows = (await session.execute(text("SELECT * FROM attribution_taxonomy"))).fetchall()
+    resolver = build_resolver(taxonomy_rows)
+    channel = channel_for_lead(resolver, lead_row).channel
+
+    # 1b. Journey summary from the WGR lead_journey mirror. Join contract
+    # (same as LeadEngagement): leads.external_id FIRST, falling back to
+    # ghl_contact_id (email-merged leads keep their original external_id and
+    # are only reachable through the GHL id). ORDER BY prefers the
+    # external_id match when both hit.
+    journey_row = (await session.execute(
+        text("""
+            SELECT * FROM lead_journey
+            WHERE lead_id = :ext
+               OR (ghl_contact_id IS NOT NULL AND ghl_contact_id = :ghl)
+            ORDER BY (lead_id = :ext) DESC
+            LIMIT 1
+        """),
+        {"ext": lead_row["external_id"] or "", "ghl": lead_row["ghl_contact_id"] or ""},
+    )).mappings().one_or_none()
+
+    def _iso(v):
+        return v.isoformat() if v is not None else None
+
+    journey = None
+    if journey_row is not None:
+        journey = LeadJourneyInfo(
+            webinar_count=journey_row["webinar_count"],
+            webinar_registered_at=_iso(journey_row["webinar_registered_at"]),
+            watched_live=journey_row["watched_live"],
+            watched_replay=journey_row["watched_replay"],
+            watch_seconds_total=journey_row["watch_seconds_total"],
+            last_opted_in_at=_iso(journey_row["last_opted_in_at"]),
+            appt_count=journey_row["appt_count"],
+            first_appt_at=_iso(journey_row["first_appt_at"]),
+            last_appt_at=_iso(journey_row["last_appt_at"]),
+            last_appt_outcome=journey_row["last_appt_outcome"],
+            last_appt_booked_by=journey_row["last_appt_booked_by"],
+            appt_qualified=journey_row["appt_qualified"],
+            appt_flagged=journey_row["appt_flagged"],
+            appt_qual_grade=journey_row["appt_qual_grade"],
+            call_count=journey_row["call_count"],
+            first_call_date=_iso(journey_row["first_call_date"]),
+            discovery_occurred=journey_row["discovery_occurred"],
+            discovery_held=journey_row["discovery_held"],
+            close_date=_iso(journey_row["close_date"]),
+            amount_collected=journey_row["amount_collected"],
+            days_to_close=journey_row["days_to_close"],
+            journey_gap=journey_row["journey_gap"],
+        )
 
     # 2. Calls (with insight count via correlated subquery).
     # processed_date stays NULL until the analyzer finishes — the frontend
@@ -449,6 +611,16 @@ async def get_lead_detail(
         entry_date=lead_row["entry_date"].isoformat() if lead_row["entry_date"] else None,
         created_at=lead_row["created_at"].isoformat() if lead_row["created_at"] else None,
         notes_raw=lead_row["notes"],
+        channel=channel,
+        utmSourceFirst=lead_row["utm_source_first"],
+        utmMediumFirst=lead_row["utm_medium_first"],
+        utmCampaignFirst=lead_row["utm_campaign_first"],
+        utmContentFirst=lead_row["utm_content_first"],
+        utmSourceLast=lead_row["utm_source_last"],
+        utmMediumLast=lead_row["utm_medium_last"],
+        utmCampaignLast=lead_row["utm_campaign_last"],
+        utmContentLast=lead_row["utm_content_last"],
+        journey=journey,
         calls=[
             LeadCallSummary(
                 id=str(r["id"]),

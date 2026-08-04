@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Float,
@@ -350,3 +351,50 @@ class OptInEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
+
+
+class AttributionTaxonomy(Base):
+    """Observed UTM triple → canonical channel. Read-only WGR mirror; CI keeps
+    WGR's bigint id as PK. Resolution logic lives in services/attribution.py.
+    observed_* are Text — they are UTM values (unbounded upstream)."""
+
+    __tablename__ = "attribution_taxonomy"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    observed_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    observed_medium: Mapped[str | None] = mapped_column(Text, nullable=True)
+    observed_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    canonical_channel: Mapped[str] = mapped_column(String(128), nullable=False)
+    platform: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    include_in_channel_reporting: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LeadEngagement(Base):
+    """Attribution touch (opt-in, email click, booking credit …) mirrored
+    read-only from WGR. No FK on purpose (mirror data). Join to CI leads via
+    leads.external_id (source='wgr') FIRST, falling back to
+    leads.ghl_contact_id — email-merged leads keep their original
+    source/external_id (see plan_lead_writes case 4) and are only reachable
+    through the GHL id. UTM/page_url are Text (unbounded upstream)."""
+
+    __tablename__ = "lead_engagements"
+
+    engagement_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    wgr_lead_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    ghl_contact_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    engagement_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    engagement_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    utm_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_medium: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_campaign: Mapped[str | None] = mapped_column(Text, nullable=True)
+    utm_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    email_campaign_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    email_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    offer_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    page_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     client_supabase_anon_key: str = ""
     client_supabase_service_key: str = ""
     client_sync_enabled: bool = False
+    # Table-scoped override for the snapshot-reconciliation deletion circuit
+    # breaker (attribution spec). Set to the exact WGR table name for ONE
+    # deliberate run via `docker compose exec -e` — never in .env.
+    wgr_sync_mass_delete_table: str = ""
 
     # Direct GHL ingestion master switch. CI used to pull leads/appointments
     # straight from GoHighLevel (nightly sync + live webhooks). As of the WGR

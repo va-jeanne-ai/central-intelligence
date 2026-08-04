@@ -53,6 +53,18 @@ const FAMILY_SEQUENCE = [
   "#ea580c",
 ];
 
+// Source bars — blue-leaning sequence, visually distinct from the emerald
+// family bars and purple pain layers. Cycled by index (labels are an open
+// set: "Call · Discovery", "Call · Sales", …, "Other").
+const SOURCE_SEQUENCE = [
+  "#2563eb",
+  "#0891b2",
+  "#0d9488",
+  "#7c3aed",
+  "#db2777",
+  "#64748b",
+];
+
 // ─── Shared tooltip ───────────────────────────────────────────────────────────
 
 interface TooltipDatum {
@@ -215,6 +227,74 @@ function TopSignalsBars({ data }: { data: CIInsightDistribution["top_signals"] }
   );
 }
 
+// A cool violet-leaning sequence for pain-layer bars — distinct from the
+// signal-family greens so the two horizontal-bar charts read as different
+// dimensions even side by side.
+const PAIN_LAYER_SEQUENCE = [
+  "#7c3aed",
+  "#9333ea",
+  "#c026d3",
+  "#db2777",
+  "#e11d48",
+  "#f97316",
+  "#ca8a04",
+];
+
+/** Horizontal bars for pain-layer mentions — which "layer" of the pain
+ * (structural, emotional, identity, belief, etc.) shows up most often. */
+function PainLayerBars({ data }: { data: CIInsightDistribution["by_pain_layer"] }) {
+  if (data.length === 0) return <ChartEmpty />;
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(220, data.length * 34)}>
+      <BarChart data={data} layout="vertical" margin={{ left: 12, right: 16 }}>
+        <XAxis type="number" hide />
+        <YAxis
+          type="category"
+          dataKey="label"
+          width={120}
+          tick={{ fontSize: 11, fill: "#6b7280" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <Tooltip cursor={{ fill: "#f9fafb" }} content={<ChartTooltip />} />
+        <Bar dataKey="mentions" radius={[0, 4, 4, 0]} maxBarSize={22}>
+          {data.map((d, i) => (
+            <Cell key={d.label} fill={PAIN_LAYER_SEQUENCE[i % PAIN_LAYER_SEQUENCE.length]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** Horizontal bars for insight sources — which calls (by call type) the
+ * filtered insights were extracted from. Same visual pattern as the
+ * pain-layer bars; reacts to the page's filter bar like every other chart. */
+function SourceBars({ data }: { data: NonNullable<CIInsightDistribution["by_source"]> }) {
+  if (data.length === 0) return <ChartEmpty />;
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(220, data.length * 34)}>
+      <BarChart data={data} layout="vertical" margin={{ left: 12, right: 16 }}>
+        <XAxis type="number" hide />
+        <YAxis
+          type="category"
+          dataKey="label"
+          width={120}
+          tick={{ fontSize: 11, fill: "#6b7280" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <Tooltip cursor={{ fill: "#f9fafb" }} content={<ChartTooltip />} />
+        <Bar dataKey="count" radius={[0, 4, 4, 0]} maxBarSize={22}>
+          {data.map((d, i) => (
+            <Cell key={d.label} fill={SOURCE_SEQUENCE[i % SOURCE_SEQUENCE.length]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 // ─── Legend (shared for the donut) ────────────────────────────────────────────
 
 function TypeLegend({ data }: { data: CIInsightDistribution["by_insight_type"] }) {
@@ -284,6 +364,33 @@ export function InsightsCharts({
             <ChartSkeleton />
           ) : (
             <SignalFamilyBars data={data.by_signal_family} />
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Pain-layer bars */}
+      <Card>
+        <CardHeader title="Pain layer breakdown" />
+        <CardBody>
+          {isLoading || !data ? (
+            <ChartSkeleton />
+          ) : (
+            <PainLayerBars data={data.by_pain_layer} />
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Source bars — where the insights come from (call types today) */}
+      <Card>
+        <CardHeader
+          title="Insight sources"
+          action={<span className="text-xs text-gray-400">by insight count</span>}
+        />
+        <CardBody>
+          {isLoading || !data ? (
+            <ChartSkeleton />
+          ) : (
+            <SourceBars data={data.by_source ?? []} />
           )}
         </CardBody>
       </Card>

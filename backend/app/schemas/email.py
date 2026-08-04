@@ -121,3 +121,54 @@ class EmailDataResponse(BaseModel):
     # Surfaced under a collapsible "Archived" section on /marketing/email
     # with a Restore action.
     archived: list[EmailCampaignRow] = []
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/email/campaigns — filterable, sortable campaign list (deliverable 2)
+# ---------------------------------------------------------------------------
+
+
+class EmailCampaignListRow(BaseModel):
+    """One row in the filterable/sortable campaigns table."""
+
+    id: str
+    name: str
+    subject: str | None = None
+    campaign_type: str | None = None
+    status: str
+    sent_at: str | None = None
+    audience_name: str | None = None
+    recipients_count: int = 0
+    open_count: int = 0
+    click_count: int = 0
+    unsubscribe_count: int = 0
+    bounce_count: int = 0
+    open_rate: float | None = None
+    click_rate: float | None = None
+    archive_url: str | None = None
+
+
+class EmailCampaignsSummary(BaseModel):
+    """Aggregate stats over the FILTERED set (not the whole table)."""
+
+    count: int = 0
+    total_recipients: int = 0
+    total_opens: int = 0
+    total_clicks: int = 0
+    avg_open_rate: float = 0.0
+    avg_click_rate: float = 0.0
+
+
+class EmailCampaignsFilterOptions(BaseModel):
+    """Distinct values actually present in the (unfiltered) table — drives
+    the frontend's filter dropdowns so every option is guaranteed non-empty.
+    """
+
+    campaign_types: list[str] = []
+    statuses: list[str] = []
+
+
+class EmailCampaignsResponse(BaseModel):
+    campaigns: list[EmailCampaignListRow] = []
+    summary: EmailCampaignsSummary = EmailCampaignsSummary()
+    filter_options: EmailCampaignsFilterOptions = EmailCampaignsFilterOptions()

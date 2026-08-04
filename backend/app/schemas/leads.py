@@ -23,7 +23,15 @@ from pydantic import BaseModel, Field
 
 
 class LeadRecord(BaseModel):
-    """A single lead row returned in the paginated list."""
+    """A single lead row returned in the paginated list.
+
+    ``channel`` is resolved per-request via ``channel_for_lead`` (never
+    stored — see ``app.services.attribution``); it is None when the lead
+    has no UTMs at all. The 8 ``utm*`` fields are the raw, never-rewritten
+    first/last-touch values mirrored from WGR — naming follows this
+    model's existing camelCase convention (``createdAt``) for consistency
+    within the class; all are optional since many leads have no UTMs.
+    """
 
     id: str
     name: str | None = None
@@ -34,6 +42,15 @@ class LeadRecord(BaseModel):
     notes: str | None = None
     createdAt: str | None = None  # noqa: N815 — camelCase to match frontend Lead type
     score: int = 0
+    channel: str | None = None
+    utmSourceFirst: str | None = None  # noqa: N815 — camelCase, see class docstring
+    utmMediumFirst: str | None = None  # noqa: N815
+    utmCampaignFirst: str | None = None  # noqa: N815
+    utmContentFirst: str | None = None  # noqa: N815
+    utmSourceLast: str | None = None  # noqa: N815
+    utmMediumLast: str | None = None  # noqa: N815
+    utmCampaignLast: str | None = None  # noqa: N815
+    utmContentLast: str | None = None  # noqa: N815
 
 
 class LeadListResponse(BaseModel):
@@ -79,9 +96,17 @@ class LeadVolumePoint(BaseModel):
 
 
 class SourceBreakdownItem(BaseModel):
-    """Share of leads from a single acquisition source."""
+    """Share of leads from a single canonical channel.
+
+    ``source`` is transitional: it is set to the same string as ``channel``
+    so the current frontend donut (which still reads ``.source``) keeps
+    rendering. Drop ``source`` once the frontend switches to ``.channel``.
+    """
 
     source: str
+    channel: str = ""
+    platform: str | None = None
+    reportable: bool = True
     count: int = 0
     percentage: float = 0.0
 
@@ -100,6 +125,32 @@ class FunnelStage(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Stats — Revenue by channel (deliverable 9b — sales half of Source Attribution)
+# ---------------------------------------------------------------------------
+
+
+class RevenueByChannelItem(BaseModel):
+    """Closed-sales revenue attributed to a single canonical channel bucket.
+
+    Same bucket labels as ``SourceBreakdownItem.channel`` (canonical
+    channels, "No attribution", "Non-marketing", "unmapped:<src>/<med>",
+    "other unmapped") but a different axis: this aggregates
+    ``closed_sales.amount_collected``, not lead counts, and is scoped by
+    ``close_date`` rather than ``entry_date`` — see
+    ``compute_revenue_by_channel`` (app.repositories.sales_stats) for the
+    join contract and date-axis rationale. Defaults keep this field
+    Pydantic-safe if a caller ever constructs one from a sparse dict.
+    """
+
+    channel: str = ""
+    platform: str | None = None
+    reportable: bool = True
+    sales_count: int = 0
+    revenue: float = 0.0
+    revenue_percentage: float = 0.0
+
+
+# ---------------------------------------------------------------------------
 # Composite stats response
 # ---------------------------------------------------------------------------
 
@@ -111,6 +162,16 @@ class LeadsStatsResponse(BaseModel):
     lead_volume: list[LeadVolumePoint] = Field(default_factory=list)
     source_breakdown: list[SourceBreakdownItem] = Field(default_factory=list)
     funnel: list[FunnelStage] = Field(default_factory=list)
+    # Revenue-by-channel (deliverable 9b). Scoped by the SAME entry_from/
+    # entry_to params as close_date (not entry_date) — see get_leads_stats
+    # for why this is a deliberate choice, not a bug. Defaults to [] so this
+    # field is never absent even if compute_revenue_by_channel returns early.
+    revenue_by_channel: list[RevenueByChannelItem] = Field(default_factory=list)
+    # Distinct provenance `leads.source` values present in the table (lowercased,
+    # count-desc). Drives the frontend Source filter dropdown so its options
+    # always reflect real data (e.g. 'wgr') instead of a hardcoded enum. NOT
+    # date-scoped — filter options must not shrink when a date range is applied.
+    available_sources: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -162,12 +223,51 @@ class NoteRow(BaseModel):
     created_at: str
 
 
+class LeadJourneyInfo(BaseModel):
+    """Per-lead journey summary from the WGR lead_journey mirror — webinar
+    watch behavior, appointment history, sales progression. All fields
+    optional (upstream computes them best-effort). Timestamps are ISO
+    strings, matching the detail response's date conventions."""
+
+    webinar_count: int | None = None
+    webinar_registered_at: str | None = None
+    watched_live: bool | None = None
+    watched_replay: bool | None = None
+    watch_seconds_total: int | None = None
+    last_opted_in_at: str | None = None
+    appt_count: int | None = None
+    first_appt_at: str | None = None
+    last_appt_at: str | None = None
+    last_appt_outcome: str | None = None
+    last_appt_booked_by: str | None = None
+    appt_qualified: bool | None = None
+    appt_flagged: bool | None = None
+    appt_qual_grade: str | None = None
+    call_count: int | None = None
+    first_call_date: str | None = None
+    discovery_occurred: bool | None = None
+    discovery_held: bool | None = None
+    close_date: str | None = None
+    amount_collected: float | None = None
+    days_to_close: int | None = None
+    journey_gap: str | None = None
+
+
 class LeadDetailResponse(BaseModel):
     """Full payload for GET /api/v1/leads/{id}.
 
     `notes_raw` carries the immutable upstream provider payload (e.g. the
     GHL webhook JSON) as a string — the frontend parses it for the
     "Initial Submission" card. `staff_notes` is the editable journal.
+
+    `channel` is resolved per-request via `channel_for_lead` (never
+    stored — see `app.services.attribution`); None when the lead has no
+    UTMs. The 8 `utm*` fields are the raw, never-rewritten first/last-touch
+    values mirrored from WGR, for the detail page's Attribution card —
+    camelCase, matching `LeadRecord`'s convention for the same 8 fields
+    (`LeadRecord.utmSourceFirst` etc.) so the frontend handles the shape
+    identically whether it came from the list or the detail endpoint. This
+    schema's other, pre-existing fields stay snake_case (unchanged).
     """
 
     id: str
@@ -182,6 +282,18 @@ class LeadDetailResponse(BaseModel):
     entry_date: str | None = None
     created_at: str | None = None
     notes_raw: str | None = None
+    channel: str | None = None
+    utmSourceFirst: str | None = None  # noqa: N815 — camelCase, matches LeadRecord (see docstring)
+    utmMediumFirst: str | None = None  # noqa: N815
+    utmCampaignFirst: str | None = None  # noqa: N815
+    utmContentFirst: str | None = None  # noqa: N815
+    utmSourceLast: str | None = None  # noqa: N815
+    utmMediumLast: str | None = None  # noqa: N815
+    utmCampaignLast: str | None = None  # noqa: N815
+    utmContentLast: str | None = None  # noqa: N815
+    # Journey summary from the WGR lead_journey mirror; None when the lead
+    # has no journey row (non-WGR leads, or mirror not yet synced).
+    journey: LeadJourneyInfo | None = None
     calls: list[LeadCallSummary] = Field(default_factory=list)
     goals: list[LeadGoalSummary] = Field(default_factory=list)
     pain_points: list[LeadPainPointSummary] = Field(default_factory=list)

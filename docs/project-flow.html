@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Central Intelligence — How It Works</title>
+<style>
+  :root {
+    --phase1: #4ade80; --phase1-bg: rgba(74, 222, 128, 0.14);
+    --phase2: #60a5fa; --phase2-bg: rgba(96, 165, 250, 0.14);
+    --phase3: #fb923c; --phase3-bg: rgba(251, 146, 60, 0.14);
+    --phase4: #a78bfa; --phase4-bg: rgba(167, 139, 250, 0.14);
+    --phase5: #a8a29e; --phase5-bg: rgba(168, 162, 158, 0.14);
+    --phase6: #f472b6; --phase6-bg: rgba(244, 114, 182, 0.14);
+    --accent: #3b82f6;
+    --text: #e2e8f0;
+    --text-light: #94a3b8;
+    --border: #334155;
+    --page-bg: #0f172a;
+    --panel-bg: #1e293b;
+    --canvas-bg: #1a2436;
+    --card-bg: #212e46;
+    --card-border: #3a4a68;
+    --connector: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: var(--text);
+    line-height: 1.5;
+    background: var(--page-bg);
+  }
+  .page { max-width: 1536px; margin: 0 auto; }
+  .header {
+    background: linear-gradient(135deg, #020617 0%, #1e293b 100%);
+    color: #fff;
+    padding: 22px 32px;
+    border-bottom: 3px solid var(--accent);
+  }
+  .header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 4px; }
+  .header .subtitle { font-size: 13px; color: #94a3b8; font-weight: 400; }
+  .header .date { font-size: 10px; color: #64748b; margin-top: 6px; }
+  .content { padding: 24px 24px 36px; }
+  h2 {
+    font-size: 14px; font-weight: 700; margin: 28px 0 12px;
+    text-transform: uppercase; letter-spacing: 1px; color: var(--text-light);
+  }
+  h2:first-child { margin-top: 0; }
+  .sf-chip {
+    display: inline-block; font-size: 9.5px; font-weight: 800;
+    padding: 2px 10px; border-radius: 9px; border: 1px solid;
+    margin-left: 10px; vertical-align: 1px; letter-spacing: 0.6px;
+  }
+  .sf-summary { font-size: 12px; color: var(--text-light); margin: -8px 0 12px; }
+
+  /* n8n-style canvas: dot grid */
+  .flow-diagram {
+    background-color: var(--canvas-bg);
+    background-image: radial-gradient(circle, rgba(148, 163, 184, 0.16) 1px, transparent 1px);
+    background-size: 18px 18px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 36px 28px 40px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 48px 52px;
+  }
+
+  .phase-col {
+    display: flex; flex-direction: column; align-items: center;
+    width: 208px; flex-shrink: 0;
+  }
+  .phase-head {
+    width: 100%; text-align: center;
+    font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.9px; padding: 7px 8px; border-radius: 7px;
+    margin-bottom: 16px; border: 1px solid;
+    position: relative;
+  }
+  .ph-p1 { background: var(--phase1-bg); border-color: var(--phase1); color: var(--phase1); }
+  .ph-p2 { background: var(--phase2-bg); border-color: var(--phase2); color: var(--phase2); }
+  .ph-p3 { background: var(--phase3-bg); border-color: var(--phase3); color: var(--phase3); }
+  .ph-p4 { background: var(--phase4-bg); border-color: var(--phase4); color: var(--phase4); }
+  .ph-p5 { background: var(--phase5-bg); border-color: var(--phase5); color: var(--phase5); }
+  .ph-p6 { background: var(--phase6-bg); border-color: var(--phase6); color: var(--phase6); }
+
+  /* horizontal wire between phase headers */
+  .h-wire {
+    position: absolute; left: -50px; top: 50%; transform: translateY(-50%);
+    display: flex; align-items: center; width: 46px;
+  }
+  .hw-line { flex: 1; height: 1.5px; background: var(--connector); }
+  .hw-arrow {
+    width: 0; height: 0;
+    border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+    border-left: 5px solid var(--connector);
+  }
+
+  /* n8n-style node card */
+  .flow-node {
+    display: flex; align-items: flex-start; gap: 10px;
+    width: 100%; padding: 10px 12px; border-radius: 9px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    box-shadow: 0 2px 8px rgba(2, 6, 23, 0.45);
+    text-align: left; line-height: 1.35;
+  }
+  .n-icon {
+    flex: 0 0 26px; height: 26px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+  .n-body { min-width: 0; }
+  .flow-node-text { font-size: 12px; font-weight: 600; color: var(--text); }
+  .flow-node-sub { font-size: 10.5px; font-weight: 400; color: var(--text-light); margin-top: 2px; }
+  .fn-p1 { border-left: 3px solid var(--phase1); } .fn-p1 .n-icon { background: var(--phase1-bg); color: var(--phase1); }
+  .fn-p2 { border-left: 3px solid var(--phase2); } .fn-p2 .n-icon { background: var(--phase2-bg); color: var(--phase2); }
+  .fn-p3 { border-left: 3px solid var(--phase3); } .fn-p3 .n-icon { background: var(--phase3-bg); color: var(--phase3); }
+  .fn-p4 { border-left: 3px solid var(--phase4); } .fn-p4 .n-icon { background: var(--phase4-bg); color: var(--phase4); }
+  .fn-p5 { border-left: 3px solid var(--phase5); } .fn-p5 .n-icon { background: var(--phase5-bg); color: var(--phase5); }
+  .fn-p6 { border-left: 3px solid var(--phase6); } .fn-p6 .n-icon { background: var(--phase6-bg); color: var(--phase6); }
+  .decision-card { border-style: dashed; border-left-style: solid; }
+
+  /* vertical wire: port dot, line, arrowhead */
+  .wire {
+    display: flex; flex-direction: column; align-items: center;
+    height: 30px; width: 100%; padding: 2px 0 1px;
+  }
+  .w-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--connector); }
+  .w-line { width: 1.5px; flex: 1; background: var(--connector); }
+  .w-arrow {
+    width: 0; height: 0;
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 5px solid var(--connector);
+  }
+
+  .b-tag {
+    font-size: 9.5px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.8px; padding: 1px 11px; border-radius: 9px;
+    border: 1px solid; margin: 12px 0 10px;
+    position: relative; background: var(--canvas-bg);
+  }
+  .b-tag::before {
+    content: ''; position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    width: 1.5px; height: 11px; background: var(--connector);
+  }
+
+  .features {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px;
+  }
+  .feature {
+    background: var(--panel-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 13px;
+  }
+  .feature-name { font-size: 12px; font-weight: 700; }
+  .feature-blurb { font-size: 11px; color: var(--text-light); margin-top: 1px; }
+
+  @media (max-width: 720px) {
+    .header { padding: 16px 16px; }
+    .content { padding: 16px 12px 28px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+<div class="header">
+  <h1>Central Intelligence</h1>
+  <div class="subtitle">Continuously syncs a client&#39;s business data and marketing platforms into one database, computes metrics, generates evidence-backed recommendations and AI insights, and serves it all through dashboards and department AI directors you can chat with.</div>
+  <div class="date">Source: projects/central-intelligence · Generated 2026-07-23</div>
+</div>
+<div class="content">
+<h2>General Flow</h2>
+<div class="flow-diagram">
+<div class="phase-col">
+<div class="phase-head ph-p1">Phase 1 &middot; Ingest</div>
+<div class="flow-node fn-p1">
+  <div class="n-icon">&#9889;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Scheduler fires on a staggered clock</div>
+    <div class="flow-node-sub">Celery beat in backend/app/tasks/celery_app.py — hourly, 6-hourly, and nightly jobs</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p1">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Sync the client&#39;s source database</div>
+    <div class="flow-node-sub">Hourly read-only pull from the client&#39;s mirror DB, incremental via watermark</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p1">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Pull connected platforms</div>
+    <div class="flow-node-sub">Mailchimp, Meta social + ads, social comments, Gmail, Drive, Calendar</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p1">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Manual sync always available</div>
+    <div class="flow-node-sub">Per-integration Sync-now buttons and a data-freshness monitor</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p2"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 2 &middot; Embed</div>
+<div class="flow-node fn-p2">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Every new record joins the embed queue</div>
+    <div class="flow-node-sub">RAG-everything: source-DB rows, files, emails, comments enqueue embed_pending</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p2">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Queue drains every 2 minutes</div>
+    <div class="flow-node-sub">Chunk → Voyage embeddings → pgvector, under a token budget (tasks/embed_worker.py)</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p3"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 3 &middot; Compute</div>
+<div class="flow-node fn-p3">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Metric catalog runs daily snapshots</div>
+    <div class="flow-node-sub">Declarative SQL registry per department, incl. per-rep splits (analytics/registry.py)</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p3">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Trends and signals recomputed</div>
+    <div class="flow-node-sub">Period-over-period verdicts, funnel stats, rolling market signals</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p4"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 4 &middot; Recommend</div>
+<div class="flow-node fn-p4">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Every metric checked against thresholds</div>
+    <div class="flow-node-sub">Statistical, no heuristics — runs right after snapshots (analytics/recommend.py)</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p4 decision-card">
+  <div class="n-icon">?</div>
+  <div class="n-body">
+    <div class="flow-node-text">Did a metric move past a threshold?</div>
+  </div>
+</div>
+<div class="b-tag" style="color: var(--phase4); border-color: var(--phase4);">Yes</div>
+<div class="flow-node fn-p4">
+  <div class="n-icon">&#10003;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Emit a data-cited recommendation</div>
+    <div class="flow-node-sub">Severity by size of move; exact numbers stored as evidence</div>
+  </div>
+</div>
+<div class="b-tag" style="color: var(--phase4); border-color: var(--phase4);">No</div>
+<div class="flow-node fn-p4">
+  <div class="n-icon">&#10005;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Stay silent</div>
+    <div class="flow-node-sub">Flat or thin data emits nothing; stale findings auto-resolve</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p5"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 5 &middot; Synthesize</div>
+<div class="flow-node fn-p5">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Daily company health verdict</div>
+    <div class="flow-node-sub">One Claude call — healthy / watch / at-risk, compounding on yesterday (analytics/overall_insight.py)</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p5">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Weekly digest every Monday</div>
+    <div class="flow-node-sub">Rollup of the week&#39;s metrics and findings; free mock fallback when no API key</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p6"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 6 &middot; Deliver</div>
+<div class="flow-node fn-p6">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Dashboards and insight pages</div>
+    <div class="flow-node-sub">KPI cards, trends, overall-insight hero, recommendation status workflow</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p6">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Chat with CI or a department director</div>
+    <div class="flow-node-sub">Marketing / Sales / Fulfillment directors reason over real SQL + RAG search, streamed live</div>
+  </div>
+</div>
+</div>
+</div>
+<h2 class="sf-head">Inside the RAG embed pipeline <span class="sf-chip ph-p2">expands Phase 2 &middot; Embed</span></h2>
+<p class="sf-summary">How every new piece of content becomes searchable knowledge within minutes.</p>
+<div class="flow-diagram">
+<div class="phase-col">
+<div class="phase-head ph-p2">Phase 1 &middot; Queue</div>
+<div class="flow-node fn-p2">
+  <div class="n-icon">&#9889;</div>
+  <div class="n-body">
+    <div class="flow-node-text">New content lands in the embed queue</div>
+    <div class="flow-node-sub">Synced DB rows, Drive files, Gmail threads, calendar events, social comments</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p2">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Duplicates skipped by content hash</div>
+    <div class="flow-node-sub">Already-embedded content never re-embeds</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p3"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 2 &middot; Embed</div>
+<div class="flow-node fn-p3">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Worker wakes every 2 minutes</div>
+    <div class="flow-node-sub">tasks/embed_worker.py drains the queue in batches</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p3 decision-card">
+  <div class="n-icon">?</div>
+  <div class="n-body">
+    <div class="flow-node-text">Daily token budget left?</div>
+  </div>
+</div>
+<div class="b-tag" style="color: var(--phase3); border-color: var(--phase3);">Yes</div>
+<div class="flow-node fn-p3">
+  <div class="n-icon">&#10003;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Chunk and embed</div>
+    <div class="flow-node-sub">services/chunker.py sizes text → Voyage, document mode</div>
+  </div>
+</div>
+<div class="b-tag" style="color: var(--phase3); border-color: var(--phase3);">No</div>
+<div class="flow-node fn-p3">
+  <div class="n-icon">&#10005;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Skip this tick</div>
+    <div class="flow-node-sub">Rows stay queued; the budget window resets daily</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p4"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 3 &middot; Store</div>
+<div class="flow-node fn-p4">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Vectors written to pgvector</div>
+    <div class="flow-node-sub">Queue row removed + budget bumped in one transaction</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p4">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Searchable within minutes</div>
+    <div class="flow-node-sub">Chat&#39;s knowledge-base search reads this store</div>
+  </div>
+</div>
+</div>
+</div>
+<h2 class="sf-head">Inside the recommendation engine <span class="sf-chip ph-p4">expands Phase 4 &middot; Recommend</span></h2>
+<p class="sf-summary">Statistical, evidence-cited findings — no heuristics, no noise.</p>
+<div class="flow-diagram">
+<div class="phase-col">
+<div class="phase-head ph-p4">Phase 1 &middot; Snapshot</div>
+<div class="flow-node fn-p4">
+  <div class="n-icon">&#9889;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Every registered metric computed</div>
+    <div class="flow-node-sub">Declarative SQL catalog — value + sample size per department (analytics/registry.py)</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p4">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Daily rows upserted</div>
+    <div class="flow-node-sub">Idempotent per day: reruns refresh, never duplicate</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p5"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 2 &middot; Judge</div>
+<div class="flow-node fn-p5">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Current window vs prior window</div>
+    <div class="flow-node-sub">Period-over-period verdict per metric (analytics/trends.py)</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p5 decision-card">
+  <div class="n-icon">?</div>
+  <div class="n-body">
+    <div class="flow-node-text">Move big enough to matter?</div>
+  </div>
+</div>
+<div class="b-tag" style="color: var(--phase5); border-color: var(--phase5);">Yes</div>
+<div class="flow-node fn-p5">
+  <div class="n-icon">&#10003;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Emit a graded finding</div>
+    <div class="flow-node-sub">≥5% adverse = warn, ≥20% = critical, ≥10% favorable = what&#39;s-working</div>
+  </div>
+</div>
+<div class="b-tag" style="color: var(--phase5); border-color: var(--phase5);">No</div>
+<div class="flow-node fn-p5">
+  <div class="n-icon">&#10005;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Emit nothing</div>
+    <div class="flow-node-sub">Flat trends and thin samples stay silent</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p6"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 3 &middot; Maintain</div>
+<div class="flow-node fn-p6">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Findings carry their evidence</div>
+    <div class="flow-node-sub">The exact numbers behind each finding are stored for audit</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p6">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Stale findings auto-resolve</div>
+    <div class="flow-node-sub">Upsert per metric + window + scope; per-rep findings capped at warn</div>
+  </div>
+</div>
+</div>
+</div>
+<h2 class="sf-head">Inside a director chat request <span class="sf-chip ph-p6">expands Phase 6 &middot; Deliver</span></h2>
+<p class="sf-summary">What happens between a question and a grounded, streamed answer.</p>
+<div class="flow-diagram">
+<div class="phase-col">
+<div class="phase-head ph-p6">Phase 1 &middot; Route</div>
+<div class="flow-node fn-p6">
+  <div class="n-icon">&#9889;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Message arrives in chat</div>
+    <div class="flow-node-sub">Addressed to CI or a specific department director (routes/directors.py)</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p6 decision-card">
+  <div class="n-icon">?</div>
+  <div class="n-body">
+    <div class="flow-node-text">Live AI configured?</div>
+  </div>
+</div>
+<div class="b-tag" style="color: var(--phase6); border-color: var(--phase6);">Yes</div>
+<div class="flow-node fn-p6">
+  <div class="n-icon">&#10003;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Real Claude agent takes it</div>
+    <div class="flow-node-sub">Full tool access over live data</div>
+  </div>
+</div>
+<div class="b-tag" style="color: var(--phase6); border-color: var(--phase6);">No</div>
+<div class="flow-node fn-p6">
+  <div class="n-icon">&#10005;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Mock agent answers</div>
+    <div class="flow-node-sub">Demo-safe, zero API cost</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p1"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 2 &middot; Reason</div>
+<div class="flow-node fn-p1">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Director consults its specialists</div>
+    <div class="flow-node-sub">Department-scoped — marketing, sales, fulfillment never cross over</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p1">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Queries real data, never invents</div>
+    <div class="flow-node-sub">SQL results come back as business prose; raw columns never reach the model</div>
+  </div>
+</div>
+<div class="wire"><span class="w-dot"></span><span class="w-line"></span><span class="w-arrow"></span></div>
+<div class="flow-node fn-p1">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Searches the knowledge base</div>
+    <div class="flow-node-sub">Question embedded → top-matching pgvector chunks</div>
+  </div>
+</div>
+</div>
+<div class="phase-col">
+<div class="phase-head ph-p2"><span class="h-wire"><span class="w-dot"></span><span class="hw-line"></span><span class="hw-arrow"></span></span>Phase 3 &middot; Answer</div>
+<div class="flow-node fn-p2">
+  <div class="n-icon">&#9881;</div>
+  <div class="n-body">
+    <div class="flow-node-text">Response streams live</div>
+    <div class="flow-node-sub">Token-by-token over SSE / WebSocket into the chat UI</div>
+  </div>
+</div>
+</div>
+</div>
+
+<h2>Key Features</h2>
+<div class="features">
+  <div class="feature">
+    <div class="feature-name">Statistical recommendation engine</div>
+    <div class="feature-blurb">Recommendations fire only when real data crosses a threshold, and every one cites its numbers.</div>
+  </div>
+  <div class="feature">
+    <div class="feature-name">Department AI directors</div>
+    <div class="feature-blurb">CI orchestrates three department-scoped directors that delegate to specialists — reasoning over real data, never inventing figures.</div>
+  </div>
+  <div class="feature">
+    <div class="feature-name">RAG-everything knowledge base</div>
+    <div class="feature-blurb">Every synced source is embedded into a pgvector store within minutes, so chat answers are grounded in the full corpus.</div>
+  </div>
+  <div class="feature">
+    <div class="feature-name">Live integrations catalog</div>
+    <div class="feature-blurb">A backend registry drives credential forms, on-demand syncs, and a freshness monitor for every connected platform.</div>
+  </div>
+  <div class="feature">
+    <div class="feature-name">Cost-safe by design</div>
+    <div class="feature-blurb">Mock mode and seed-data fallbacks keep the whole pipeline runnable with zero paid API calls.</div>
+  </div>
+</div>
+</div>
+</div>
+</body>
+</html>

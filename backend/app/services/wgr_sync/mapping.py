@@ -145,11 +145,21 @@ def map_lead_status(pipeline_stage: Optional[str]) -> Optional[str]:
 # Shared-domain tables (source='wgr' + external_id; CI UUID/string PKs)
 # ---------------------------------------------------------------------------
 
+# Marketing attribution columns (Greg's webhook layer, 2026-07): first-touch
+# is write-once upstream, last-touch is latest-wins. Mirrored verbatim —
+# canonical channel is resolved at read time via attribution_taxonomy.
+_ATTRIBUTION_COLS = (
+    "ghl_contact_id",
+    "utm_source_first", "utm_medium_first", "utm_campaign_first", "utm_content_first",
+    "utm_source_last", "utm_medium_last", "utm_campaign_last", "utm_content_last",
+)
+
+
 def map_lead(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     ext = _clean(row.get("lead_id"))
     if not ext:
         return None
-    return {
+    out = {
         "source": WGR_SOURCE,
         "external_id": ext,
         "name": _clean(row.get("name")),
@@ -164,6 +174,14 @@ def map_lead(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "entry_date": row.get("entry_date"),
         "notes": _clean(row.get("notes")),
     }
+    # Presence-conditional: a column absent from the raw row (schema drift,
+    # older snapshot) is OMITTED from the mapped dict, so the upsert leaves
+    # the previously mirrored CI value untouched instead of nulling it. All
+    # rows in a run come from one SELECT *, so batch dicts stay homogeneous.
+    for col in _ATTRIBUTION_COLS:
+        if col in row:
+            out[col] = _clean(row.get(col))
+    return out
 
 
 def map_call(row: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -645,4 +663,283 @@ def map_opt_in_event(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "utm_content": _clean(row.get("utm_content")),
         "external_id": _clean(row.get("external_id")),
         "raw_payload": row.get("raw_payload"),
+    }
+
+
+def _coerce_bool(v: Any, default: bool = True) -> bool:
+    """Strict boolean coercion: psycopg returns real bools for boolean
+    columns, but a drifted text value like "false" must not become truthy."""
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return default
+    return str(v).strip().lower() in ("t", "true", "1", "yes")
+
+
+def map_attribution_row(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    if row.get("id") is None or not _clean(row.get("canonical_channel")):
+        return None
+    return {
+        "id": row["id"],
+        "observed_source": _clean(row.get("observed_source")),
+        "observed_medium": _clean(row.get("observed_medium")),
+        "observed_content": _clean(row.get("observed_content")),
+        "canonical_channel": _clean(row.get("canonical_channel")),
+        "platform": _clean(row.get("platform")),
+        "include_in_channel_reporting": _coerce_bool(
+            row.get("include_in_channel_reporting"), default=True),
+        "notes": _clean(row.get("notes")),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def map_lead_engagement(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    ext = _clean(row.get("engagement_id"))
+    if not ext:
+        return None
+    return {
+        "engagement_id": ext,
+        "wgr_lead_id": _clean(row.get("lead_id")),
+        "ghl_contact_id": _clean(row.get("ghl_contact_id")),
+        "engagement_type": _clean(row.get("engagement_type")),
+        "engagement_date": row.get("engagement_date"),
+        "utm_source": _clean(row.get("utm_source")),
+        "utm_medium": _clean(row.get("utm_medium")),
+        "utm_campaign": _clean(row.get("utm_campaign")),
+        "utm_content": _clean(row.get("utm_content")),
+        "source_type": _clean(row.get("source_type")),
+        "email_campaign_id": _clean(row.get("email_campaign_id")),
+        "email_id": _clean(row.get("email_id")),
+        "offer_id": _clean(row.get("offer_id")),
+        "page_url": _clean(row.get("page_url")),
+        "notes": _clean(row.get("notes")),
+        "created_at": row.get("created_at"),
+    }
+
+
+def map_lead_journey(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Per-lead journey summary (snapshot reconcile — upstream rebuilds the
+    table). lead_id is verified unique/non-null upstream (probe 2026-08-03);
+    a row without one is unusable → skip (kept-and-warned semantics)."""
+    ext = _clean(row.get("lead_id"))
+    if not ext:
+        return None
+    amount = row.get("amount_collected")
+    return {
+        "lead_id": ext,
+        "ghl_contact_id": _clean(row.get("ghl_contact_id")),
+        "email": _clean(row.get("email")),
+        "name": _clean(row.get("name")),
+        "entry_date": row.get("entry_date"),
+        "utm_source_first": _clean(row.get("utm_source_first")),
+        "utm_medium_first": _clean(row.get("utm_medium_first")),
+        "utm_content_first": _clean(row.get("utm_content_first")),
+        "channel_first": _clean(row.get("channel_first")),
+        "attr_derived_from": _clean(row.get("attr_derived_from")),
+        "attr_order_evidence": _clean(row.get("attr_order_evidence")),
+        "utm_source_last": _clean(row.get("utm_source_last")),
+        "utm_medium_last": _clean(row.get("utm_medium_last")),
+        "channel_last": _clean(row.get("channel_last")),
+        "commenter_link_status": _clean(row.get("commenter_link_status")),
+        "first_comment_at": row.get("first_comment_at"),
+        "comment_keyword": _clean(row.get("comment_keyword")),
+        "webinar_count": row.get("webinar_count"),
+        "webinar_registered_at": row.get("webinar_registered_at"),
+        "watched_live": row.get("watched_live"),
+        "watched_replay": row.get("watched_replay"),
+        "watch_seconds_total": row.get("watch_seconds_total"),
+        "last_opted_in_at": row.get("last_opted_in_at"),
+        "appt_count": row.get("appt_count"),
+        "first_appt_at": row.get("first_appt_at"),
+        "last_appt_at": row.get("last_appt_at"),
+        "last_appt_outcome": _clean(row.get("last_appt_outcome")),
+        "last_appt_booked_by": _clean(row.get("last_appt_booked_by")),
+        "last_appt_source": _clean(row.get("last_appt_source")),
+        "call_count": row.get("call_count"),
+        "first_call_date": row.get("first_call_date"),
+        "discovery_occurred": row.get("discovery_occurred"),
+        "discovery_held": row.get("discovery_held"),
+        "sale_id": _clean(row.get("sale_id")),
+        "close_date": row.get("close_date"),
+        "amount_collected": float(amount) if amount is not None else None,
+        "days_to_close": row.get("days_to_close"),
+        "journey_gap": _clean(row.get("journey_gap")),
+        "appt_qualified": row.get("appt_qualified"),
+        "appt_flagged": row.get("appt_flagged"),
+        "appt_qual_grade": _clean(row.get("appt_qual_grade")),
+    }
+
+
+def map_wgr_offer(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Real WGR offer catalog (11 rows) — snapshot reconcile, small table.
+
+    Distinct from ``map_offer`` above, which feeds the app-CRUD ``offers``
+    table via the native-PK plan — that path is untouched. This mirrors WGR's
+    own ``offers`` table verbatim into ``wgr_offers``."""
+    oid = _clean(row.get("offer_id"))
+    if not oid:
+        return None
+    return {
+        "offer_id": oid,
+        "name": _clean(row.get("name")),
+        "offer_type": _clean(row.get("offer_type")),
+        "description": _clean(row.get("description")),
+        "price": row.get("price"),
+        "status": _clean(row.get("status")),
+        "url": _clean(row.get("url")),
+        "notes": _clean(row.get("notes")),
+        "created_at": row.get("created_at"),
+    }
+
+
+def map_wgr_offer_mapping(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Real WGR offer_mappings (15 rows) — per-program payment-level rows.
+
+    No upstream primary key; ``(program, payment_level, offer_id)`` is
+    verified unique across all 15 rows (probe 2026-08-04), so this builds a
+    deterministic composite ``id`` from that triple for CI's primary key."""
+    program = _clean(row.get("program"))
+    payment_level = _clean(row.get("payment_level"))
+    offer_id = _clean(row.get("offer_id"))
+    if program is None and payment_level is None and offer_id is None:
+        return None
+    composite_id = f"{program or ''}|{payment_level or ''}|{offer_id or ''}"
+    return {
+        "id": composite_id,
+        "program": program,
+        "payment_level": payment_level,
+        "offer_id": offer_id,
+        "amount_collected": row.get("amount_collected"),
+        "revenue_earned": row.get("revenue_earned"),
+        "created_at": row.get("created_at"),
+    }
+
+
+def map_wgr_comment_event(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """WGR comment_events (15,855 rows) → CI WgrCommentEvent. Native upstream
+    PK (uuid ``id``, verified unique/non-null, probe 2026-08-04). Feeds the
+    social page's "Leads by Day" rollup (deliverable 1 — Greg-spec rebuild)."""
+    ev_id = _clean(row.get("id"))
+    if not ev_id:
+        return None
+    return {
+        "id": str(ev_id),
+        "ghl_contact_id": _clean(row.get("ghl_contact_id")),
+        "ghl_conversation_id": _clean(row.get("ghl_conversation_id")),
+        "platform": _clean(row.get("platform")),
+        "keyword": _clean(row.get("keyword")),
+        "post_id": _clean(row.get("post_id")),
+        "post_url": _clean(row.get("post_url")),
+        "comment_text": _clean(row.get("comment_text")),
+        "fb_page_id": _clean(row.get("fb_page_id")),
+        "fb_page_name": _clean(row.get("fb_page_name")),
+        "occurred_at": row.get("occurred_at"),
+        "created_at": row.get("created_at"),
+    }
+
+
+def map_wgr_post_comment_lead(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """WGR post_comment_leads (2,754 rows) → CI WgrPostCommentLead. Native
+    upstream PK (``ig_media_id``, verified unique/non-null, probe 2026-08-04).
+    Precomputed per-post/keyword lead rollup — feeds the social page's
+    per-post lead counts and per-keyword stat cards (deliverable 1)."""
+    media_id = _clean(row.get("ig_media_id"))
+    if not media_id:
+        return None
+    return {
+        "ig_media_id": str(media_id),
+        "shortcode": _clean(row.get("shortcode")),
+        "permalink": _clean(row.get("permalink")),
+        "posted_at": row.get("posted_at"),
+        "media_type": _clean(row.get("media_type")),
+        "is_reel": bool(row.get("is_reel", False)),
+        "keyword_counts": row.get("keyword_counts"),
+        "total_leads": row.get("total_leads"),
+        "first_lead_at": row.get("first_lead_at"),
+        "last_lead_at": row.get("last_lead_at"),
+    }
+
+
+def map_meta_campaign(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    ext = _clean(row.get("campaign_id"))
+    if not ext:
+        return None
+    return {
+        "campaign_id": ext,
+        "meta_campaign_id": _clean(row.get("meta_campaign_id")),
+        "name": _clean(row.get("name")),
+        "campaign_type": _clean(row.get("campaign_type")),
+        "objective": _clean(row.get("objective")),
+        "status": _clean(row.get("status")),
+        "daily_budget": row.get("daily_budget"),
+        "lifetime_budget": row.get("lifetime_budget"),
+        "targeting_type": _clean(row.get("targeting_type")),
+        "targeting_notes": _clean(row.get("targeting_notes")),
+        "start_date": row.get("start_date"),
+        "end_date": row.get("end_date"),
+        "notes": _clean(row.get("notes")),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def map_meta_ad(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    ext = _clean(row.get("ad_id"))
+    if not ext:
+        return None
+    return {
+        "ad_id": ext,
+        "campaign_id": _clean(row.get("campaign_id")),
+        "meta_ad_id": _clean(row.get("meta_ad_id")),
+        "name": _clean(row.get("name")),
+        "ad_format": _clean(row.get("ad_format")),
+        "status": _clean(row.get("status")),
+        "hook_text": _clean(row.get("hook_text")),
+        "hook_type": _clean(row.get("hook_type")),
+        "script_body": _clean(row.get("script_body")),
+        "script_cta": _clean(row.get("script_cta")),
+        "framework_used": _clean(row.get("framework_used")),
+        "offer_id": _clean(row.get("offer_id")),
+        "target_audience": _clean(row.get("target_audience")),
+        "calendar_entry_id": _clean(row.get("calendar_entry_id")),
+        "parent_ad_id": _clean(row.get("parent_ad_id")),
+        "iteration_notes": _clean(row.get("iteration_notes")),
+        "result": _clean(row.get("result")),
+        "launched_date": row.get("launched_date"),
+        "kill_date": row.get("kill_date"),
+        "kill_reason": _clean(row.get("kill_reason")),
+        "notes": _clean(row.get("notes")),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def map_meta_ad_performance(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    ext = _clean(row.get("perf_id"))
+    if not ext:
+        return None
+    return {
+        "perf_id": ext,
+        "ad_id": _clean(row.get("ad_id")),
+        "snapshot_date": row.get("snapshot_date"),
+        "snapshot_type": _clean(row.get("snapshot_type")),
+        "amount_spent": row.get("amount_spent"),
+        "impressions": row.get("impressions"),
+        "reach": row.get("reach"),
+        "leads": row.get("leads"),
+        "cost_per_lead": row.get("cost_per_lead"),
+        "booked_calls": row.get("booked_calls"),
+        "cost_per_booked_call": row.get("cost_per_booked_call"),
+        "link_clicks": row.get("link_clicks"),
+        "cost_per_link_click": row.get("cost_per_link_click"),
+        "hook_rate": row.get("hook_rate"),
+        "hold_rate": row.get("hold_rate"),
+        "ctr": row.get("ctr"),
+        "cpm": row.get("cpm"),
+        "frequency": row.get("frequency"),
+        "kpi_status": _clean(row.get("kpi_status")),
+        "metric_notes": _clean(row.get("metric_notes")),
+        "action_taken": _clean(row.get("action_taken")),
+        "created_at": row.get("created_at"),
     }

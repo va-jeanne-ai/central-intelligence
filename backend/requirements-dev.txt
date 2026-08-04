@@ -1,0 +1,6 @@
+# Dev/test dependencies — everything verify.sh and the local test suite need
+# beyond the runtime deps. Rebuild the venv with:
+#   python3.13 -m venv --copies .venv && .venv/bin/pip install -r requirements-dev.txt
+-r requirements.txt
+pytest>=8.0
+httpx>=0.27  # fastapi.testclient transport (tests/test_error_envelope.py)

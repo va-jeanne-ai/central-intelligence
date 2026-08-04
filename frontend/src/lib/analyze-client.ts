@@ -43,3 +43,36 @@ export function analyzeView(
     { silent: true, timeout: 90_000 },
   );
 }
+
+// ─── Follow-up chat (deliverable 8) ─────────────────────────────────────────
+
+export interface AnalyzeChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AnalyzeChatResponse {
+  reply: string;
+  model: string | null;
+  generated_at: string;
+}
+
+/**
+ * Ask a follow-up question about the same filtered view the drawer already
+ * analyzed. `params` must be the SAME filter params passed to `analyzeView`
+ * so the backend recomputes aggregates from identical filters. `messages` is
+ * the full local running history (including the new user turn) — the
+ * backend has no server-side session for this, ephemeral by design.
+ */
+export function analyzeViewChat(
+  surface: string,
+  params: URLSearchParams,
+  messages: AnalyzeChatMessage[],
+): Promise<AnalyzeChatResponse> {
+  const qs = params.toString();
+  return apiClient.post<AnalyzeChatResponse>(
+    `/analyze/${surface}/chat${qs ? `?${qs}` : ""}`,
+    { messages },
+    { silent: true, timeout: 60_000 },
+  );
+}

@@ -182,9 +182,107 @@ def test_map_marketing_social() -> None:
     check("tag blank → None", m.map_insight_tag({"id": 8, "tag": "  "}) is None)
 
 
+def test_map_lead_carries_utm_attribution() -> None:
+    # Hard asserts (not check()): these must fail loudly under pytest during
+    # the TDD red phase; check() only soft-fails there.
+    row = {
+        "lead_id": "LEAD_001", "name": "Jane Doe", "email": "j@x.com",
+        "phone": "12143365496", "pipeline_stage": "Applied",
+        "entry_date": "2026-07-01", "notes": None,
+        "ghl_contact_id": "ghl_abc123",
+        "utm_source_first": "ig", "utm_medium_first": "social",
+        "utm_campaign_first": "julypromo", "utm_content_first": "reel-14",
+        "utm_source_last": "email", "utm_medium_last": "broadcast",
+        "utm_campaign_last": "webinar-0722", "utm_content_last": None,
+    }
+    mapped = m.map_lead(row)
+    assert mapped["ghl_contact_id"] == "ghl_abc123"
+    assert mapped["utm_source_first"] == "ig"
+    assert mapped["utm_content_first"] == "reel-14"
+    assert mapped["utm_source_last"] == "email"
+    assert mapped["utm_content_last"] is None
+
+
+def test_map_lead_missing_utm_columns_omits_keys_entirely() -> None:
+    # Presence-conditional (audit r6 #4): when SELECT * no longer returns a
+    # column, the mapped dict must OMIT the key — never emit None, which the
+    # upsert would write over previously mirrored values. An explicit upstream
+    # NULL (key present, value None) still maps to None.
+    mapped = m.map_lead({"lead_id": "LEAD_002"})
+    assert "utm_source_first" not in mapped
+    assert "ghl_contact_id" not in mapped
+    explicit_null = m.map_lead({"lead_id": "LEAD_003", "utm_source_first": None})
+    assert explicit_null["utm_source_first"] is None
+
+
+def test_map_attribution_row_skips_rows_without_channel() -> None:
+    assert m.map_attribution_row({"id": 1, "canonical_channel": None}) is None
+    ok = m.map_attribution_row(
+        {"id": 2, "observed_source": "ig", "canonical_channel": "instagram_organic"}
+    )
+    assert ok["id"] == 2 and ok["include_in_channel_reporting"] is True
+
+
+def test_map_attribution_row_coerces_string_booleans() -> None:
+    # r7: a drifted text "false" must not become truthy.
+    row = {"id": 3, "canonical_channel": "email",
+           "include_in_channel_reporting": "false"}
+    assert m.map_attribution_row(row)["include_in_channel_reporting"] is False
+
+
+def test_map_lead_engagement() -> None:
+    row = {
+        "engagement_id": "ENG_001", "lead_id": "LEAD_001",
+        "ghl_contact_id": "ghl_abc", "engagement_type": "opt_in",
+        "engagement_date": "2026-07-20T10:00:00+00:00",
+        "utm_source": "email", "utm_medium": "broadcast",
+        "utm_campaign": "webinar-0722", "utm_content": None,
+        "source_type": "email", "email_campaign_id": "EMAIL_202607_003",
+        "email_id": "EMAIL_202607_003", "offer_id": None,
+        "page_url": "https://x.com/optin", "notes": None,
+        "created_at": "2026-07-20T10:00:01+00:00",
+    }
+    out = m.map_lead_engagement(row)
+    assert out["engagement_id"] == "ENG_001"
+    assert out["wgr_lead_id"] == "LEAD_001"
+    assert out["engagement_type"] == "opt_in"
+    assert m.map_lead_engagement({"engagement_id": None}) is None
+
+
+def test_map_meta_ad_performance() -> None:
+    row = {
+        "perf_id": "PERF_001", "ad_id": "AD_001", "snapshot_date": "2026-07-20",
+        "snapshot_type": "Daily", "amount_spent": "125.50", "impressions": 10000,
+        "reach": 8000, "leads": 12, "cost_per_lead": "10.46", "booked_calls": 3,
+        "cost_per_booked_call": "41.83", "link_clicks": 210,
+        "cost_per_link_click": "0.60", "hook_rate": "31.20", "hold_rate": "12.40",
+        "ctr": "2.10", "cpm": "12.55", "frequency": "1.25",
+        "kpi_status": "On Track", "metric_notes": None, "action_taken": None,
+        "created_at": "2026-07-21T00:00:00+00:00",
+    }
+    out = m.map_meta_ad_performance(row)
+    assert out["perf_id"] == "PERF_001" and out["ad_id"] == "AD_001"
+    assert m.map_meta_ad_performance({"perf_id": None}) is None
+
+
+def test_map_meta_campaign_and_ad() -> None:
+    assert m.map_meta_campaign({"campaign_id": "CAMP_1", "name": "July",
+                                "campaign_type": "Lead Gen"})["campaign_id"] == "CAMP_1"
+    assert m.map_meta_ad({"ad_id": "AD_1", "name": "Hook A",
+                          "ad_format": "Reel"})["ad_id"] == "AD_1"
+    assert m.map_meta_campaign({"campaign_id": None}) is None
+    assert m.map_meta_ad({"ad_id": ""}) is None
+
+
 def main() -> int:
     for fn in (
         test_normalize_phone, test_test_call_filter, test_map_lead,
+        test_map_lead_carries_utm_attribution,
+        test_map_lead_missing_utm_columns_omits_keys_entirely,
+        test_map_attribution_row_skips_rows_without_channel,
+        test_map_attribution_row_coerces_string_booleans,
+        test_map_lead_engagement,
+        test_map_meta_ad_performance, test_map_meta_campaign_and_ad,
         test_map_appointment_status, test_map_lead_status,
         test_map_insight, test_map_content_idea,
         test_map_market_signal, test_map_sales_rep, test_map_closed_sale_and_activity,
