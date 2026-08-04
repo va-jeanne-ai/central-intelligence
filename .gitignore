@@ -36,9 +36,8 @@ Thumbs.db
 .vscode/
 
 # Celery beat scheduler state — generated at runtime; never check in
-celerybeat-schedule
-celerybeat-schedule-shm
-celerybeat-schedule-wal
+# celerybeat scratch — glob catches Finder-duplicate copies ("-shm 2" etc.)
+celerybeat-schedule*
 
 # WAT framework
 .tmp/
