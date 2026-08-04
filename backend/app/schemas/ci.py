@@ -297,6 +297,9 @@ class InsightFacets(BaseModel):
     signal_family: list[str]
     signal_strength: list[str]
     pain_layer: list[str]
+    # Source labels ("Call · <call_type>", "Other") — drives the table's
+    # Source filter; same label contract as InsightDistribution.by_source.
+    source: list[str] = Field(default_factory=list)
 
 
 class InsightCount(BaseModel):

@@ -440,8 +440,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/ci.py": {
-    "mtime": 1785855057.2371933,
-    "ast_hash": "c1180bcd3f37584b24fa4947dc3ee98f",
+    "mtime": 1785855666.1769865,
+    "ast_hash": "bc81fff0fc177f121bb28d1e6c1fc199",
     "semantic_hash": ""
   },
   "backend/app/routes/dashboard.py": {
@@ -555,8 +555,8 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/ci.py": {
-    "mtime": 1785855060.5595582,
-    "ast_hash": "cc28d58f35a38a9161a08acb728893f0",
+    "mtime": 1785855668.7856865,
+    "ast_hash": "24b0dd0daef651804f5c02290fcbd401",
     "semantic_hash": ""
   },
   "backend/app/schemas/common.py": {
@@ -885,8 +885,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/ci-insights/page.tsx": {
-    "mtime": 1785772210.5727236,
-    "ast_hash": "67283b525459f8b0e05d9f6e77e7b696",
+    "mtime": 1785855720.4692233,
+    "ast_hash": "9b6fe36643f409af761a87cc9345e51b",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/ci-market-signals/page.tsx": {
@@ -1320,8 +1320,8 @@
     "semantic_hash": ""
   },
   "frontend/src/types/index.ts": {
-    "mtime": 1785855176.264837,
-    "ast_hash": "14c61f882a5a9d408713c4e2faee66ba",
+    "mtime": 1785855731.4973416,
+    "ast_hash": "408f575a61d5e1e3260a7a6a4a0af201",
     "semantic_hash": ""
   },
   "frontend/tailwind.config.ts": {

@@ -14,7 +14,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response
-from sqlalchemy import asc, case, desc, func, literal_column, or_, select
+from sqlalchemy import asc, case, desc, false, func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analytics.team import RepRow, call_owner_match_values, resolve_rep
@@ -943,6 +943,7 @@ def _build_insight_filters(
     search: str | None,
     date_from: str | None,
     date_to: str | None,
+    source: str | None = None,
 ) -> list:
     """Injection-safe filter clauses for the insights list — bind params only,
     whitelisted columns only. Shared by list_insights and insight_summary so
@@ -961,6 +962,24 @@ def _build_insight_filters(
     if tag:
         tag_match = select(InsightTag.insight_id).where(InsightTag.tag == tag)
         clauses.append(Insight.id.in_(tag_match))
+    if source:
+        # Accepts exactly the labels the by_source distribution emits (same
+        # contract as the leads page's channel filter): "Call · <call_type>",
+        # "Call · Unknown", "Other". Subquery IN keeps the shared builder
+        # join-free, mirroring the tag filter above.
+        if source == "Other":
+            clauses.append(Insight.call_id.is_(None))
+        elif source == "Call · Unknown":
+            typed_calls = select(Call.id).where(Call.call_type.is_not(None))
+            clauses.append(Insight.call_id.is_not(None))
+            clauses.append(Insight.call_id.not_in(typed_calls))
+        elif source.startswith("Call · "):
+            call_type = source[len("Call · "):]
+            typed = select(Call.id).where(Call.call_type == call_type)
+            clauses.append(Insight.call_id.in_(typed))
+        else:
+            # Unknown label → zero rows (never silently ignore a filter).
+            clauses.append(false())
     if search:
         like = f"%{search.strip()}%"
         clauses.append(or_(Insight.signal.ilike(like), Insight.raw_quote.ilike(like)))
@@ -981,6 +1000,7 @@ async def list_insights(
     signal_strength: str | None = Query(None, description="Exact match on signal_strength."),
     pain_layer: str | None = Query(None, description="Exact match on pain_layer."),
     tag: str | None = Query(None, description="Exact match on an insight_tags.tag joined to the insight."),
+    source: str | None = Query(None, description="Insight source label — exactly what by_source emits (e.g. 'Call · Discovery', 'Other')."),
     search: str | None = Query(None, description="Case-insensitive match on signal or raw_quote."),
     created_from: str | None = Query(None, description="Insight created_at >= (ISO date/datetime)."),
     created_to: str | None = Query(None, description="Insight created_at <= (ISO date/datetime)."),
@@ -1005,6 +1025,7 @@ async def list_insights(
         signal_strength=signal_strength,
         pain_layer=pain_layer,
         tag=tag,
+        source=source,
         search=search,
         date_from=created_from or date_from,
         date_to=created_to or date_to,
@@ -1113,11 +1134,30 @@ async def insight_facets(
         rows = (await session.execute(stmt)).scalars().all()
         return [r for r in rows if r and r.strip()]
 
+    # Source labels present in the data — same "Call · <call_type>" shape the
+    # by_source distribution and the `source` filter use. Unfiltered (facets
+    # drive dropdowns, so the option list must not shrink when a filter is
+    # applied); "Other" only appears if call-less insights ever exist.
+    source_rows = (
+        await session.execute(
+            select(
+                case(
+                    (Insight.call_id.is_(None), "Other"),
+                    else_="Call · " + func.coalesce(Call.call_type, "Unknown"),
+                ).label("label")
+            )
+            .select_from(Insight)
+            .outerjoin(Call, Call.id == Insight.call_id)
+            .distinct()
+        )
+    ).scalars().all()
+
     return InsightFacets(
         insight_type=await _distinct(Insight.insight_type),
         signal_family=await _distinct(Insight.signal_family),
         signal_strength=await _distinct(Insight.signal_strength),
         pain_layer=await _distinct(Insight.pain_layer),
+        source=sorted(source_rows),
     )
 
 
@@ -1134,6 +1174,7 @@ async def insight_summary(
     signal_strength: str | None = Query(None),
     pain_layer: str | None = Query(None),
     tag: str | None = Query(None),
+    source: str | None = Query(None, description="Insight source label — exactly what by_source emits (e.g. 'Call · Discovery', 'Other')."),
     search: str | None = Query(None),
     created_from: str | None = Query(None),
     created_to: str | None = Query(None),
@@ -1159,6 +1200,7 @@ async def insight_summary(
         signal_strength=signal_strength,
         pain_layer=pain_layer,
         tag=tag,
+        source=source,
         search=search,
         date_from=created_from or date_from,
         date_to=created_to or date_to,

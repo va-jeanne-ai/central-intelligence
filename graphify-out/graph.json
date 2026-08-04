@@ -1650,7 +1650,7 @@
       "source_location": "L555",
       "_origin": "ast",
       "id": "agents_central_intelligence_get_analytics_verdicts",
-      "community": 463,
+      "community": 59,
       "norm_label": "_get_analytics_verdicts()"
     },
     {
@@ -1780,7 +1780,7 @@
       "source_location": "L561",
       "_origin": "ast",
       "id": "agents_central_intelligence_rationale_561",
-      "community": 463,
+      "community": 59,
       "norm_label": "return the engine's trend verdicts + open recommendations as structured json."
     },
     {
@@ -4620,7 +4620,7 @@
       "source_location": "L268",
       "_origin": "ast",
       "id": "analytics_recommend_fetch_recommendation_rows",
-      "community": 463,
+      "community": 59,
       "norm_label": "fetch_recommendation_rows()"
     },
     {
@@ -4630,7 +4630,7 @@
       "source_location": "L268",
       "_origin": "ast",
       "id": "backend_app_analytics_recommend_py_asyncsession",
-      "community": 463,
+      "community": 59,
       "norm_label": "asyncsession"
     },
     {
@@ -4710,7 +4710,7 @@
       "source_location": "L276",
       "_origin": "ast",
       "id": "analytics_recommend_rationale_276",
-      "community": 463,
+      "community": 59,
       "norm_label": "fetch active (or filtered) recommendation rows as plain dicts.      defaults to"
     },
     {
@@ -4720,7 +4720,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "users_jinangokotano_documents_agentic_builder_projects_central_intelligence_backend_app_analytics_registry_py",
-      "community": 178,
+      "community": 59,
       "norm_label": "registry.py"
     },
     {
@@ -4730,7 +4730,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "analytics_registry_metric",
-      "community": 178,
+      "community": 411,
       "norm_label": "metric"
     },
     {
@@ -4740,7 +4740,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "analytics_registry_metric_has_asof",
-      "community": 178,
+      "community": 411,
       "norm_label": ".has_asof()"
     },
     {
@@ -4750,7 +4750,7 @@
       "source_location": "L581",
       "_origin": "ast",
       "id": "analytics_registry_all_metrics",
-      "community": 178,
+      "community": 59,
       "norm_label": "all_metrics()"
     },
     {
@@ -4760,7 +4760,7 @@
       "source_location": "L586",
       "_origin": "ast",
       "id": "analytics_registry_metrics_for_area",
-      "community": 178,
+      "community": 59,
       "norm_label": "metrics_for_area()"
     },
     {
@@ -4780,7 +4780,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "analytics_registry_rationale_1",
-      "community": 178,
+      "community": 59,
       "norm_label": "metric registry \u2014 the declarative catalog of outcome metrics.  this is the \"what"
     },
     {
@@ -4790,7 +4790,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "analytics_registry_rationale_49",
-      "community": 178,
+      "community": 411,
       "norm_label": "one declared outcome metric. ``sql`` follows the contract in the module docstrin"
     },
     {
@@ -4800,7 +4800,7 @@
       "source_location": "L582",
       "_origin": "ast",
       "id": "analytics_registry_rationale_582",
-      "community": 178,
+      "community": 59,
       "norm_label": "every registered metric."
     },
     {
@@ -4810,7 +4810,7 @@
       "source_location": "L587",
       "_origin": "ast",
       "id": "analytics_registry_rationale_587",
-      "community": 178,
+      "community": 59,
       "norm_label": "registered metrics for one area (e.g. 'sales')."
     },
     {
@@ -17177,7 +17177,7 @@
       "label": "list_insights()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L977",
+      "source_location": "L996",
       "_origin": "ast",
       "id": "routes_ci_list_insights",
       "community": 462,
@@ -17187,7 +17187,7 @@
       "label": "insight_facets()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1095",
+      "source_location": "L1116",
       "_origin": "ast",
       "id": "routes_ci_insight_facets",
       "community": 25,
@@ -17197,7 +17197,7 @@
       "label": "insight_summary()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1131",
+      "source_location": "L1171",
       "_origin": "ast",
       "id": "routes_ci_insight_summary",
       "community": 462,
@@ -17207,7 +17207,7 @@
       "label": "get_insight()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1264",
+      "source_location": "L1306",
       "_origin": "ast",
       "id": "routes_ci_get_insight",
       "community": 25,
@@ -17217,7 +17217,7 @@
       "label": "update_insight()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1312",
+      "source_location": "L1354",
       "_origin": "ast",
       "id": "routes_ci_update_insight",
       "community": 25,
@@ -17227,7 +17227,7 @@
       "label": "UpdateInsightRequest",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1312",
+      "source_location": "L1354",
       "_origin": "ast",
       "id": "updateinsightrequest",
       "community": 141,
@@ -17237,7 +17237,7 @@
       "label": "delete_insight()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1346",
+      "source_location": "L1388",
       "_origin": "ast",
       "id": "routes_ci_delete_insight",
       "community": 25,
@@ -17247,7 +17247,7 @@
       "label": "create_content_idea()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1364",
+      "source_location": "L1406",
       "_origin": "ast",
       "id": "routes_ci_create_content_idea",
       "community": 141,
@@ -17257,7 +17257,7 @@
       "label": "CreateContentIdeaRequest",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1364",
+      "source_location": "L1406",
       "_origin": "ast",
       "id": "createcontentidearequest",
       "community": 141,
@@ -17267,7 +17267,7 @@
       "label": "list_content_ideas()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1406",
+      "source_location": "L1448",
       "_origin": "ast",
       "id": "routes_ci_list_content_ideas",
       "community": 25,
@@ -17277,7 +17277,7 @@
       "label": "update_content_idea()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1458",
+      "source_location": "L1500",
       "_origin": "ast",
       "id": "routes_ci_update_content_idea",
       "community": 25,
@@ -17287,7 +17287,7 @@
       "label": "UpdateContentIdeaRequest",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1458",
+      "source_location": "L1500",
       "_origin": "ast",
       "id": "updatecontentidearequest",
       "community": 141,
@@ -17297,7 +17297,7 @@
       "label": "_momentum()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1518",
+      "source_location": "L1560",
       "_origin": "ast",
       "id": "routes_ci_momentum",
       "community": 418,
@@ -17307,7 +17307,7 @@
       "label": "_momentum_sql_expr()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1545",
+      "source_location": "L1587",
       "_origin": "ast",
       "id": "routes_ci_momentum_sql_expr",
       "community": 371,
@@ -17317,7 +17317,7 @@
       "label": "list_market_signals()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1564",
+      "source_location": "L1606",
       "_origin": "ast",
       "id": "routes_ci_list_market_signals",
       "community": 371,
@@ -17327,7 +17327,7 @@
       "label": "market_signal_facets()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1662",
+      "source_location": "L1704",
       "_origin": "ast",
       "id": "routes_ci_market_signal_facets",
       "community": 25,
@@ -17337,7 +17337,7 @@
       "label": "refresh_market_signals()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1695",
+      "source_location": "L1737",
       "_origin": "ast",
       "id": "routes_ci_refresh_market_signals",
       "community": 25,
@@ -17347,7 +17347,7 @@
       "label": "list_tags()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1717",
+      "source_location": "L1759",
       "_origin": "ast",
       "id": "routes_ci_list_tags",
       "community": 9,
@@ -17357,7 +17357,7 @@
       "label": "list_offers()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1743",
+      "source_location": "L1785",
       "_origin": "ast",
       "id": "routes_ci_list_offers",
       "community": 25,
@@ -17367,7 +17367,7 @@
       "label": "get_monthly_preferences()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1780",
+      "source_location": "L1822",
       "_origin": "ast",
       "id": "routes_ci_get_monthly_preferences",
       "community": 25,
@@ -17377,7 +17377,7 @@
       "label": "update_monthly_preferences()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1814",
+      "source_location": "L1856",
       "_origin": "ast",
       "id": "routes_ci_update_monthly_preferences",
       "community": 25,
@@ -17387,7 +17387,7 @@
       "label": "UpdateMonthlyPreferencesRequest",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1814",
+      "source_location": "L1856",
       "_origin": "ast",
       "id": "updatemonthlypreferencesrequest",
       "community": 141,
@@ -17397,7 +17397,7 @@
       "label": "sync_insights_to_shared_intelligence()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1868",
+      "source_location": "L1910",
       "_origin": "ast",
       "id": "routes_ci_sync_insights_to_shared_intelligence",
       "community": 128,
@@ -17407,7 +17407,7 @@
       "label": "sync_content_ideas()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L2009",
+      "source_location": "L2051",
       "_origin": "ast",
       "id": "routes_ci_sync_content_ideas",
       "community": 25,
@@ -17417,7 +17417,7 @@
       "label": "_month_name()",
       "file_type": "code",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L2066",
+      "source_location": "L2108",
       "_origin": "ast",
       "id": "routes_ci_month_name",
       "community": 25,
@@ -17597,9 +17597,9 @@
       "label": "Injection-safe filter clauses for the insights list \u2014 bind params only,     whit",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L947",
+      "source_location": "L948",
       "_origin": "ast",
-      "id": "routes_ci_rationale_947",
+      "id": "routes_ci_rationale_948",
       "community": 462,
       "norm_label": "injection-safe filter clauses for the insights list \u2014 bind params only,     whit"
     },
@@ -17607,9 +17607,9 @@
       "label": "Query insights with full filters + pagination + source attribution (CI-MKT-01).",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L993",
+      "source_location": "L1013",
       "_origin": "ast",
-      "id": "routes_ci_rationale_993",
+      "id": "routes_ci_rationale_1013",
       "community": 462,
       "norm_label": "query insights with full filters + pagination + source attribution (ci-mkt-01)."
     },
@@ -17617,9 +17617,9 @@
       "label": "Distinct filterable values present in the insights table.      Drives the insigh",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1098",
+      "source_location": "L1119",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1098",
+      "id": "routes_ci_rationale_1119",
       "community": 25,
       "norm_label": "distinct filterable values present in the insights table.      drives the insigh"
     },
@@ -17627,9 +17627,9 @@
       "label": "Pre-aggregated distributions for the CI Insights charts (CI-MKT-01).      Aggreg",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1144",
+      "source_location": "L1185",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1144",
+      "id": "routes_ci_rationale_1185",
       "community": 462,
       "norm_label": "pre-aggregated distributions for the ci insights charts (ci-mkt-01).      aggreg"
     },
@@ -17637,9 +17637,9 @@
       "label": "Get single insight with full detail (CI-MKT-01).",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1268",
+      "source_location": "L1310",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1268",
+      "id": "routes_ci_rationale_1310",
       "community": 25,
       "norm_label": "get single insight with full detail (ci-mkt-01)."
     },
@@ -17647,9 +17647,9 @@
       "label": "Partial update of an Insight's editable fields shown on the call detail page.",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1317",
+      "source_location": "L1359",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1317",
+      "id": "routes_ci_rationale_1359",
       "community": 25,
       "norm_label": "partial update of an insight's editable fields shown on the call detail page."
     },
@@ -17657,9 +17657,9 @@
       "label": "Hard-delete an Insight. InsightTag rows cascade; ContentIdea links go to NULL.",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1350",
+      "source_location": "L1392",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1350",
+      "id": "routes_ci_rationale_1392",
       "community": 25,
       "norm_label": "hard-delete an insight. insighttag rows cascade; contentidea links go to null."
     },
@@ -17667,9 +17667,9 @@
       "label": "Create a content idea manually from the UI.      Maps frontend `{title, platform",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1368",
+      "source_location": "L1410",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1368",
+      "id": "routes_ci_rationale_1410",
       "community": 141,
       "norm_label": "create a content idea manually from the ui.      maps frontend `{title, platform"
     },
@@ -17677,9 +17677,9 @@
       "label": "Query content ideas with filters (CI-MKT-01).",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1414",
+      "source_location": "L1456",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1414",
+      "id": "routes_ci_rationale_1456",
       "community": 25,
       "norm_label": "query content ideas with filters (ci-mkt-01)."
     },
@@ -17687,9 +17687,9 @@
       "label": "Update content idea status (CI-MKT-01).      EC-08: Status transitions are valid",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1463",
+      "source_location": "L1505",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1463",
+      "id": "routes_ci_rationale_1505",
       "community": 25,
       "norm_label": "update content idea status (ci-mkt-01).      ec-08: status transitions are valid"
     },
@@ -17697,9 +17697,9 @@
       "label": "7-day mention rate vs. the prior-23-day average rate within the 30d window.",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1519",
+      "source_location": "L1561",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1519",
+      "id": "routes_ci_rationale_1561",
       "community": 418,
       "norm_label": "7-day mention rate vs. the prior-23-day average rate within the 30d window."
     },
@@ -17707,9 +17707,9 @@
       "label": "SQL twin of `_momentum()`, for ORDER BY \u2014 sorting momentum in the     database i",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1546",
+      "source_location": "L1588",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1546",
+      "id": "routes_ci_rationale_1588",
       "community": 371,
       "norm_label": "sql twin of `_momentum()`, for order by \u2014 sorting momentum in the     database i"
     },
@@ -17717,9 +17717,9 @@
       "label": "Get aggregated market signals with filters + pagination (CI-MKT-01).      `marke",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1577",
+      "source_location": "L1619",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1577",
+      "id": "routes_ci_rationale_1619",
       "community": 371,
       "norm_label": "get aggregated market signals with filters + pagination (ci-mkt-01).      `marke"
     },
@@ -17727,9 +17727,9 @@
       "label": "Distinct filterable values present in the market_signals table.      Drives the",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1665",
+      "source_location": "L1707",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1665",
+      "id": "routes_ci_rationale_1707",
       "community": 25,
       "norm_label": "distinct filterable values present in the market_signals table.      drives the"
     },
@@ -17737,9 +17737,9 @@
       "label": "Enqueue the market-signals recompute job (aggregates insights \u2192 market_signals).",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1696",
+      "source_location": "L1738",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1696",
+      "id": "routes_ci_rationale_1738",
       "community": 25,
       "norm_label": "enqueue the market-signals recompute job (aggregates insights \u2192 market_signals)."
     },
@@ -17747,9 +17747,9 @@
       "label": "List tag dictionary (CI-MKT-01).",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1720",
+      "source_location": "L1762",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1720",
+      "id": "routes_ci_rationale_1762",
       "community": 9,
       "norm_label": "list tag dictionary (ci-mkt-01)."
     },
@@ -17757,9 +17757,9 @@
       "label": "List CI offers catalog (CI-MKT-01).",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1748",
+      "source_location": "L1790",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1748",
+      "id": "routes_ci_rationale_1790",
       "community": 25,
       "norm_label": "list ci offers catalog (ci-mkt-01)."
     },
@@ -17767,9 +17767,9 @@
       "label": "Get calendar configuration for a specific month (CI-MKT-01).",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1785",
+      "source_location": "L1827",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1785",
+      "id": "routes_ci_rationale_1827",
       "community": 25,
       "norm_label": "get calendar configuration for a specific month (ci-mkt-01)."
     },
@@ -17777,9 +17777,9 @@
       "label": "Create or update monthly calendar preferences (CI-MKT-01).",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1820",
+      "source_location": "L1862",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1820",
+      "id": "routes_ci_rationale_1862",
       "community": 25,
       "norm_label": "create or update monthly calendar preferences (ci-mkt-01)."
     },
@@ -17787,9 +17787,9 @@
       "label": "CI-MKT-02: Sync CI insights to Central Intelligence shared intelligence tables.",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1871",
+      "source_location": "L1913",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1871",
+      "id": "routes_ci_rationale_1913",
       "community": 128,
       "norm_label": "ci-mkt-02: sync ci insights to central intelligence shared intelligence tables."
     },
@@ -17797,9 +17797,9 @@
       "label": "CI-MKT-03: Sync CI content_ideas to Central Intelligence content_ideas table.",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L2012",
+      "source_location": "L2054",
       "_origin": "ast",
-      "id": "routes_ci_rationale_2012",
+      "id": "routes_ci_rationale_2054",
       "community": 25,
       "norm_label": "ci-mkt-03: sync ci content_ideas to central intelligence content_ideas table."
     },
@@ -17827,9 +17827,9 @@
       "label": "# NOTE: declared before /insights/{insight_id} so the literal \"facets\"",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1091",
+      "source_location": "L1112",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1091",
+      "id": "routes_ci_rationale_1112",
       "community": 25,
       "norm_label": "# note: declared before /insights/{insight_id} so the literal \"facets\""
     },
@@ -17837,9 +17837,9 @@
       "label": "# NOTE: declared before /insights/{insight_id} so the literal \"summary\"",
       "file_type": "rationale",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1127",
+      "source_location": "L1167",
       "_origin": "ast",
-      "id": "routes_ci_rationale_1127",
+      "id": "routes_ci_rationale_1167",
       "community": 25,
       "norm_label": "# note: declared before /insights/{insight_id} so the literal \"summary\""
     },
@@ -24797,7 +24797,7 @@
       "label": "InsightCount",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L302",
+      "source_location": "L305",
       "_origin": "ast",
       "id": "schemas_ci_insightcount",
       "community": 462,
@@ -24807,7 +24807,7 @@
       "label": "InsightTopSignal",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L314",
+      "source_location": "L317",
       "_origin": "ast",
       "id": "schemas_ci_insighttopsignal",
       "community": 9,
@@ -24817,7 +24817,7 @@
       "label": "InsightDistribution",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L323",
+      "source_location": "L326",
       "_origin": "ast",
       "id": "schemas_ci_insightdistribution",
       "community": 9,
@@ -24827,7 +24827,7 @@
       "label": "InsightDetail",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L343",
+      "source_location": "L346",
       "_origin": "ast",
       "id": "schemas_ci_insightdetail",
       "community": 9,
@@ -24837,7 +24837,7 @@
       "label": "InsightDetailResponse",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L370",
+      "source_location": "L373",
       "_origin": "ast",
       "id": "schemas_ci_insightdetailresponse",
       "community": 9,
@@ -24847,7 +24847,7 @@
       "label": "ContentIdeaSummary",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L385",
+      "source_location": "L388",
       "_origin": "ast",
       "id": "schemas_ci_contentideasummary",
       "community": 9,
@@ -24857,7 +24857,7 @@
       "label": "ContentIdeaListResponse",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L400",
+      "source_location": "L403",
       "_origin": "ast",
       "id": "schemas_ci_contentidealistresponse",
       "community": 9,
@@ -24867,7 +24867,7 @@
       "label": "UpdateContentIdeaRequest",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L405",
+      "source_location": "L408",
       "_origin": "ast",
       "id": "schemas_ci_updatecontentidearequest",
       "community": 9,
@@ -24877,7 +24877,7 @@
       "label": "UpdateContentIdeaResponse",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L411",
+      "source_location": "L414",
       "_origin": "ast",
       "id": "schemas_ci_updatecontentidearesponse",
       "community": 9,
@@ -24887,7 +24887,7 @@
       "label": "CreateContentIdeaRequest",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L417",
+      "source_location": "L420",
       "_origin": "ast",
       "id": "schemas_ci_createcontentidearequest",
       "community": 9,
@@ -24897,7 +24897,7 @@
       "label": "AnalyzeCallResponse",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L436",
+      "source_location": "L439",
       "_origin": "ast",
       "id": "schemas_ci_analyzecallresponse",
       "community": 468,
@@ -24907,7 +24907,7 @@
       "label": "CreateCallFromTranscriptRequest",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L450",
+      "source_location": "L453",
       "_origin": "ast",
       "id": "schemas_ci_createcallfromtranscriptrequest",
       "community": 9,
@@ -24917,7 +24917,7 @@
       "label": "CreateCallFromTranscriptResponse",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L467",
+      "source_location": "L470",
       "_origin": "ast",
       "id": "schemas_ci_createcallfromtranscriptresponse",
       "community": 9,
@@ -24927,7 +24927,7 @@
       "label": "MarketSignalItem",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L477",
+      "source_location": "L480",
       "_origin": "ast",
       "id": "schemas_ci_marketsignalitem",
       "community": 9,
@@ -24937,7 +24937,7 @@
       "label": "MarketSignalListResponse",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L499",
+      "source_location": "L502",
       "_origin": "ast",
       "id": "schemas_ci_marketsignallistresponse",
       "community": 9,
@@ -24947,7 +24947,7 @@
       "label": "MarketSignalFacets",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L504",
+      "source_location": "L507",
       "_origin": "ast",
       "id": "schemas_ci_marketsignalfacets",
       "community": 9,
@@ -24957,7 +24957,7 @@
       "label": "TagItem",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L519",
+      "source_location": "L522",
       "_origin": "ast",
       "id": "schemas_ci_tagitem",
       "community": 9,
@@ -24967,7 +24967,7 @@
       "label": "TagListResponse",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L526",
+      "source_location": "L529",
       "_origin": "ast",
       "id": "schemas_ci_taglistresponse",
       "community": 9,
@@ -24977,7 +24977,7 @@
       "label": "OfferItem",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L534",
+      "source_location": "L537",
       "_origin": "ast",
       "id": "schemas_ci_offeritem",
       "community": 9,
@@ -24987,7 +24987,7 @@
       "label": "OfferListResponse",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L543",
+      "source_location": "L546",
       "_origin": "ast",
       "id": "schemas_ci_offerlistresponse",
       "community": 9,
@@ -24997,7 +24997,7 @@
       "label": "MonthlyPreferenceResponse",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L551",
+      "source_location": "L554",
       "_origin": "ast",
       "id": "schemas_ci_monthlypreferenceresponse",
       "community": 9,
@@ -25007,7 +25007,7 @@
       "label": "UpdateMonthlyPreferencesRequest",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L563",
+      "source_location": "L566",
       "_origin": "ast",
       "id": "schemas_ci_updatemonthlypreferencesrequest",
       "community": 9,
@@ -25017,7 +25017,7 @@
       "label": "SyncResult",
       "file_type": "code",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L576",
+      "source_location": "L579",
       "_origin": "ast",
       "id": "schemas_ci_syncresult",
       "community": 9,
@@ -25127,9 +25127,9 @@
       "label": "A single (label, count) pair for a distribution chart.      ``mentions`` sums fr",
       "file_type": "rationale",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L303",
+      "source_location": "L306",
       "_origin": "ast",
-      "id": "schemas_ci_rationale_303",
+      "id": "schemas_ci_rationale_306",
       "community": 462,
       "norm_label": "a single (label, count) pair for a distribution chart.      ``mentions`` sums fr"
     },
@@ -25137,9 +25137,9 @@
       "label": "A high-frequency signal surfaced for the \"top signals\" bar chart.",
       "file_type": "rationale",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L315",
+      "source_location": "L318",
       "_origin": "ast",
-      "id": "schemas_ci_rationale_315",
+      "id": "schemas_ci_rationale_318",
       "community": 9,
       "norm_label": "a high-frequency signal surfaced for the \"top signals\" bar chart."
     },
@@ -25147,9 +25147,9 @@
       "label": "Pre-aggregated distributions for the CI Insights charts (CI-MKT-01).      Comput",
       "file_type": "rationale",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L324",
+      "source_location": "L327",
       "_origin": "ast",
-      "id": "schemas_ci_rationale_324",
+      "id": "schemas_ci_rationale_327",
       "community": 9,
       "norm_label": "pre-aggregated distributions for the ci insights charts (ci-mkt-01).      comput"
     },
@@ -25157,9 +25157,9 @@
       "label": "Payload for POST /api/v1/ci/content-ideas \u2014 manual idea creation from the UI.",
       "file_type": "rationale",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L418",
+      "source_location": "L421",
       "_origin": "ast",
-      "id": "schemas_ci_rationale_418",
+      "id": "schemas_ci_rationale_421",
       "community": 9,
       "norm_label": "payload for post /api/v1/ci/content-ideas \u2014 manual idea creation from the ui."
     },
@@ -25167,9 +25167,9 @@
       "label": "Response from POST /api/v1/ci/calls/{call_id}/analyze.      The analyzer runs as",
       "file_type": "rationale",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L437",
+      "source_location": "L440",
       "_origin": "ast",
-      "id": "schemas_ci_rationale_437",
+      "id": "schemas_ci_rationale_440",
       "community": 468,
       "norm_label": "response from post /api/v1/ci/calls/{call_id}/analyze.      the analyzer runs as"
     },
@@ -25177,9 +25177,9 @@
       "label": "Payload for POST /api/v1/ci/calls \u2014 create a Call row by pasting a transcript.",
       "file_type": "rationale",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L451",
+      "source_location": "L454",
       "_origin": "ast",
-      "id": "schemas_ci_rationale_451",
+      "id": "schemas_ci_rationale_454",
       "community": 9,
       "norm_label": "payload for post /api/v1/ci/calls \u2014 create a call row by pasting a transcript."
     },
@@ -25187,9 +25187,9 @@
       "label": "Distinct filterable values present in the market_signals table.      Drives the",
       "file_type": "rationale",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L505",
+      "source_location": "L508",
       "_origin": "ast",
-      "id": "schemas_ci_rationale_505",
+      "id": "schemas_ci_rationale_508",
       "community": 9,
       "norm_label": "distinct filterable values present in the market_signals table.      drives the"
     },
@@ -37834,7 +37834,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "fixtures_prompt_snapshots_app_agents_directors_marketing",
-      "community": 470,
+      "community": 370,
       "norm_label": "app.agents.directors.marketing"
     },
     {
@@ -37844,7 +37844,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "fixtures_prompt_snapshots_app_agents_directors_marketing_data_integrity_rule",
-      "community": 470,
+      "community": 370,
       "norm_label": "data_integrity_rule"
     },
     {
@@ -38334,7 +38334,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "fixtures_prompt_snapshots_app_prompts_script_generation_v1",
-      "community": 370,
+      "community": 470,
       "norm_label": "app.prompts.script_generation_v1"
     },
     {
@@ -38344,7 +38344,7 @@
       "source_location": "L96",
       "_origin": "ast",
       "id": "fixtures_prompt_snapshots_app_prompts_script_generation_v1_script_generation_system_prompt_v1",
-      "community": 370,
+      "community": 470,
       "norm_label": "script_generation_system_prompt_v1"
     },
     {
@@ -39144,7 +39144,7 @@
       "source_location": "L134",
       "_origin": "ast",
       "id": "backend_tests_test_analytics_team_py_trendresult",
-      "community": 178,
+      "community": 411,
       "norm_label": "trendresult"
     },
     {
@@ -44684,7 +44684,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "calls_page",
-      "community": 70,
+      "community": 17,
       "norm_label": "page.tsx"
     },
     {
@@ -44694,7 +44694,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "calls_page_allcallspage",
-      "community": 70,
+      "community": 17,
       "norm_label": "allcallspage()"
     },
     {
@@ -45251,7 +45251,7 @@
       "label": "FilterBar()",
       "file_type": "code",
       "source_file": "frontend/src/app/(app)/ci-insights/page.tsx",
-      "source_location": "L167",
+      "source_location": "L170",
       "_origin": "ast",
       "id": "ci_insights_page_filterbar",
       "community": 56,
@@ -45261,7 +45261,7 @@
       "label": "SkeletonRow()",
       "file_type": "code",
       "source_file": "frontend/src/app/(app)/ci-insights/page.tsx",
-      "source_location": "L309",
+      "source_location": "L323",
       "_origin": "ast",
       "id": "ci_insights_page_skeletonrow",
       "community": 56,
@@ -45271,7 +45271,7 @@
       "label": "InsightRow()",
       "file_type": "code",
       "source_file": "frontend/src/app/(app)/ci-insights/page.tsx",
-      "source_location": "L326",
+      "source_location": "L340",
       "_origin": "ast",
       "id": "ci_insights_page_insightrow",
       "community": 56,
@@ -45281,7 +45281,7 @@
       "label": "EmptyState()",
       "file_type": "code",
       "source_file": "frontend/src/app/(app)/ci-insights/page.tsx",
-      "source_location": "L384",
+      "source_location": "L398",
       "_origin": "ast",
       "id": "ci_insights_page_emptystate",
       "community": 56,
@@ -45291,7 +45291,7 @@
       "label": "LoadingSkeleton()",
       "file_type": "code",
       "source_file": "frontend/src/app/(app)/ci-insights/page.tsx",
-      "source_location": "L400",
+      "source_location": "L414",
       "_origin": "ast",
       "id": "ci_insights_page_loadingskeleton",
       "community": 56,
@@ -45301,7 +45301,7 @@
       "label": "DEFAULT_FACETS",
       "file_type": "code",
       "source_file": "frontend/src/app/(app)/ci-insights/page.tsx",
-      "source_location": "L412",
+      "source_location": "L426",
       "_origin": "ast",
       "id": "ci_insights_page_default_facets",
       "community": 56,
@@ -45311,7 +45311,7 @@
       "label": "CIInsightsPage()",
       "file_type": "code",
       "source_file": "frontend/src/app/(app)/ci-insights/page.tsx",
-      "source_location": "L419",
+      "source_location": "L434",
       "_origin": "ast",
       "id": "ci_insights_page_ciinsightspage",
       "community": 14,
@@ -46224,7 +46224,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "insights_team_formatting",
-      "community": 15,
+      "community": 167,
       "norm_label": "team-formatting.ts"
     },
     {
@@ -46234,7 +46234,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "insights_team_formatting_repmetricblock",
-      "community": 15,
+      "community": 167,
       "norm_label": "repmetricblock"
     },
     {
@@ -46244,7 +46244,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "insights_team_formatting_teamrecommendation",
-      "community": 15,
+      "community": 167,
       "norm_label": "teamrecommendation"
     },
     {
@@ -46254,7 +46254,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "insights_team_formatting_teamrep",
-      "community": 15,
+      "community": 167,
       "norm_label": "teamrep"
     },
     {
@@ -46264,7 +46264,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "insights_team_formatting_teamrollup",
-      "community": 15,
+      "community": 167,
       "norm_label": "teamrollup"
     },
     {
@@ -46274,7 +46274,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "insights_team_formatting_teamanalyticsresponse",
-      "community": 15,
+      "community": 167,
       "norm_label": "teamanalyticsresponse"
     },
     {
@@ -46284,7 +46284,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "insights_team_formatting_formatvalue",
-      "community": 15,
+      "community": 167,
       "norm_label": "formatvalue()"
     },
     {
@@ -46294,7 +46294,7 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "insights_team_formatting_formatcount",
-      "community": 15,
+      "community": 167,
       "norm_label": "formatcount()"
     },
     {
@@ -46304,7 +46304,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "insights_team_formatting_formatrelchange",
-      "community": 15,
+      "community": 167,
       "norm_label": "formatrelchange()"
     },
     {
@@ -46314,7 +46314,7 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "insights_team_formatting_weightedteamcallscore",
-      "community": 15,
+      "community": 167,
       "norm_label": "weightedteamcallscore()"
     },
     {
@@ -46324,7 +46324,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "insights_team_formatting_sortrepsbyoutbounddesc",
-      "community": 15,
+      "community": 167,
       "norm_label": "sortrepsbyoutbounddesc()"
     },
     {
@@ -46334,7 +46334,7 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "insights_team_formatting_statuspillvariant",
-      "community": 15,
+      "community": 167,
       "norm_label": "statuspillvariant"
     },
     {
@@ -46344,7 +46344,7 @@
       "source_location": "L122",
       "_origin": "ast",
       "id": "insights_team_formatting_trendpillvariant",
-      "community": 15,
+      "community": 167,
       "norm_label": "trendpillvariant"
     },
     {
@@ -46354,7 +46354,7 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "insights_team_formatting_trendpilllabel",
-      "community": 15,
+      "community": 167,
       "norm_label": "trendpilllabel()"
     },
     {
@@ -46364,7 +46364,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "insights_team_pills",
-      "community": 15,
+      "community": 167,
       "norm_label": "team-pills.tsx"
     },
     {
@@ -46374,7 +46374,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "insights_team_pills_status_style",
-      "community": 15,
+      "community": 167,
       "norm_label": "status_style"
     },
     {
@@ -46384,7 +46384,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "insights_team_pills_repstatuspill",
-      "community": 15,
+      "community": 167,
       "norm_label": "repstatuspill()"
     },
     {
@@ -46394,7 +46394,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "insights_team_pills_trend_style",
-      "community": 15,
+      "community": 167,
       "norm_label": "trend_style"
     },
     {
@@ -46404,7 +46404,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "insights_team_pills_trendpill",
-      "community": 15,
+      "community": 167,
       "norm_label": "trendpill()"
     },
     {
@@ -46414,7 +46414,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "insights_team_tab",
-      "community": 15,
+      "community": 167,
       "norm_label": "team-tab.tsx"
     },
     {
@@ -46424,7 +46424,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "insights_team_tab_windows",
-      "community": 15,
+      "community": 167,
       "norm_label": "windows"
     },
     {
@@ -46434,7 +46434,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "insights_team_tab_area_label",
-      "community": 15,
+      "community": 167,
       "norm_label": "area_label"
     },
     {
@@ -46444,7 +46444,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "insights_team_tab_repdetailpanel",
-      "community": 15,
+      "community": 167,
       "norm_label": "repdetailpanel()"
     },
     {
@@ -46454,7 +46454,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "insights_team_tab_repleaderboard",
-      "community": 15,
+      "community": 167,
       "norm_label": "repleaderboard()"
     },
     {
@@ -46464,7 +46464,7 @@
       "source_location": "L175",
       "_origin": "ast",
       "id": "insights_team_tab_teamtab",
-      "community": 15,
+      "community": 167,
       "norm_label": "teamtab()"
     },
     {
@@ -46474,7 +46474,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "slug_page",
-      "community": 3,
+      "community": 8,
       "norm_label": "page.tsx"
     },
     {
@@ -46484,7 +46484,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "slug_page_ismaskedvalue",
-      "community": 3,
+      "community": 8,
       "norm_label": "ismaskedvalue()"
     },
     {
@@ -46494,7 +46494,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "slug_page_syncable_slugs",
-      "community": 3,
+      "community": 8,
       "norm_label": "syncable_slugs"
     },
     {
@@ -46504,7 +46504,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "slug_page_sync_button_label",
-      "community": 3,
+      "community": 8,
       "norm_label": "sync_button_label"
     },
     {
@@ -46514,7 +46514,7 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "slug_page_connecteduser",
-      "community": 3,
+      "community": 8,
       "norm_label": "connecteduser"
     },
     {
@@ -46524,7 +46524,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "slug_page_connectedusersresponse",
-      "community": 3,
+      "community": 8,
       "norm_label": "connectedusersresponse"
     },
     {
@@ -46534,7 +46534,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "slug_page_instagramsetupstepscard",
-      "community": 3,
+      "community": 8,
       "norm_label": "instagramsetupstepscard()"
     },
     {
@@ -46544,7 +46544,7 @@
       "source_location": "L191",
       "_origin": "ast",
       "id": "slug_page_facebooksetupstepscard",
-      "community": 3,
+      "community": 8,
       "norm_label": "facebooksetupstepscard()"
     },
     {
@@ -46554,7 +46554,7 @@
       "source_location": "L317",
       "_origin": "ast",
       "id": "slug_page_googleworkspaceconnectcard",
-      "community": 3,
+      "community": 8,
       "norm_label": "googleworkspaceconnectcard()"
     },
     {
@@ -46564,7 +46564,7 @@
       "source_location": "L720",
       "_origin": "ast",
       "id": "slug_page_integrationdetailpage",
-      "community": 3,
+      "community": 8,
       "norm_label": "integrationdetailpage()"
     },
     {
@@ -46694,7 +46694,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "integrations_page",
-      "community": 3,
+      "community": 15,
       "norm_label": "page.tsx"
     },
     {
@@ -46704,7 +46704,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "integrations_page_formatlastsynced",
-      "community": 3,
+      "community": 15,
       "norm_label": "formatlastsynced()"
     },
     {
@@ -46714,7 +46714,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "integrations_page_integrationcard",
-      "community": 3,
+      "community": 15,
       "norm_label": "integrationcard()"
     },
     {
@@ -46724,7 +46724,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "integrations_page_integrationspage",
-      "community": 3,
+      "community": 15,
       "norm_label": "integrationspage()"
     },
     {
@@ -47974,7 +47974,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "email_page",
-      "community": 8,
+      "community": 3,
       "norm_label": "page.tsx"
     },
     {
@@ -47984,7 +47984,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "email_page_campaignrow",
-      "community": 8,
+      "community": 3,
       "norm_label": "campaignrow"
     },
     {
@@ -47994,7 +47994,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "email_page_campaignssummary",
-      "community": 8,
+      "community": 3,
       "norm_label": "campaignssummary"
     },
     {
@@ -48004,7 +48004,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "email_page_filteroptions",
-      "community": 8,
+      "community": 3,
       "norm_label": "filteroptions"
     },
     {
@@ -48014,7 +48014,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "email_page_campaignsresponse",
-      "community": 8,
+      "community": 3,
       "norm_label": "campaignsresponse"
     },
     {
@@ -48024,7 +48024,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "email_page_empty_data",
-      "community": 8,
+      "community": 3,
       "norm_label": "empty_data"
     },
     {
@@ -48034,7 +48034,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "email_page_sortmetric",
-      "community": 8,
+      "community": 3,
       "norm_label": "sortmetric"
     },
     {
@@ -48044,7 +48044,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "email_page_sortdir",
-      "community": 8,
+      "community": 3,
       "norm_label": "sortdir"
     },
     {
@@ -48054,7 +48054,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "email_page_sort_metric_labels",
-      "community": 8,
+      "community": 3,
       "norm_label": "sort_metric_labels"
     },
     {
@@ -48064,7 +48064,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "email_page_formatpercent",
-      "community": 8,
+      "community": 3,
       "norm_label": "formatpercent()"
     },
     {
@@ -48074,7 +48074,7 @@
       "source_location": "L98",
       "_origin": "ast",
       "id": "email_page_formatdate",
-      "community": 8,
+      "community": 3,
       "norm_label": "formatdate()"
     },
     {
@@ -48084,7 +48084,7 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "email_page_formatnumber",
-      "community": 8,
+      "community": 3,
       "norm_label": "formatnumber()"
     },
     {
@@ -48094,7 +48094,7 @@
       "source_location": "L134",
       "_origin": "ast",
       "id": "email_page_tierof",
-      "community": 8,
+      "community": 3,
       "norm_label": "tierof()"
     },
     {
@@ -48104,7 +48104,7 @@
       "source_location": "L144",
       "_origin": "ast",
       "id": "email_page_tier_styles",
-      "community": 8,
+      "community": 3,
       "norm_label": "tier_styles"
     },
     {
@@ -48114,7 +48114,7 @@
       "source_location": "L150",
       "_origin": "ast",
       "id": "email_page_tierchip",
-      "community": 8,
+      "community": 3,
       "norm_label": "tierchip()"
     },
     {
@@ -48124,7 +48124,7 @@
       "source_location": "L169",
       "_origin": "ast",
       "id": "email_page_sortableheader",
-      "community": 8,
+      "community": 3,
       "norm_label": "sortableheader()"
     },
     {
@@ -48134,7 +48134,7 @@
       "source_location": "L210",
       "_origin": "ast",
       "id": "email_page_topcampaignscard",
-      "community": 8,
+      "community": 3,
       "norm_label": "topcampaignscard()"
     },
     {
@@ -48144,7 +48144,7 @@
       "source_location": "L307",
       "_origin": "ast",
       "id": "email_page_campaigntablerow",
-      "community": 8,
+      "community": 3,
       "norm_label": "campaigntablerow()"
     },
     {
@@ -48154,7 +48154,7 @@
       "source_location": "L364",
       "_origin": "ast",
       "id": "email_page_campaignsemptystate",
-      "community": 8,
+      "community": 3,
       "norm_label": "campaignsemptystate()"
     },
     {
@@ -48164,7 +48164,7 @@
       "source_location": "L378",
       "_origin": "ast",
       "id": "email_page_emailpageskeleton",
-      "community": 8,
+      "community": 3,
       "norm_label": "emailpageskeleton()"
     },
     {
@@ -48174,7 +48174,7 @@
       "source_location": "L414",
       "_origin": "ast",
       "id": "email_page_emailpage",
-      "community": 8,
+      "community": 3,
       "norm_label": "emailpage()"
     },
     {
@@ -48274,7 +48274,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "icp_page",
-      "community": 167,
+      "community": 142,
       "norm_label": "page.tsx"
     },
     {
@@ -48284,7 +48284,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "icp_page_apiicpsegment",
-      "community": 167,
+      "community": 142,
       "norm_label": "apiicpsegment"
     },
     {
@@ -48294,7 +48294,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "icp_page_apiicplistresponse",
-      "community": 167,
+      "community": 142,
       "norm_label": "apiicplistresponse"
     },
     {
@@ -48304,7 +48304,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "icp_page_fromapi",
-      "community": 167,
+      "community": 142,
       "norm_label": "fromapi()"
     },
     {
@@ -48314,7 +48314,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "icp_page_kpitile",
-      "community": 167,
+      "community": 142,
       "norm_label": "kpitile"
     },
     {
@@ -48324,7 +48324,7 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "icp_page_kpi_tiles",
-      "community": 167,
+      "community": 142,
       "norm_label": "kpi_tiles"
     },
     {
@@ -48334,7 +48334,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "icp_page_icpprofile",
-      "community": 167,
+      "community": 142,
       "norm_label": "icpprofile"
     },
     {
@@ -48344,7 +48344,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "icp_page_editdraft",
-      "community": 167,
+      "community": 142,
       "norm_label": "editdraft"
     },
     {
@@ -48354,7 +48354,7 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "icp_page_kpitilecard",
-      "community": 167,
+      "community": 142,
       "norm_label": "kpitilecard()"
     },
     {
@@ -48364,7 +48364,7 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "icp_page_icpcardviewprops",
-      "community": 167,
+      "community": 142,
       "norm_label": "icpcardviewprops"
     },
     {
@@ -48374,7 +48374,7 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "icp_page_icpcardview",
-      "community": 167,
+      "community": 142,
       "norm_label": "icpcardview()"
     },
     {
@@ -48384,7 +48384,7 @@
       "source_location": "L185",
       "_origin": "ast",
       "id": "icp_page_icpcardeditprops",
-      "community": 167,
+      "community": 142,
       "norm_label": "icpcardeditprops"
     },
     {
@@ -48394,7 +48394,7 @@
       "source_location": "L193",
       "_origin": "ast",
       "id": "icp_page_icpcardedit",
-      "community": 167,
+      "community": 142,
       "norm_label": "icpcardedit()"
     },
     {
@@ -48404,7 +48404,7 @@
       "source_location": "L267",
       "_origin": "ast",
       "id": "icp_page_newicpformcardprops",
-      "community": 167,
+      "community": 142,
       "norm_label": "newicpformcardprops"
     },
     {
@@ -48414,7 +48414,7 @@
       "source_location": "L272",
       "_origin": "ast",
       "id": "icp_page_newicpformcard",
-      "community": 167,
+      "community": 142,
       "norm_label": "newicpformcard()"
     },
     {
@@ -48424,7 +48424,7 @@
       "source_location": "L345",
       "_origin": "ast",
       "id": "icp_page_icpcardssection",
-      "community": 167,
+      "community": 142,
       "norm_label": "icpcardssection()"
     },
     {
@@ -48434,7 +48434,7 @@
       "source_location": "L522",
       "_origin": "ast",
       "id": "icp_page_icppage",
-      "community": 167,
+      "community": 142,
       "norm_label": "icppage()"
     },
     {
@@ -49944,7 +49944,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "business_page",
-      "community": 3,
+      "community": 15,
       "norm_label": "page.tsx"
     },
     {
@@ -49954,7 +49954,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "business_page_editablefield",
-      "community": 3,
+      "community": 15,
       "norm_label": "editablefield"
     },
     {
@@ -49964,7 +49964,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "business_page_field_order",
-      "community": 3,
+      "community": 15,
       "norm_label": "field_order"
     },
     {
@@ -49974,7 +49974,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "business_page_formstate",
-      "community": 3,
+      "community": 15,
       "norm_label": "formstate"
     },
     {
@@ -49984,7 +49984,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "business_page_emptyform",
-      "community": 3,
+      "community": 15,
       "norm_label": "emptyform()"
     },
     {
@@ -49994,7 +49994,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "business_page_toformstate",
-      "community": 3,
+      "community": 15,
       "norm_label": "toformstate()"
     },
     {
@@ -50004,7 +50004,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "business_page_businesssettingspage",
-      "community": 3,
+      "community": 15,
       "norm_label": "businesssettingspage()"
     },
     {
@@ -51834,7 +51834,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "layout_header",
-      "community": 70,
+      "community": 17,
       "norm_label": "header.tsx"
     },
     {
@@ -51844,7 +51844,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "layout_header_headerprops",
-      "community": 70,
+      "community": 17,
       "norm_label": "headerprops"
     },
     {
@@ -51854,7 +51854,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "layout_header_formatdate",
-      "community": 70,
+      "community": 17,
       "norm_label": "formatdate()"
     },
     {
@@ -51864,7 +51864,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "layout_header_actionbutton",
-      "community": 70,
+      "community": 17,
       "norm_label": "actionbutton"
     },
     {
@@ -51874,7 +51874,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "layout_header_getactionbutton",
-      "community": 70,
+      "community": 17,
       "norm_label": "getactionbutton()"
     },
     {
@@ -51884,7 +51884,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "layout_header_header",
-      "community": 70,
+      "community": 17,
       "norm_label": "header()"
     },
     {
@@ -52834,7 +52834,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "ui_card_card",
-      "community": 3,
+      "community": 15,
       "norm_label": "card()"
     },
     {
@@ -52994,7 +52994,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ui_filter_bar",
-      "community": 97,
+      "community": 3,
       "norm_label": "filter-bar.tsx"
     },
     {
@@ -53004,7 +53004,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "ui_filter_bar_filterbarprops",
-      "community": 97,
+      "community": 3,
       "norm_label": "filterbarprops"
     },
     {
@@ -53014,7 +53014,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "ui_filter_bar_filterbar",
-      "community": 97,
+      "community": 3,
       "norm_label": "filterbar()"
     },
     {
@@ -53194,7 +53194,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ui_pagination",
-      "community": 103,
+      "community": 70,
       "norm_label": "pagination.tsx"
     },
     {
@@ -53204,7 +53204,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "ui_pagination_page_size_options",
-      "community": 103,
+      "community": 70,
       "norm_label": "page_size_options"
     },
     {
@@ -53214,7 +53214,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "ui_pagination_paginationprops",
-      "community": 103,
+      "community": 70,
       "norm_label": "paginationprops"
     },
     {
@@ -53224,7 +53224,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "ui_pagination_jumptopage",
-      "community": 103,
+      "community": 70,
       "norm_label": "jumptopage()"
     },
     {
@@ -53234,7 +53234,7 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "ui_pagination_pagination",
-      "community": 103,
+      "community": 70,
       "norm_label": "pagination()"
     },
     {
@@ -53354,7 +53354,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "ui_skeleton_skeleton",
-      "community": 3,
+      "community": 15,
       "norm_label": "skeleton()"
     },
     {
@@ -54054,7 +54054,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_use_pagination",
-      "community": 103,
+      "community": 70,
       "norm_label": "use-pagination.ts"
     },
     {
@@ -54064,7 +54064,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "hooks_use_pagination_isvalidsize",
-      "community": 103,
+      "community": 70,
       "norm_label": "isvalidsize()"
     },
     {
@@ -54074,7 +54074,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "hooks_use_pagination_readstoredsize",
-      "community": 103,
+      "community": 70,
       "norm_label": "readstoredsize()"
     },
     {
@@ -54084,7 +54084,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "hooks_use_pagination_usepaginationresult",
-      "community": 103,
+      "community": 70,
       "norm_label": "usepaginationresult"
     },
     {
@@ -55811,7 +55811,7 @@
       "label": "OverallInsight",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L243",
+      "source_location": "L246",
       "_origin": "ast",
       "id": "types_index_overallinsight",
       "community": 15,
@@ -55821,7 +55821,7 @@
       "label": "CIInsightCount",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L255",
+      "source_location": "L258",
       "_origin": "ast",
       "id": "types_index_ciinsightcount",
       "community": 171,
@@ -55831,7 +55831,7 @@
       "label": "CIInsightTopSignal",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L262",
+      "source_location": "L265",
       "_origin": "ast",
       "id": "types_index_ciinsighttopsignal",
       "community": 171,
@@ -55841,7 +55841,7 @@
       "label": "CIInsightDistribution",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L271",
+      "source_location": "L274",
       "_origin": "ast",
       "id": "types_index_ciinsightdistribution",
       "community": 56,
@@ -55851,7 +55851,7 @@
       "label": "CIMarketSignal",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L286",
+      "source_location": "L289",
       "_origin": "ast",
       "id": "types_index_cimarketsignal",
       "community": 189,
@@ -55861,7 +55861,7 @@
       "label": "CIMarketSignalsResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L306",
+      "source_location": "L309",
       "_origin": "ast",
       "id": "types_index_cimarketsignalsresponse",
       "community": 189,
@@ -55871,7 +55871,7 @@
       "label": "CIMarketSignalFacets",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L313",
+      "source_location": "L316",
       "_origin": "ast",
       "id": "types_index_cimarketsignalfacets",
       "community": 189,
@@ -55881,7 +55881,7 @@
       "label": "CICallFacets",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L321",
+      "source_location": "L324",
       "_origin": "ast",
       "id": "types_index_cicallfacets",
       "community": 70,
@@ -55891,7 +55891,7 @@
       "label": "AdsAnalyzeResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L328",
+      "source_location": "L331",
       "_origin": "ast",
       "id": "types_index_adsanalyzeresponse",
       "community": 17,
@@ -55901,7 +55901,7 @@
       "label": "AdsOverviewKpis",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L337",
+      "source_location": "L340",
       "_origin": "ast",
       "id": "types_index_adsoverviewkpis",
       "community": 171,
@@ -55911,7 +55911,7 @@
       "label": "AdsOverviewCampaign",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L349",
+      "source_location": "L352",
       "_origin": "ast",
       "id": "types_index_adsoverviewcampaign",
       "community": 15,
@@ -55921,7 +55921,7 @@
       "label": "AdsOverviewTopAd",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L366",
+      "source_location": "L369",
       "_origin": "ast",
       "id": "types_index_adsoverviewtopad",
       "community": 15,
@@ -55931,7 +55931,7 @@
       "label": "AdsOverviewResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L383",
+      "source_location": "L386",
       "_origin": "ast",
       "id": "types_index_adsoverviewresponse",
       "community": 15,
@@ -55941,7 +55941,7 @@
       "label": "DmData",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L391",
+      "source_location": "L394",
       "_origin": "ast",
       "id": "types_index_dmdata",
       "community": 3,
@@ -55951,7 +55951,7 @@
       "label": "DmAnalyzeResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L399",
+      "source_location": "L402",
       "_origin": "ast",
       "id": "types_index_dmanalyzeresponse",
       "community": 17,
@@ -55961,7 +55961,7 @@
       "label": "SocialAnalyzeResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L411",
+      "source_location": "L414",
       "_origin": "ast",
       "id": "types_index_socialanalyzeresponse",
       "community": 17,
@@ -55971,7 +55971,7 @@
       "label": "SocialOverviewSummary",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L421",
+      "source_location": "L424",
       "_origin": "ast",
       "id": "types_index_socialoverviewsummary",
       "community": 171,
@@ -55981,7 +55981,7 @@
       "label": "SocialOverviewPost",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L435",
+      "source_location": "L438",
       "_origin": "ast",
       "id": "types_index_socialoverviewpost",
       "community": 97,
@@ -55991,7 +55991,7 @@
       "label": "SocialOverviewLeadDay",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L455",
+      "source_location": "L458",
       "_origin": "ast",
       "id": "types_index_socialoverviewleadday",
       "community": 171,
@@ -56001,7 +56001,7 @@
       "label": "SocialOverviewResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L461",
+      "source_location": "L464",
       "_origin": "ast",
       "id": "types_index_socialoverviewresponse",
       "community": 97,
@@ -56011,7 +56011,7 @@
       "label": "OfferGenerateResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L475",
+      "source_location": "L478",
       "_origin": "ast",
       "id": "types_index_offergenerateresponse",
       "community": 97,
@@ -56021,7 +56021,7 @@
       "label": "Promotion",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L483",
+      "source_location": "L486",
       "_origin": "ast",
       "id": "types_index_promotion",
       "community": 77,
@@ -56031,7 +56031,7 @@
       "label": "ProviderFieldSchema",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L500",
+      "source_location": "L503",
       "_origin": "ast",
       "id": "types_index_providerfieldschema",
       "community": 171,
@@ -56041,7 +56041,7 @@
       "label": "IntegrationSummary",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L510",
+      "source_location": "L513",
       "_origin": "ast",
       "id": "types_index_integrationsummary",
       "community": 171,
@@ -56051,7 +56051,7 @@
       "label": "IntegrationDetail",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L531",
+      "source_location": "L534",
       "_origin": "ast",
       "id": "types_index_integrationdetail",
       "community": 171,
@@ -56061,17 +56061,17 @@
       "label": "TestIntegrationResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L537",
+      "source_location": "L540",
       "_origin": "ast",
       "id": "types_index_testintegrationresponse",
-      "community": 3,
+      "community": 8,
       "norm_label": "testintegrationresponse"
     },
     {
       "label": "FreshnessVerdict",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L545",
+      "source_location": "L548",
       "_origin": "ast",
       "id": "types_index_freshnessverdict",
       "community": 358,
@@ -56081,7 +56081,7 @@
       "label": "FreshnessSourceResult",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L547",
+      "source_location": "L550",
       "_origin": "ast",
       "id": "types_index_freshnesssourceresult",
       "community": 358,
@@ -56091,7 +56091,7 @@
       "label": "FreshnessResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L559",
+      "source_location": "L562",
       "_origin": "ast",
       "id": "types_index_freshnessresponse",
       "community": 358,
@@ -56101,7 +56101,7 @@
       "label": "SyncTriggerResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L565",
+      "source_location": "L568",
       "_origin": "ast",
       "id": "types_index_synctriggerresponse",
       "community": 358,
@@ -56111,7 +56111,7 @@
       "label": "SyncStatusResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L571",
+      "source_location": "L574",
       "_origin": "ast",
       "id": "types_index_syncstatusresponse",
       "community": 358,
@@ -56121,7 +56121,7 @@
       "label": "CalendarAttendee",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L580",
+      "source_location": "L583",
       "_origin": "ast",
       "id": "types_index_calendarattendee",
       "community": 171,
@@ -56131,7 +56131,7 @@
       "label": "CalendarEventRow",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L586",
+      "source_location": "L589",
       "_origin": "ast",
       "id": "types_index_calendareventrow",
       "community": 170,
@@ -56141,7 +56141,7 @@
       "label": "CalendarEventsResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L611",
+      "source_location": "L614",
       "_origin": "ast",
       "id": "types_index_calendareventsresponse",
       "community": 171,
@@ -56151,7 +56151,7 @@
       "label": "CalendarSummary",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L616",
+      "source_location": "L619",
       "_origin": "ast",
       "id": "types_index_calendarsummary",
       "community": 176,
@@ -56161,7 +56161,7 @@
       "label": "CalendarListResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L621",
+      "source_location": "L624",
       "_origin": "ast",
       "id": "types_index_calendarlistresponse",
       "community": 171,
@@ -56171,7 +56171,7 @@
       "label": "AppointmentRow",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L627",
+      "source_location": "L630",
       "_origin": "ast",
       "id": "types_index_appointmentrow",
       "community": 170,
@@ -56181,7 +56181,7 @@
       "label": "AppointmentsListResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L642",
+      "source_location": "L645",
       "_origin": "ast",
       "id": "types_index_appointmentslistresponse",
       "community": 171,
@@ -56191,7 +56191,7 @@
       "label": "ChatSessionRow",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L651",
+      "source_location": "L654",
       "_origin": "ast",
       "id": "types_index_chatsessionrow",
       "community": 300,
@@ -56201,7 +56201,7 @@
       "label": "ChatSessionListResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L660",
+      "source_location": "L663",
       "_origin": "ast",
       "id": "types_index_chatsessionlistresponse",
       "community": 300,
@@ -56211,7 +56211,7 @@
       "label": "ChatMessageRow",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L664",
+      "source_location": "L667",
       "_origin": "ast",
       "id": "types_index_chatmessagerow",
       "community": 171,
@@ -56221,7 +56221,7 @@
       "label": "ChatSessionDetailResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L671",
+      "source_location": "L674",
       "_origin": "ast",
       "id": "types_index_chatsessiondetailresponse",
       "community": 300,
@@ -56231,7 +56231,7 @@
       "label": "DocumentRow",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L678",
+      "source_location": "L681",
       "_origin": "ast",
       "id": "types_index_documentrow",
       "community": 171,
@@ -56241,7 +56241,7 @@
       "label": "DocumentsResponse",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L689",
+      "source_location": "L692",
       "_origin": "ast",
       "id": "types_index_documentsresponse",
       "community": 171,
@@ -56251,7 +56251,7 @@
       "label": "BrandingConfig",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L696",
+      "source_location": "L699",
       "_origin": "ast",
       "id": "types_index_brandingconfig",
       "community": 171,
@@ -56261,7 +56261,7 @@
       "label": "InstanceProfile",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L707",
+      "source_location": "L710",
       "_origin": "ast",
       "id": "types_index_instanceprofile",
       "community": 171,
@@ -56271,7 +56271,7 @@
       "label": "InstanceProfileUpdate",
       "file_type": "code",
       "source_file": "frontend/src/types/index.ts",
-      "source_location": "L727",
+      "source_location": "L730",
       "_origin": "ast",
       "id": "types_index_instanceprofileupdate",
       "community": 171,
@@ -67344,7 +67344,7 @@
       "source_location": "L843",
       "_origin": "ast",
       "id": "new_documents_technical_plan_enhanced_9_cross_domain_data_flow",
-      "community": 163,
+      "community": 463,
       "norm_label": "9. cross-domain data flow"
     },
     {
@@ -67354,7 +67354,7 @@
       "source_location": "L845",
       "_origin": "ast",
       "id": "new_documents_technical_plan_enhanced_shared_intelligence_tables",
-      "community": 163,
+      "community": 463,
       "norm_label": "shared intelligence tables"
     },
     {
@@ -67364,7 +67364,7 @@
       "source_location": "L861",
       "_origin": "ast",
       "id": "new_documents_technical_plan_enhanced_data_flow_diagram",
-      "community": 163,
+      "community": 463,
       "norm_label": "data flow diagram"
     },
     {
@@ -67374,7 +67374,7 @@
       "source_location": "L904",
       "_origin": "ast",
       "id": "new_documents_technical_plan_enhanced_10_authentication_model",
-      "community": 472,
+      "community": 163,
       "norm_label": "10. authentication model"
     },
     {
@@ -67384,7 +67384,7 @@
       "source_location": "L906",
       "_origin": "ast",
       "id": "new_documents_technical_plan_enhanced_two_layer_architecture",
-      "community": 472,
+      "community": 163,
       "norm_label": "two-layer architecture"
     },
     {
@@ -67394,7 +67394,7 @@
       "source_location": "L936",
       "_origin": "ast",
       "id": "new_documents_technical_plan_enhanced_auth_endpoints",
-      "community": 472,
+      "community": 163,
       "norm_label": "auth endpoints"
     },
     {
@@ -117062,21 +117062,21 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1091",
+      "source_location": "L1112",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "routes_ci_rationale_1091",
-      "target": "routes_ci"
+      "source": "routes_ci_rationale_1112",
+      "target": "routes_ci",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1127",
+      "source_location": "L1167",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "routes_ci_rationale_1127",
-      "target": "routes_ci"
+      "source": "routes_ci_rationale_1167",
+      "target": "routes_ci",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -119152,11 +119152,11 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L947",
+      "source_location": "L948",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "routes_ci_rationale_947",
-      "target": "routes_ci_build_insight_filters"
+      "source": "routes_ci_rationale_948",
+      "target": "routes_ci_build_insight_filters",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -119184,11 +119184,11 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L993",
+      "source_location": "L1013",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "routes_ci_rationale_993",
-      "target": "routes_ci_list_insights"
+      "source": "routes_ci_rationale_1013",
+      "target": "routes_ci_list_insights",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -119205,11 +119205,11 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1098",
+      "source_location": "L1119",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "routes_ci_rationale_1098",
-      "target": "routes_ci_insight_facets"
+      "source": "routes_ci_rationale_1119",
+      "target": "routes_ci_insight_facets",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -119248,11 +119248,11 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1144",
+      "source_location": "L1185",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "routes_ci_rationale_1144",
-      "target": "routes_ci_insight_summary"
+      "source": "routes_ci_rationale_1185",
+      "target": "routes_ci_insight_summary",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -119269,9 +119269,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1268",
+      "source_location": "L1310",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1268",
+      "source": "routes_ci_rationale_1310",
       "target": "routes_ci_get_insight",
       "confidence_score": 1.0
     },
@@ -119279,9 +119279,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1317",
+      "source_location": "L1359",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1317",
+      "source": "routes_ci_rationale_1359",
       "target": "routes_ci_update_insight",
       "confidence_score": 1.0
     },
@@ -119340,9 +119340,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1350",
+      "source_location": "L1392",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1350",
+      "source": "routes_ci_rationale_1392",
       "target": "routes_ci_delete_insight",
       "confidence_score": 1.0
     },
@@ -119372,9 +119372,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1368",
+      "source_location": "L1410",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1368",
+      "source": "routes_ci_rationale_1410",
       "target": "routes_ci_create_content_idea",
       "confidence_score": 1.0
     },
@@ -119434,9 +119434,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1414",
+      "source_location": "L1456",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1414",
+      "source": "routes_ci_rationale_1456",
       "target": "routes_ci_list_content_ideas",
       "confidence_score": 1.0
     },
@@ -119444,9 +119444,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1463",
+      "source_location": "L1505",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1463",
+      "source": "routes_ci_rationale_1505",
       "target": "routes_ci_update_content_idea",
       "confidence_score": 1.0
     },
@@ -119507,9 +119507,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1519",
+      "source_location": "L1561",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1519",
+      "source": "routes_ci_rationale_1561",
       "target": "routes_ci_momentum",
       "confidence_score": 1.0
     },
@@ -119616,9 +119616,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1546",
+      "source_location": "L1588",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1546",
+      "source": "routes_ci_rationale_1588",
       "target": "routes_ci_momentum_sql_expr",
       "confidence_score": 1.0
     },
@@ -119648,9 +119648,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1577",
+      "source_location": "L1619",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1577",
+      "source": "routes_ci_rationale_1619",
       "target": "routes_ci_list_market_signals",
       "confidence_score": 1.0
     },
@@ -119669,9 +119669,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1665",
+      "source_location": "L1707",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1665",
+      "source": "routes_ci_rationale_1707",
       "target": "routes_ci_market_signal_facets",
       "confidence_score": 1.0
     },
@@ -119679,9 +119679,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1696",
+      "source_location": "L1738",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1696",
+      "source": "routes_ci_rationale_1738",
       "target": "routes_ci_refresh_market_signals",
       "confidence_score": 1.0
     },
@@ -119711,9 +119711,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1720",
+      "source_location": "L1762",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1720",
+      "source": "routes_ci_rationale_1762",
       "target": "routes_ci_list_tags",
       "confidence_score": 1.0
     },
@@ -119732,9 +119732,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1748",
+      "source_location": "L1790",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1748",
+      "source": "routes_ci_rationale_1790",
       "target": "routes_ci_list_offers",
       "confidence_score": 1.0
     },
@@ -119764,9 +119764,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1785",
+      "source_location": "L1827",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1785",
+      "source": "routes_ci_rationale_1827",
       "target": "routes_ci_get_monthly_preferences",
       "confidence_score": 1.0
     },
@@ -119774,9 +119774,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1820",
+      "source_location": "L1862",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1820",
+      "source": "routes_ci_rationale_1862",
       "target": "routes_ci_update_monthly_preferences",
       "confidence_score": 1.0
     },
@@ -119816,9 +119816,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L1871",
+      "source_location": "L1913",
       "weight": 1.0,
-      "source": "routes_ci_rationale_1871",
+      "source": "routes_ci_rationale_1913",
       "target": "routes_ci_sync_insights_to_shared_intelligence",
       "confidence_score": 1.0
     },
@@ -119837,9 +119837,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/routes/ci.py",
-      "source_location": "L2012",
+      "source_location": "L2054",
       "weight": 1.0,
-      "source": "routes_ci_rationale_2012",
+      "source": "routes_ci_rationale_2054",
       "target": "routes_ci_sync_content_ideas",
       "confidence_score": 1.0
     },
@@ -134562,39 +134562,39 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L303",
+      "source_location": "L306",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "schemas_ci_rationale_303",
-      "target": "schemas_ci_insightcount"
+      "source": "schemas_ci_rationale_306",
+      "target": "schemas_ci_insightcount",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L315",
+      "source_location": "L318",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "schemas_ci_rationale_315",
-      "target": "schemas_ci_insighttopsignal"
+      "source": "schemas_ci_rationale_318",
+      "target": "schemas_ci_insighttopsignal",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L324",
+      "source_location": "L327",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "schemas_ci_rationale_324",
-      "target": "schemas_ci_insightdistribution"
+      "source": "schemas_ci_rationale_327",
+      "target": "schemas_ci_insightdistribution",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L418",
+      "source_location": "L421",
       "weight": 1.0,
-      "source": "schemas_ci_rationale_418",
+      "source": "schemas_ci_rationale_421",
       "target": "schemas_ci_createcontentidearequest",
       "confidence_score": 1.0
     },
@@ -134602,9 +134602,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L437",
+      "source_location": "L440",
       "weight": 1.0,
-      "source": "schemas_ci_rationale_437",
+      "source": "schemas_ci_rationale_440",
       "target": "schemas_ci_analyzecallresponse",
       "confidence_score": 1.0
     },
@@ -134612,9 +134612,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L451",
+      "source_location": "L454",
       "weight": 1.0,
-      "source": "schemas_ci_rationale_451",
+      "source": "schemas_ci_rationale_454",
       "target": "schemas_ci_createcallfromtranscriptrequest",
       "confidence_score": 1.0
     },
@@ -134622,9 +134622,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/app/schemas/ci.py",
-      "source_location": "L505",
+      "source_location": "L508",
       "weight": 1.0,
-      "source": "schemas_ci_rationale_505",
+      "source": "schemas_ci_rationale_508",
       "target": "schemas_ci_marketsignalfacets",
       "confidence_score": 1.0
     },
@@ -165448,9 +165448,9 @@
       "source_file": "frontend/src/app/(app)/ci-insights/insights-charts.tsx",
       "source_location": "L59",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_insights_insights_charts",
-      "target": "ci_insights_insights_charts_source_sequence",
-      "confidence_score": 1.0
+      "target": "ci_insights_insights_charts_source_sequence"
     },
     {
       "relation": "contains",
@@ -165458,9 +165458,9 @@
       "source_file": "frontend/src/app/(app)/ci-insights/insights-charts.tsx",
       "source_location": "L273",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_insights_insights_charts",
-      "target": "ci_insights_insights_charts_sourcebars",
-      "confidence_score": 1.0
+      "target": "ci_insights_insights_charts_sourcebars"
     },
     {
       "relation": "contains",
@@ -205103,5 +205103,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "bf9c75e8e3a7ba77c85194e655062f065859c861"
+  "built_at_commit": "5a54ed9f61207cdc527449373b71a65eb734da16"
 }

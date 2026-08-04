@@ -147,6 +147,7 @@ interface FilterBarProps {
   signalFamily: string;
   signalStrength: string;
   painLayer: string;
+  sourceFilter: string;
   tag: string;
   onTagChange: (v: string) => void;
   createdFrom: string;
@@ -155,10 +156,12 @@ interface FilterBarProps {
   signalFamilyOptions: string[];
   signalStrengthOptions: string[];
   painLayerOptions: string[];
+  sourceOptions: string[];
   onInsightTypeChange: (v: string) => void;
   onSignalFamilyChange: (v: string) => void;
   onSignalStrengthChange: (v: string) => void;
   onPainLayerChange: (v: string) => void;
+  onSourceChange: (v: string) => void;
   onCreatedFromChange: (v: string) => void;
   onCreatedToChange: (v: string) => void;
   onClear: () => void;
@@ -171,6 +174,7 @@ function FilterBar({
   signalFamily,
   signalStrength,
   painLayer,
+  sourceFilter,
   tag,
   onTagChange,
   createdFrom,
@@ -179,10 +183,12 @@ function FilterBar({
   signalFamilyOptions,
   signalStrengthOptions,
   painLayerOptions,
+  sourceOptions,
   onInsightTypeChange,
   onSignalFamilyChange,
   onSignalStrengthChange,
   onPainLayerChange,
+  onSourceChange,
   onCreatedFromChange,
   onCreatedToChange,
   onClear,
@@ -193,6 +199,7 @@ function FilterBar({
     signalFamily !== "All" ||
     signalStrength !== "All" ||
     painLayer !== "All" ||
+    sourceFilter !== "All" ||
     tag !== "" ||
     createdFrom !== "" ||
     createdTo !== "";
@@ -244,6 +251,13 @@ function FilterBar({
         value={painLayer}
         options={painLayerOptions}
         onChange={onPainLayerChange}
+      />
+      <FacetSelect
+        id="filter-source"
+        label="Source"
+        value={sourceFilter}
+        options={sourceOptions}
+        onChange={onSourceChange}
       />
 
       {/* Tag — free text, not a dropdown (2,774 distinct tags is free-text
@@ -414,6 +428,7 @@ const DEFAULT_FACETS: CIInsightFacets = {
   signal_family: [],
   signal_strength: [],
   pain_layer: [],
+  source: [],
 };
 
 export default function CIInsightsPage() {
@@ -436,6 +451,7 @@ export default function CIInsightsPage() {
   const [signalFamily, setSignalFamily] = useState("All");
   const [signalStrength, setSignalStrength] = useState("All");
   const [painLayer, setPainLayer] = useState("All");
+  const [sourceFilter, setSourceFilter] = useState("All");
   const [tag, setTag] = useState("");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
@@ -475,6 +491,7 @@ export default function CIInsightsPage() {
     if (signalFamily !== "All") params.set("signal_family", signalFamily);
     if (signalStrength !== "All") params.set("signal_strength", signalStrength);
     if (painLayer !== "All") params.set("pain_layer", painLayer);
+    if (sourceFilter !== "All") params.set("source", sourceFilter);
     if (tag.trim()) params.set("tag", tag.trim());
     if (createdFrom) params.set("created_from", createdFrom);
     if (createdTo) params.set("created_to", createdTo);
@@ -599,7 +616,7 @@ export default function CIInsightsPage() {
   useEffect(() => {
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, insightType, signalFamily, signalStrength, painLayer, tag, createdFrom, createdTo]);
+  }, [search, insightType, signalFamily, signalStrength, painLayer, sourceFilter, tag, createdFrom, createdTo]);
 
   function handleClear() {
     setSearch("");
@@ -607,6 +624,7 @@ export default function CIInsightsPage() {
     setSignalFamily("All");
     setSignalStrength("All");
     setPainLayer("All");
+    setSourceFilter("All");
     setTag("");
     setCreatedFrom("");
     setCreatedTo("");
@@ -647,6 +665,7 @@ export default function CIInsightsPage() {
               signalFamily={signalFamily}
               signalStrength={signalStrength}
               painLayer={painLayer}
+              sourceFilter={sourceFilter}
               tag={tag}
               onTagChange={setTag}
               createdFrom={createdFrom}
@@ -655,10 +674,12 @@ export default function CIInsightsPage() {
               signalFamilyOptions={facets.signal_family}
               signalStrengthOptions={facets.signal_strength}
               painLayerOptions={facets.pain_layer}
+              sourceOptions={facets.source ?? []}
               onInsightTypeChange={setInsightType}
               onSignalFamilyChange={setSignalFamily}
               onSignalStrengthChange={setSignalStrength}
               onPainLayerChange={setPainLayer}
+              onSourceChange={setSourceFilter}
               onCreatedFromChange={setCreatedFrom}
               onCreatedToChange={setCreatedTo}
               onClear={handleClear}

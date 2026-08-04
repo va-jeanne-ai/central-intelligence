@@ -236,6 +236,9 @@ export interface CIInsightFacets {
   signal_family: string[];
   signal_strength: string[];
   pain_layer: string[];
+  // Source labels ("Call · <call_type>", "Other") — optional: defaulted
+  // server-side, tolerate absence against an older backend.
+  source?: string[];
 }
 
 /** The company-level health assessment shown atop /insights. Synthesized daily by
