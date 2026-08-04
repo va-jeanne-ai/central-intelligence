@@ -1212,12 +1212,38 @@ async def insight_summary(
     )
     top_rows = (await session.execute(_apply(top_stmt))).all()
 
+    # Source distribution — where the filtered insights come from. Every
+    # insight today is call-sourced (100% call_id coverage), so the labels
+    # are "Call · <call_type>"; a null call_id (possible future sources —
+    # emails, docs) buckets as "Other" instead of vanishing.
+    source_label = case(
+        (Insight.call_id.is_(None), "Other"),
+        else_="Call · " + func.coalesce(Call.call_type, "Unknown"),
+    ).label("label")
+    source_stmt = (
+        select(
+            source_label,
+            func.count().label("count"),
+            func.coalesce(func.sum(Insight.frequency_score), 0).label("mentions"),
+        )
+        .select_from(Insight)
+        .outerjoin(Call, Call.id == Insight.call_id)
+        .group_by(source_label)
+        .order_by(func.coalesce(func.sum(Insight.frequency_score), 0).desc())
+    )
+    source_rows = (await session.execute(_apply(source_stmt))).all()
+    by_source = [
+        InsightCount(label=r.label, count=r.count, mentions=r.mentions)
+        for r in source_rows
+    ]
+
     return InsightDistribution(
         total=total,
         by_insight_type=await _distribution(Insight.insight_type),
         by_signal_family=await _distribution(Insight.signal_family),
         by_signal_strength=await _distribution(Insight.signal_strength),
         by_pain_layer=await _distribution(Insight.pain_layer),
+        by_source=by_source,
         top_signals=[
             InsightTopSignal(
                 signal=r.signal,

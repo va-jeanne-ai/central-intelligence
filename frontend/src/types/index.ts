@@ -274,6 +274,10 @@ export interface CIInsightDistribution {
   by_signal_family: CIInsightCount[];
   by_signal_strength: CIInsightCount[];
   by_pain_layer: CIInsightCount[];
+  // Where the insights came from — "Call · <call_type>" labels ("Other" for
+  // future non-call sources). Optional: defaulted server-side, so tolerate
+  // absence against an older backend.
+  by_source?: CIInsightCount[];
   top_signals: CIInsightTopSignal[];
 }
 

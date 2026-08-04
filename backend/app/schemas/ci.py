@@ -333,6 +333,10 @@ class InsightDistribution(BaseModel):
     by_signal_family: list[InsightCount]
     by_signal_strength: list[InsightCount]
     by_pain_layer: list[InsightCount]
+    # Where the insights came from — "Call · <call_type>" labels ("Other" for
+    # any future non-call source). Defaulted so older cached clients tolerate
+    # its absence (dict/schema lock-step convention).
+    by_source: list[InsightCount] = Field(default_factory=list)
     top_signals: list[InsightTopSignal]
 
 
