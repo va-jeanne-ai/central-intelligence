@@ -197,7 +197,7 @@ class EmailCampaignsResponse(BaseModel):
     campaigns: list[EmailCampaignListRow] = []
     total: int = 0
     page: int = 1
-    per_page: int = 50
+    per_page: int = 20  # matches the route's default and the page's DEFAULT_PAGE_SIZE
     summary: EmailCampaignsSummary = EmailCampaignsSummary()
     tier_thresholds: EmailCampaignsTierThresholds = EmailCampaignsTierThresholds()
     # Top-5 by the requested sort metric over the WHOLE filtered set (not

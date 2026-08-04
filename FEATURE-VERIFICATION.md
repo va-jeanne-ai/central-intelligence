@@ -814,8 +814,9 @@ every row today (column is real, just nothing to show yet).
 8. Confirm the **"Top campaigns"** card shows exactly 5 rows (or fewer if
    the filtered set has under 5), ranked #1–#5 by whichever metric is
    selected in "Sort by", each with a name, the metric's formatted value,
-   and a ScoreBar — and that changing "Sort by" re-ranks this card using
-   the SAME already-fetched data (no extra network call).
+   and a ScoreBar — and that changing "Sort by" re-ranks this card (a fresh
+   server query over the whole filtered set — since the 2026-08-05 SQL
+   pagination rework, expect a quick refetch, not an instant client re-sort).
 9. Clear all filters (via "Clear filters") — confirm the table returns to
    showing "2,426 total" and the KPI row returns to the unfiltered totals.
 10. Scroll to the bottom of the Campaigns table — confirm a **Pagination**
