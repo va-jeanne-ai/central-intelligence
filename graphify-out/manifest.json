@@ -465,8 +465,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/funnels.py": {
-    "mtime": 1785773483.0897684,
-    "ast_hash": "11185c4a6f989419dc7d5e49b523c1dd",
+    "mtime": 1785782786.055764,
+    "ast_hash": "7f7538cc9805328bbdafa49f991e9b88",
     "semantic_hash": ""
   },
   "backend/app/routes/health.py": {
@@ -515,8 +515,8 @@
     "semantic_hash": ""
   },
   "backend/app/routes/social.py": {
-    "mtime": 1785779758.629251,
-    "ast_hash": "21f291c3f232fbf4df3388b87e484190",
+    "mtime": 1785783256.1819506,
+    "ast_hash": "a4d5ed685338e8a7ce23f29f85bf544a",
     "semantic_hash": ""
   },
   "backend/app/routes/transcribe.py": {
@@ -965,8 +965,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/funnels/page.tsx": {
-    "mtime": 1785773566.577032,
-    "ast_hash": "ae90fedb6d4f4ea1d3e91ffefad0861b",
+    "mtime": 1785854739.8995059,
+    "ast_hash": "88dccff991f2e2efdfeb12d246c952d2",
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/marketing/icp/page.tsx": {
@@ -1335,8 +1335,8 @@
     "semantic_hash": ""
   },
   "scripts/dev.sh": {
-    "mtime": 1785764037.6995046,
-    "ast_hash": "a5979551056875403604bb315ce07641",
+    "mtime": 1785781930.3184643,
+    "ast_hash": "261f8c6e43c87cd9e8b46e07ec47499b",
     "semantic_hash": ""
   },
   "supabase/migrations/00001_create_foundation_tables.sql": {
@@ -2755,8 +2755,8 @@
     "semantic_hash": ""
   },
   "backend/app/repositories/funnel_stats.py": {
-    "mtime": 1785773331.6776562,
-    "ast_hash": "bcf5b7367891a301dd651f620576db94",
+    "mtime": 1785782803.921,
+    "ast_hash": "431411ee99f46dd54448dd12e179f629",
     "semantic_hash": ""
   },
   "backend/tests/test_ci_market_signals_momentum.py": {
@@ -2765,8 +2765,8 @@
     "semantic_hash": ""
   },
   "backend/tests/test_funnel_stats.py": {
-    "mtime": 1785773359.4575946,
-    "ast_hash": "8530b754b1ffa1ea739d93c9d252d323",
+    "mtime": 1785782836.4182646,
+    "ast_hash": "585aa70c73c008e79b1ac591803fe43e",
     "semantic_hash": ""
   },
   "backend/alembic/versions/e79cc79ec06b_add_wgr_offers_mirror.py": {
@@ -2795,13 +2795,13 @@
     "semantic_hash": ""
   },
   "backend/app/repositories/social_stats.py": {
-    "mtime": 1785780786.6664467,
-    "ast_hash": "4a784a823baf5812dad3d868319b3f39",
+    "mtime": 1785782843.893612,
+    "ast_hash": "ed93dad3359744d3a4bd723d82930435",
     "semantic_hash": ""
   },
   "backend/tests/test_social_stats.py": {
-    "mtime": 1785780760.4026372,
-    "ast_hash": "bb3bfa6ae004ecd478d9923f488e70c4",
+    "mtime": 1785783340.281102,
+    "ast_hash": "a708267c5a36c719fbb46c2627d19ec6",
     "semantic_hash": ""
   }
 }

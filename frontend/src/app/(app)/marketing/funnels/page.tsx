@@ -71,24 +71,29 @@ function FunnelOverviewCard({ stages }: { stages: FunnelOverviewStage[] }) {
             No lead journey data available for this range.
           </p>
         ) : (
-          <div className="flex flex-col items-center gap-1.5">
+          <div className="flex flex-col gap-1.5">
+            {/* Stage label lives OUTSIDE the bar in a fixed column — bars for
+                late stages shrink to slivers (Closed is 0.6% of Leads), and a
+                label inside the bar truncated to "Cl…" (readability bug,
+                2026-08-04). The bar itself stays proportional & centered so
+                the funnel taper still reads; counts/percentages keep their
+                own fixed columns on the right. */}
             {stages.map((stage, index) => {
-              const widthPct = maxCount > 0 ? Math.max((stage.count / maxCount) * 100, 20) : 100;
+              const widthPct = maxCount > 0 ? Math.max((stage.count / maxCount) * 100, 2) : 100;
               const colors = STAGE_COLORS[index % STAGE_COLORS.length];
 
               return (
-                <div
-                  key={stage.stage}
-                  className="flex flex-col items-center w-full"
-                  style={{ maxWidth: `${widthPct}%` }}
-                >
+                <div key={stage.stage} className="flex flex-col w-full">
                   <div className="w-full flex items-center gap-3">
-                    <div
-                      className={`flex-1 rounded-lg flex items-center justify-center px-4 py-2.5 min-w-0 cursor-default ${colors.bgClass}`}
-                    >
-                      <span className={`text-xs font-bold tracking-wide truncate ${colors.textClass}`}>
-                        {stage.label}
-                      </span>
+                    <span className="w-28 flex-shrink-0 text-right text-xs font-bold tracking-wide text-gray-700">
+                      {stage.label}
+                    </span>
+                    <div className="flex-1 min-w-0 flex justify-center">
+                      <div
+                        className={`rounded-lg py-2.5 cursor-default ${colors.bgClass}`}
+                        style={{ width: `${widthPct}%` }}
+                        title={`${stage.label}: ${stage.count.toLocaleString()}`}
+                      />
                     </div>
                     <span className="text-xs font-semibold tabular-nums text-gray-700 flex-shrink-0 w-20 text-right">
                       {stage.count.toLocaleString()}
@@ -103,15 +108,15 @@ function FunnelOverviewCard({ stages }: { stages: FunnelOverviewStage[] }) {
                     </span>
                   </div>
                   {index < stages.length - 1 && (
-                    <div className="w-px h-1.5 bg-emerald-200" aria-hidden="true" />
+                    <div className="w-px h-1.5 bg-emerald-200 self-center" aria-hidden="true" />
                   )}
                 </div>
               );
             })}
           </div>
         )}
-        <div className="mt-4 flex items-center gap-4 text-[10px] text-gray-400 font-medium uppercase tracking-wide">
-          <span>Stage</span>
+        <div className="mt-4 flex items-center gap-3 text-[10px] text-gray-400 font-medium uppercase tracking-wide">
+          <span className="w-28 text-right">Stage</span>
           <span className="ml-auto w-20 text-right">Count</span>
           <span className="w-14 text-right">% of Leads</span>
           <span className="w-16 text-right">Step Conv.</span>
