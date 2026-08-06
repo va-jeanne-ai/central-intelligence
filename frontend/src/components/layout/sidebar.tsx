@@ -51,6 +51,8 @@ const TOP_NAV: NavItem[] = [
   { label: "Dashboard", icon: "📊", href: "/dashboard", department: "core" },
   { label: "Central Intelligence Chat", icon: "👑", href: "/chat", department: "core" },
   { label: "Insights", icon: "🧠", href: "/insights", department: "core" },
+  // Static prototype (P0) — see docs/superpowers/plans/2026-08-06-foresight-layer-prototype.md
+  { label: "Foresight", icon: "🔮", href: "/foresight", department: "core" },
   { label: "Calendar", icon: "📅", href: "/calendar", department: "core" },
 ];
 
