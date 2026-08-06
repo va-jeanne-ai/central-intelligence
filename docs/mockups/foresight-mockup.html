@@ -1,0 +1,326 @@
+<title>Foresight — CI design mockup</title>
+<style>
+  :root {
+    --ink: #111827;
+    --muted: #6b7280;
+    --faint: #9ca3af;
+    --ground: #f6f7f9;
+    --card: #ffffff;
+    --line: #e5e7eb;
+    --gold: #f59e0b;
+    --gold-soft: #fffbeb;
+    --blue: #3b82f6;
+    --emerald: #10b981;
+    --sidebar: #16181d;
+    --good: #16a34a;
+    --warn: #d97706;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--ground); color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { display: flex; min-height: 100vh; }
+
+  /* ── Sidebar (app frame, abridged) ─────────────────────────── */
+  .sidebar {
+    width: 228px; flex-shrink: 0; background: var(--sidebar); color: #d1d5db;
+    padding: 20px 0; font-size: 13px;
+  }
+  .brand { padding: 0 18px 18px; border-bottom: 1px solid #262930; }
+  .brand b { color: #fff; font-size: 14px; display: block; }
+  .brand span { font-size: 9px; letter-spacing: .14em; color: var(--gold); font-weight: 700; }
+  .nav { padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .nav a {
+    display: flex; align-items: center; gap: 9px; padding: 7px 10px;
+    border-radius: 8px; color: #b6bcc6; text-decoration: none;
+  }
+  .nav a.active { background: #262930; color: #fff; border-left: 3px solid var(--gold); padding-left: 7px; }
+  .nav .sect { font-size: 9px; letter-spacing: .16em; color: #6b7280; font-weight: 700; padding: 14px 10px 4px; }
+
+  /* ── Content ───────────────────────────────────────────────── */
+  .content { flex: 1; min-width: 0; }
+  .topbar {
+    background: var(--card); border-bottom: 1px solid var(--line);
+    padding: 14px 28px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .topbar h1 { font-size: 16px; }
+  .topbar time { font-size: 12px; color: var(--faint); }
+  .page { padding: 24px 28px 48px; max-width: 1060px; }
+
+  .mocknote {
+    border: 1px dashed var(--gold); background: var(--gold-soft);
+    border-radius: 10px; padding: 10px 14px; font-size: 12px; color: #92400e;
+    margin-bottom: 20px;
+  }
+  .mocknote b { text-transform: uppercase; letter-spacing: .08em; font-size: 10px; }
+
+  .lede { margin-bottom: 20px; }
+  .lede h2 { font-size: 19px; letter-spacing: -0.01em; text-wrap: balance; }
+  .lede p { font-size: 13px; color: var(--muted); margin-top: 3px; max-width: 62ch; }
+
+  /* KPI row */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--gold); border-radius: 10px; padding: 12px 14px; }
+  .kpi .l { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .kpi .v { font-size: 22px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .kpi .s { font-size: 11px; color: var(--muted); }
+  .kpi.g { border-top-color: var(--emerald); } .kpi.b { border-top-color: var(--blue); } .kpi.o { border-top-color: #f97316; }
+
+  /* Recommendation card */
+  .rec { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .rec-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 18px; border-bottom: 1px solid #f1f2f4; }
+  .rec-head h3 { font-size: 14px; }
+  .chips { display: flex; gap: 6px; flex-shrink: 0; }
+  .chip { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .chip.dept-s { background: #eff6ff; color: #1d4ed8; }
+  .chip.dept-m { background: #ecfdf5; color: #047857; }
+  .chip.hi  { background: #f0fdf4; color: var(--good); box-shadow: inset 0 0 0 1px #bbf7d0; }
+  .chip.med { background: #fffbeb; color: var(--warn); box-shadow: inset 0 0 0 1px #fde68a; }
+  .chip.st-new { background: var(--gold-soft); color: #b45309; }
+  .chip.st-acc { background: #eff6ff; color: #1d4ed8; }
+  .chip.st-track { background: #f0fdf4; color: var(--good); }
+
+  .rec-body { padding: 16px 18px; }
+  .lenses { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .lens { border-radius: 9px; background: #fafafa; padding: 12px 14px; border-left: 3px solid var(--line); }
+  .lens.hind { border-left-color: #94a3b8; }
+  .lens.ins  { border-left-color: var(--blue); }
+  .lens.fore { border-left-color: var(--gold); background: var(--gold-soft); }
+  .lens .tag { font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 6px; }
+  .lens p { font-size: 12.5px; line-height: 1.5; }
+  .lens p.head { font-weight: 600; font-size: 13px; }
+  .lens .sub { color: var(--muted); font-size: 11.5px; margin-top: 5px; }
+  .lens a { color: var(--blue); font-size: 11.5px; font-weight: 600; text-decoration: none; display: inline-block; margin-top: 7px; }
+  .lens .impact { color: #047857; font-weight: 600; font-size: 12px; margin-top: 7px; }
+
+  /* Interval visual */
+  .stats { border: 1px solid #f1f2f4; border-radius: 9px; padding: 11px 14px; margin-top: 12px; }
+  .stats .row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  .stats .row:first-of-type { margin-top: 0; }
+  .stats .lbl { width: 118px; flex-shrink: 0; text-align: right; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .track { position: relative; flex: 1; height: 14px; }
+  .track::before { content: ""; position: absolute; inset: 5px 0; border-radius: 999px; background: #f1f2f4; }
+  .iv { position: absolute; top: 5px; bottom: 5px; border-radius: 999px; background: #cbd5e1; }
+  .iv.v { background: #fcd34d; }
+  .pt { position: absolute; top: 1px; bottom: 1px; width: 3px; border-radius: 2px; background: #64748b; }
+  .pt.v { background: #b45309; }
+  .val { width: 46px; text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stats .meta { display: flex; justify-content: space-between; font-size: 10px; color: var(--faint); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 8px; }
+
+  /* Action bar + outcome strip (P2 north-star elements) */
+  .actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .btn { font-size: 12px; font-weight: 700; border-radius: 8px; padding: 7px 14px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
+  .btn.primary { background: var(--gold); border-color: var(--gold); color: #fff; }
+  .btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .actions .note { font-size: 11px; color: var(--faint); margin-left: auto; }
+
+  .outcome { margin-top: 12px; border: 1px solid #d1fae5; background: #f0fdf4; border-radius: 9px; padding: 11px 14px; }
+  .outcome .t { font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--good); }
+  .outcome .grid { display: flex; gap: 26px; margin-top: 7px; align-items: baseline; }
+  .outcome .m .n { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .outcome .m .d { font-size: 10.5px; color: var(--muted); }
+  .outcome .up { color: var(--good); }
+
+  /* Gated (unpublished) rec */
+  .gated { border-style: dashed; background: transparent; }
+  .gated .rec-head { border-bottom: none; opacity: .75; }
+  .gated .why { padding: 0 18px 14px; font-size: 12px; color: var(--muted); max-width: 72ch; }
+  .gated .why b { color: var(--warn); }
+
+  .foot { font-size: 11.5px; color: var(--faint); margin-top: 22px; max-width: 78ch; line-height: 1.55; }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .lenses, .kpis { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="frame">
+  <aside class="sidebar">
+    <div class="brand"><b>🧠 Central Intelligence</b><span>AI COMMAND CENTER</span></div>
+    <nav class="nav">
+      <a href="#">📊 Dashboard</a>
+      <a href="#">👑 Central Intelligence Chat</a>
+      <a href="#">🧠 Insights</a>
+      <a href="#" class="active">🔮 Foresight</a>
+      <a href="#">📅 Calendar</a>
+      <div class="sect">MARKETING</div>
+      <a href="#">📱 Social Media</a>
+      <a href="#">📈 Funnels</a>
+      <a href="#">📣 Ads</a>
+    </nav>
+  </aside>
+
+  <div class="content">
+    <div class="topbar">
+      <h1>Foresight</h1>
+      <time>Thursday, August 6, 2026</time>
+    </div>
+
+    <div class="page">
+      <div class="mocknote"><b>Design mockup</b> — north-star vision for the Foresight layer (P1 statistics + P2 lifecycle). Static; numbers illustrative. The live P0 prototype is at /foresight.</div>
+
+      <div class="lede">
+        <h2>Recommendations with receipts</h2>
+        <p>Every card carries its full evidence chain — what the data shows, why we think it happens, and what to do about it. A recommendation only publishes when its confidence interval clears the baseline; everything else stays behind the gate.</p>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi"><span class="l">Published</span><div class="v">3</div><span class="s">1 held behind the gate</span></div>
+        <div class="kpi g"><span class="l">Being Tracked</span><div class="v">1</div><span class="s">outcome measured weekly</span></div>
+        <div class="kpi b"><span class="l">Evidence Rows</span><div class="v">35,714</div><span class="s">journey · sales · email · insights</span></div>
+        <div class="kpi o"><span class="l">Last Refresh</span><div class="v">02:00</div><span class="s">nightly, with the WGR sync</span></div>
+      </div>
+
+      <!-- ── Card 1: ACCEPTED + OUTCOME TRACKING (the full lifecycle) ── -->
+      <article class="rec">
+        <div class="rec-head">
+          <h3>Follow up with live webinar watchers within 24 hours</h3>
+          <div class="chips">
+            <span class="chip dept-s">sales</span>
+            <span class="chip hi">High confidence</span>
+            <span class="chip st-track">Tracking outcome</span>
+          </div>
+        </div>
+        <div class="rec-body">
+          <div class="lenses">
+            <div class="lens hind">
+              <span class="tag">Hindsight — what the data shows</span>
+              <p class="head">Live watchers book at 3.4× the replay rate</p>
+              <p class="sub">8.1% vs 2.4% booking rate across 6,879 watchers.</p>
+              <a href="#">Funnel: 11,573 registered → 6,879 watched →</a>
+            </div>
+            <div class="lens ins">
+              <span class="tag">Insight — why we think it happens</span>
+              <p>Intent peaks in the hours after live attendance — live watchers chose a fixed time, and the Q&amp;A creates a personal hook a replay can't.</p>
+              <p class="sub" style="font-style:italic">Hypothesis — the numbers live in the hindsight column.</p>
+            </div>
+            <div class="lens fore">
+              <span class="tag">Foresight — what to do</span>
+              <p class="head">Same-day follow-up queue for every live watcher, ahead of replay outreach.</p>
+              <p class="impact">≈ +18 bookings/month at current volume</p>
+            </div>
+          </div>
+
+          <div class="stats">
+            <div class="meta"><span>Rate comparison · 95% interval</span><span>n = 6,879 watchers</span></div>
+            <div class="row"><span class="lbl">Replay-only</span><div class="track"><div class="iv" style="left:18%;width:11%"></div><div class="pt" style="left:23%"></div></div><span class="val">2.4%</span></div>
+            <div class="row"><span class="lbl">Watched live</span><div class="track"><div class="iv v" style="left:69%;width:18%"></div><div class="pt v" style="left:78%"></div></div><span class="val">8.1%</span></div>
+          </div>
+
+          <div class="outcome">
+            <span class="t">Outcome since accepted · Jul 14</span>
+            <div class="grid">
+              <div class="m"><div class="n up">+22%</div><div class="d">live-watcher booking rate</div></div>
+              <div class="m"><div class="n">31 → 38</div><div class="d">bookings / month</div></div>
+              <div class="m"><div class="n">3 wks</div><div class="d">of 8-week measurement window</div></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- ── Card 2: NEW, awaiting decision ── -->
+      <article class="rec">
+        <div class="rec-head">
+          <h3>Send two value emails before every promo push</h3>
+          <div class="chips">
+            <span class="chip dept-m">marketing</span>
+            <span class="chip hi">High confidence</span>
+            <span class="chip st-new">New this week</span>
+          </div>
+        </div>
+        <div class="rec-body">
+          <div class="lenses">
+            <div class="lens hind">
+              <span class="tag">Hindsight — what the data shows</span>
+              <p class="head">Value/Education campaigns open at 29.4% vs 22.1%</p>
+              <p class="sub">Consistent across 2,426 sent campaigns and ten years of history.</p>
+              <a href="#">Email: 2,426 campaigns · 12 types →</a>
+            </div>
+            <div class="lens ins">
+              <span class="tag">Insight — why we think it happens</span>
+              <p>Story-led subjects earn the open; promo-led subjects spend the goodwill those opens build. Sequencing preserves list health.</p>
+            </div>
+            <div class="lens fore">
+              <span class="tag">Foresight — what to do</span>
+              <p class="head">Adopt a 2:1 cadence — two value sends ahead of each promo, unsubscribes as the guardrail.</p>
+              <p class="impact">≈ +5–7% opens on the following promo</p>
+            </div>
+          </div>
+
+          <div class="stats">
+            <div class="meta"><span>Rate comparison · 95% interval</span><span>n = 2,426 campaigns</span></div>
+            <div class="row"><span class="lbl">Other types</span><div class="track"><div class="iv" style="left:60%;width:5%"></div><div class="pt" style="left:62%"></div></div><span class="val">22.1%</span></div>
+            <div class="row"><span class="lbl">Value/Education</span><div class="track"><div class="iv v" style="left:79%;width:8%"></div><div class="pt v" style="left:83%"></div></div><span class="val">29.4%</span></div>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary">Accept &amp; track outcome</button>
+            <button class="btn">Dismiss</button>
+            <span class="note">Accepting starts an 8-week outcome measurement</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- ── Card 3: MEDIUM confidence, wide interval visible ── -->
+      <article class="rec">
+        <div class="rec-head">
+          <h3>Shift Meta budget toward the two proven campaigns</h3>
+          <div class="chips">
+            <span class="chip dept-m">marketing</span>
+            <span class="chip med">Medium confidence</span>
+            <span class="chip st-new">New this week</span>
+          </div>
+        </div>
+        <div class="rec-body">
+          <div class="lenses">
+            <div class="lens hind">
+              <span class="tag">Hindsight — what the data shows</span>
+              <p class="head">meta_paid leads close at ~2.1× baseline</p>
+              <p class="sub">1.3% vs 0.6% — but 83 total sales keep this interval wide. Watch it narrow as n grows.</p>
+              <a href="#">Leads: channel → meta_paid (714) →</a>
+            </div>
+            <div class="lens ins">
+              <span class="tag">Insight — why we think it happens</span>
+              <p>Paid traffic arrives pre-qualified by the ad hook — the top campaigns filter for exactly the ICP the webinar converts.</p>
+            </div>
+            <div class="lens fore">
+              <span class="tag">Foresight — what to do</span>
+              <p class="head">Concentrate spend by cost-per-closed-lead; pause the tail; revisit monthly.</p>
+              <p class="impact">Same spend, ≈ +2–3 closes/quarter</p>
+            </div>
+          </div>
+
+          <div class="stats">
+            <div class="meta"><span>Rate comparison · 95% interval — note the overlap risk</span><span>n = 714 leads · 83 sales</span></div>
+            <div class="row"><span class="lbl">All channels</span><div class="track"><div class="iv" style="left:14%;width:10%"></div><div class="pt" style="left:18%"></div></div><span class="val">0.6%</span></div>
+            <div class="row"><span class="lbl">meta_paid</span><div class="track"><div class="iv v" style="left:21%;width:49%"></div><div class="pt v" style="left:38%"></div></div><span class="val">1.3%</span></div>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary">Accept &amp; track outcome</button>
+            <button class="btn">Dismiss</button>
+            <span class="note">Interval nearly touches baseline — act small, measure</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- ── Card 4: HELD BY THE GATE (unpublished, shown collapsed) ── -->
+      <article class="rec gated">
+        <div class="rec-head">
+          <h3>Route time-freedom pain leads to the senior closer</h3>
+          <div class="chips">
+            <span class="chip" style="background:#f3f4f6;color:#6b7280">Held by the gate</span>
+          </div>
+        </div>
+        <p class="why"><b>Why it isn't published:</b> at n = 184 discovery calls the interval (58–91%) overlaps the baseline (30–46%) too little data to separate signal from noise. The engine keeps counting nightly and publishes automatically the week the intervals separate — or discards it if they converge.</p>
+      </article>
+
+      <p class="foot">
+        Production rules: every number is a SQL count over the mirrors (lead_journey, closed_sales, email_campaigns, call insights) with Wilson score intervals — no ML, no heuristics, nothing a human can't reproduce with one query. Accepting a card starts an outcome window; results feed back into the card. Recommendations expire when their underlying rates converge. Plan: docs/superpowers/plans/2026-08-06-foresight-layer-prototype.md
+      </p>
+    </div>
+  </div>
+</div>
