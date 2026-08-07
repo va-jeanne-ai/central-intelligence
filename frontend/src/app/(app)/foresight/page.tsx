@@ -55,6 +55,7 @@ interface ForesightCard {
   variant_high: number;
   n_label: string;
   computed_at: string;
+  consecutive_clear_nights: number;
 }
 
 interface ForesightRecommendationsResponse {

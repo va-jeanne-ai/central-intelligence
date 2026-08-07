@@ -6,6 +6,88 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Foresight gate integrity: n floors, Bonferroni sweep, hysteresis, complement baselines
+
+Post-ship code review flagged the publication gate as under-defended in
+exactly the ways that matter for a client-facing "trust the numbers"
+surface. All findings fixed in `backend/app/services/foresight.py`,
+`backend/app/repositories/foresight_stats.py`, and
+`backend/app/tasks/foresight.py`:
+
+- **n-floor (critical):** `verdict()`/`build_card()` now require both
+  cohorts' n and gate ANY candidate below `MIN_COHORT_N=30` before any
+  interval comparison runs. Previously `channels.get("ig_dm", {"n":0,
+  "closed":0})` + `wilson_interval(0, 0) = Interval(0,0,0)` could
+  trivially satisfy the separation test and publish a fabricated warning
+  card off a missing/renamed channel label; a `mean_interval` at n=1
+  collapses to a zero-width interval that could likewise publish High
+  confidence off a single observation. New tests reproduce both exact
+  failure modes and confirm they now gate.
+- **Multiple-comparisons correction on the discovery sweep:** the
+  7-signal-family sweep published whichever family cleared the baseline at
+  single-comparison z=1.96 — a 7-way sweep at that z has roughly a 30%
+  chance some family clears by chance alone even with zero real signal.
+  Every family's (and the baseline's) Wilson interval in this sweep now
+  uses `DISCOVERY_SWEEP_Z=2.69` (Bonferroni, alpha/7, two-sided). Verified
+  against live data: the "Relationships" family (n=57, 16 closed, 28.1%),
+  which had cleared the old standard-z gate the day after failing, now
+  correctly gates under the corrected z — the family's own interval widens
+  from [18.1–40.8] to [15.3–45.8], enough to re-overlap the also-widened
+  baseline.
+- **Hysteresis state machine:** the DISPLAYED status is no longer the raw
+  per-night verdict. `apply_hysteresis` (pure, `app/services/foresight.py`)
+  requires 2 CONSECUTIVE nightly runs clearing the raw verdict before
+  gated→published; published→gated is IMMEDIATE on the first night that
+  stops clearing (fail-toward-gated, no grace period on the way down). A
+  new `consecutive_clear_nights` column (migration `158699f25a23`) persists
+  the streak; the nightly task reads every row's PRIOR status/streak
+  BEFORE the delete+insert so the state machine has last run's state.
+- **Winning-family interpolation:** a published `discovery_families` card
+  now names its winning signal family in the title/variant_label/action
+  copy (`discovery_family_title`/`discovery_family_action`, interpolating
+  the COMPUTED family name) instead of the generic "Top signal family"
+  placeholder. A gated card still uses the generic copy — there is no
+  winner to name when the gate holds.
+- **Generic hold_reason fallback:** every candidate now always renders
+  SOME why-held text when gated. Previously only `discovery_families`
+  supplied a `hold_reason_fn`; the other four would have rendered their
+  HYPOTHESIS prose as if it were the reason for the hold. New
+  `_default_hold_reason` (computed values only: "Intervals overlap at
+  current n: variant [a–b] vs baseline [c–d]. Recounted nightly.") fires
+  whenever a candidate doesn't supply its own reason.
+- **Complement baselines for channel cards:** `ig_dm_channel`/
+  `meta_paid_close` now compare against `complement_baseline()` (all
+  leads EXCLUDING the variant's own cohort: total − variant), not the
+  inclusive all-lead baseline the variant was partly made of. Recomputed
+  against the live DB: ig_dm vs 0.37% [0.26–0.53] (was 0.64% [0.52–0.79])
+  — effect grows from 1.75× to **~3.0×**; meta_paid vs 0.83% [0.67–1.04]
+  (was the same 0.64% baseline) — **−0.72pp** (was −0.52pp). The plan
+  doc's original validation table is amended (not rewritten) with these
+  complement-baseline numbers in a new section.
+- Deleted the dead `_intervals_overlap` helper (superseded by the
+  branching in `verdict()` itself); `hold_reason_fn` is now typed
+  `Callable[[], str] | None` instead of the untyped `Optional[callable]`.
+- `backend/tests/test_foresight.py`: 24 new tests (54 total) — n-floor
+  (missing cohort, below-floor cohort, inclusive boundary, custom min_n
+  override), a degenerate n=1 `mean_interval` that would trivially clear a
+  gate without the floor, the Bonferroni z constant and a reproduction of
+  the "clears at standard z, gates at Bonferroni z" scenario, the full
+  hysteresis state machine (first clear stays gated at streak=1, second
+  consecutive night publishes, a broken streak resets to 0, published→gated
+  is immediate, a brand-new candidate starts at streak=0 not an immediate
+  publish, purity/no-hidden-state), winning-family interpolation, and the
+  generic hold_reason fallback. Backend total: **372 passing (348 prior +
+  24 new)**.
+- Frontend `ForesightCard` TypeScript type gained `consecutive_clear_nights:
+  number` in lock-step with the Pydantic schema — `tsc --noEmit`/lint/
+  test/build all still green.
+- **Re-verified against live data:** two consecutive in-process runs of
+  `compute_foresight_recommendations` produced identical results — 4
+  published (`live_watch`, `ig_dm_channel` lift, `meta_paid_close`
+  warning, `email_value`) + 1 gated (`discovery_families`, correctly held
+  under Bonferroni) — confirming the hysteresis machinery is stable, not
+  flapping. Wall time 6.6–7.6s per run, well under the 60s budget.
+
 ### Added — Foresight P1: real statistics engine with a publication gate
 
 - Replaces the P0 static-sample `/foresight` prototype

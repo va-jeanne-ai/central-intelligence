@@ -1273,7 +1273,7 @@ A second, filtered call (`media_type=REELS`, `date_from`/`date_to` spanning
 (bypassing Celery/Redis — pure DB-to-DB) upserted **15,856 rows** into
 `wgr_comment_events` and **2,754 rows** into `wgr_post_comment_leads`.
 
-## Foresight (P1) — real statistics engine with a publication gate (2026-08-07)
+## Foresight (P1) — real statistics engine with a publication gate (2026-08-07; gate-integrity fixes 2026-08-07)
 
 **Feature:** `/foresight` no longer shows the P0 hardcoded sample
 recommendations (docs/superpowers/plans/2026-08-06-foresight-layer-
@@ -1282,36 +1282,65 @@ which reads a table computed nightly by a Celery task from four pure SQL
 cohort counts (`backend/app/repositories/foresight_stats.py`) turned into
 Wilson (or mean-of-campaigns) 95% confidence intervals
 (`backend/app/services/foresight.py`) — no ML, no heuristics. A card
-publishes only when its interval clears the baseline; overlapping
-intervals stay gated and render collapsed with a computed hold reason.
+publishes only when its interval clears the baseline AND has done so for
+2 consecutive nightly runs (hysteresis); overlapping intervals — or a
+cohort too small to trust — stay gated and render collapsed with a
+computed hold reason.
+
+**Gate-integrity fixes (2026-08-07, post-review) — these are why the
+numbers below differ from the initial ship:**
+1. **n-floor:** `verdict()` now takes both cohorts' n and gates ANY
+   candidate below `MIN_COHORT_N=30`, before any interval math runs.
+   Closes a hole where a missing/empty/renamed cohort could otherwise
+   trivially publish a fabricated finding off zero data.
+2. **Bonferroni-corrected discovery sweep:** the 7-family sweep now uses
+   `DISCOVERY_SWEEP_Z=2.69` (alpha/7, controls the family-wise error rate)
+   instead of the standard z=1.96 for every family's interval — a 7-way
+   sweep at standard z has roughly a 30% chance some family clears by
+   chance alone even when none is real.
+3. **Hysteresis:** the DISPLAYED status requires the raw verdict to clear
+   2 CONSECUTIVE nightly runs before flipping gated→published;
+   published→gated is immediate (fail-toward-gated, no grace period).
+4. **Winning-family interpolation:** a published discovery card now names
+   its winning signal family in the title/variant_label/action (computed
+   value, not fabricated prose) instead of the generic placeholder.
+5. **Generic hold_reason fallback:** every gated card now always carries
+   SOME computed-values-only hold reason, even candidates that don't
+   supply their own `hold_reason_fn`.
+6. **Complement baselines:** `ig_dm_channel`/`meta_paid_close` now compare
+   against all leads EXCLUDING the variant's own cohort (not the inclusive
+   all-lead baseline, which partly contained the variant itself).
 
 **How to locate:** `/foresight` — under Central Intelligence in the
 sidebar.
 
-**Before you start:** live counts as of 2026-08-07 (unfiltered):
+**Before you start:** live counts as of 2026-08-07 (unfiltered), post-fix:
 - `live_watch`: watched-live 499/5,347 (9.3% [8.6–10.1]) vs replay-only
-  104/1,590 (6.5% [5.4–7.9]) — publishes as a lift.
-- `ig_dm_channel`: ig_dm 52/4,656 (1.12% [0.85–1.46]) vs the all-lead
-  baseline 83/12,933 (0.64% [0.52–0.79]) — publishes as a lift.
-- `meta_paid_close`: meta_paid 4/3,466 (0.12% [0.04–0.30]) vs the same
-  83/12,933 baseline — publishes as a **warning** card (significantly
-  BELOW baseline; the action copy tells the client what to avoid, not what
-  to do).
+  104/1,590 (6.5% [5.4–7.9]) — publishes as a lift. **Unchanged by the fixes.**
+- `ig_dm_channel`: ig_dm 52/4,656 (1.12% [0.85–1.46]) vs the **complement**
+  baseline (all leads excluding ig_dm) 31/8,277 (0.37% [0.26–0.53]) —
+  publishes as a lift, **~3.0×** (was 1.75× against the old inclusive
+  baseline — the complement baseline is the more correct comparison and
+  the larger, more honest effect size).
+- `meta_paid_close`: meta_paid 4/3,466 (0.12% [0.04–0.30]) vs the
+  **complement** baseline (all leads excluding meta_paid) 79/9,467 (0.83%
+  [0.67–1.04]) — publishes as a **warning** card, **−0.72pp** (was −0.52pp
+  against the old inclusive baseline).
 - `email_value`: Value/Education 649 campaigns at mean 26.1% ±1.1 vs the
   other 1,779 campaigns at 22.7% ±0.7 (mean-of-campaigns interval, not
-  Wilson — see the docstring on `mean_interval` for why) — publishes as a
-  lift.
-- `discovery_families`: baseline 23/188 discovery-held leads (12.2%
-  [8.3–17.7]). At P1 validation time (2026-08-06) every signal family with
-  n≥20 overlapped this baseline (closest: Life Circumstances 23.9%
-  [16.2–33.7]) and the card gated. **Live data has since moved**: as of
-  this ship date the "Relationships" family (n=57, 16 closed, 28.1%
-  [18.1–40.8]) now clears the baseline and the card publishes instead of
-  gating. This is expected engine behavior, not a defect — the task
-  recounts nightly and the card will gate again if the rate reverts. If
-  you run this verification and it's back to gated, that's correct too;
-  confirm whichever state you see matches a fresh in-process recompute
-  (see below), not a stale/cached number.
+  Wilson) — publishes as a lift. **Unchanged by the fixes.**
+- `discovery_families`: baseline 23/188 discovery-held leads, now computed
+  at the Bonferroni-corrected z=2.69: 12.2% [7.2–20.1] (wider than the
+  z=1.96 interval [8.3–17.7]). **All 7 families gate under this corrected
+  z**, including "Relationships" (n=57, 16 closed, 28.1% [15.3–45.8]) —
+  which had cleared the OLD standard-z, inclusive-baseline gate the day
+  this feature first shipped. This is the exact scenario the Bonferroni
+  fix exists to catch: a single family clearing a 7-way sweep at
+  single-comparison alpha is expected to happen by chance roughly 30% of
+  the time even with zero real signal. The card is gated, and — being a
+  brand-new evaluation under the corrected math — starts its hysteresis
+  streak at 0 (a first clearing night would show streak=1 and a "needs a
+  second consecutive night" hold reason, not an immediate publish).
 
 **Steps:**
 1. Open `/foresight`. Confirm the amber "Prototype — static sample data"
@@ -1330,9 +1359,10 @@ sidebar.
    the standard emerald), a "Warning" badge, and action copy that tells
    the client to avoid scaling Meta spend on the blended close rate — not
    an instruction to do something.
-5. If any card is gated, confirm it renders collapsed (no interval bars,
-   no confidence badge) with a "Held by the gate" pill and a hold-reason
-   sentence naming the baseline, the closest family, and their rates/n.
+5. Confirm the `discovery_families` card is gated: renders collapsed (no
+   interval bars, no confidence badge) with a "Held by the gate" pill and
+   a hold-reason sentence naming the Bonferroni-corrected baseline, the
+   closest family ("Relationships"), and their rates/n.
 6. Reload — confirm the loading skeleton renders briefly, never a
    spinner-only or blank screen, never a native `alert()`/`confirm()`.
 7. Click an evidence link (e.g. "Funnel: lead_journey watched_live vs
@@ -1342,48 +1372,56 @@ sidebar.
 **Pass:** every card's headline rate/interval is traceable to a direct SQL
 count against `lead_journey` / `email_campaigns` / `insights`+`calls`+
 `leads`+`lead_journey`; the publication gate is honored (no card claims
-"lift" or "warning" with overlapping intervals); the discovery card's
-verdict matches a fresh recompute even if it differs from the 2026-08-06
-snapshot; loading/error states are quiet. **Fail:** any card shows a
-fabricated or hardcoded number, a published card whose intervals actually
-overlap, a gated card missing its hold reason, or a native browser dialog
-anywhere on the page.
+"lift" or "warning" with overlapping intervals, no card publishes off a
+cohort below n=30, the discovery sweep uses the Bonferroni z); a card that
+just started clearing shows a hysteresis "night 1 of 2" hold reason rather
+than publishing immediately; loading/error states are quiet. **Fail:** any
+card shows a fabricated or hardcoded number, a published card whose
+intervals actually overlap (at the correct z for its candidate type), a
+card published off a thin/missing cohort, a gated card missing its hold
+reason, a discovery card naming a family it hasn't actually cleared for,
+or a native browser dialog anywhere on the page.
 
-**Backend proof (2026-08-07):** in-process call to
-`get_foresight_recommendations(...)` (no HTTP server) against the real CI
-DB, immediately after running `compute_foresight_recommendations`'s
-`_run()` coroutine directly (the plan's "backfill-style one-off" pattern):
+**Backend proof (2026-08-07, post gate-integrity fixes):** in-process call
+to `get_foresight_recommendations(...)` (no HTTP server) against the real
+CI DB, after running `compute_foresight_recommendations`'s `_run()`
+coroutine directly TWICE in a row (confirming idempotency/stability):
 
-| Card | Computed | Validation table | Match |
-|---|---|---|---|
-| `live_watch` | 9.3% [8.6–10.1] vs 6.5% [5.4–7.9] | 9.3% [8.6–10.1] vs 6.5% [5.4–7.9] | ✅ |
-| `ig_dm_channel` | 1.12% [0.85–1.46] vs 0.64% [0.52–0.79] | 1.12% [0.85–1.46] vs 0.64% [0.52–0.79] | ✅ |
-| `meta_paid_close` | 0.12% [0.04–0.30] vs 0.64% [0.52–0.79] (warning) | same (warning) | ✅ |
-| `email_value` | 26.1%±1.1 vs 22.7%±0.7 | 26.1%±1.1 vs 22.7%±0.7 | ✅ |
-| `discovery_families` baseline | 12.2% [8.3–17.7] (n=188, 23 closed) | 12.2% [8.3–17.7] | ✅ |
-| `discovery_families` verdict | published_lift (Relationships 28.1% [18.1–40.8], n=57) | gated (2026-08-06 snapshot) | ⚠️ live-data drift, documented above |
+| Card | Computed | Verdict |
+|---|---|---|
+| `live_watch` | 9.3% [8.6–10.1] vs 6.5% [5.4–7.9] | published_lift, Medium |
+| `ig_dm_channel` | 1.1% [0.9–1.5] vs complement baseline 0.4% [0.3–0.5] | published_lift, High (+0.7pp · 3.0×) |
+| `meta_paid_close` | 0.1% [0.0–0.3] vs complement baseline 0.8% [0.7–1.0] | published_warning, High (−0.7pp · 0.1×) |
+| `email_value` | 26.1%±1.1 vs 22.7%±0.7 | published_lift, High |
+| `discovery_families` | baseline 12.2% [7.2–20.1] (Bonferroni z=2.69); closest Relationships 28.1% [15.3–45.8], n=57 | gated, streak=0 |
 
-Compute task wall time: **6.35s** (well under the plan's <60s
-aggregate-only budget — pure aggregate reads, no row shipping). Result:
-5 published (4 lift + 1 warning), 0 gated, on this run.
+Both runs produced **identical results** (4 published incl. 1 warning, 1
+gated) — confirms the hysteresis machinery is stable, not flapping.
+Compute task wall time: **6.6–7.6s** per run (well under the plan's <60s
+aggregate-only budget — pure aggregate reads, no row shipping).
 
-**Discovery-join hardening:** the `insights`×`calls`×`leads`×`lead_journey`
-join originally used a plain multi-condition `ON` clause (matching
-`sales_stats.py`'s documented fan-out risk almost verbatim); confirmed a
-handful of leads in this DB do match two different `lead_journey` rows
-(one via `external_id`, one via a different row's `ghl_contact_id`).
-Hardened to the same `LEFT JOIN LATERAL ... ORDER BY (external_id match)
-DESC LIMIT 1` pattern `sales_stats.py` already uses — re-verified the
-computed counts are unchanged (188/23 baseline, same seven family counts)
-before and after the fix, confirming the fan-out risk existed structurally
-but hadn't corrupted this query's results.
+**Discovery-join hardening (carried over from initial ship):** the
+`insights`×`calls`×`leads`×`lead_journey` join uses a `LEFT JOIN LATERAL
+... ORDER BY (external_id match) DESC LIMIT 1` pattern (same guard
+`sales_stats.py`'s channel/revenue query uses) — a plain multi-condition
+`ON` clause can silently fan a lead out across multiple `lead_journey`
+rows; confirmed a handful of leads in this DB exhibit that risk. Re-
+verified computed counts are unchanged before/after.
 
-**Pure-stats suite:** 30 new tests
-(`backend/tests/test_foresight.py`) — `wilson_interval` against every
-number in the validation table, `mean_interval` known values + degenerate
-n≤1 case, all three `verdict` branches, High/Medium confidence tiering
-(both lift and warning directions), `lift_text` incl. zero-baseline
-division guard, and `build_card` assembly for published/warning/gated
-shapes. Backend total: **348 passing (318 baseline + 30 new)**. Frontend:
+**Pure-stats suite:** 54 tests total in `backend/tests/test_foresight.py`
+(30 from initial ship + 24 new for the gate-integrity fixes) — the 24 new
+cover: the n-floor gating a missing/zero-n cohort AND a below-floor
+cohort AND the inclusive boundary case; a degenerate n=1 mean_interval
+that would trivially clear a gate without the floor; the Bonferroni z
+constant and a reproduction of the exact "marginal family clears at
+standard z, gates at Bonferroni z" scenario; the full hysteresis state
+machine (first clear night stays gated at streak=1, second consecutive
+night publishes, a broken streak resets to 0, published→gated is
+immediate, a brand-new candidate with no prior row starts at streak=0 not
+an immediate publish); winning-family interpolation into title/
+variant_label/action/headline; and the generic hold_reason fallback.
+Backend total: **372 passing (348 prior + 24 new)**. Frontend:
 `npx tsc --noEmit && npm run lint && npm run test && npm run build` all
-green, no dev servers run.
+green (added `consecutive_clear_nights: number` to the `ForesightCard`
+TypeScript contract, in lock-step with the Pydantic schema), no dev
+servers run.

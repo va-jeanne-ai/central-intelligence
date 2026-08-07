@@ -48,6 +48,7 @@ def _to_card(row: ForesightRecommendation) -> ForesightCard:
         variant_high=row.variant_high,
         n_label=row.n_label,
         computed_at=row.computed_at.isoformat(),
+        consecutive_clear_nights=row.consecutive_clear_nights,
     )
 
 

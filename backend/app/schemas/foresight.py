@@ -28,6 +28,7 @@ class ForesightCard(BaseModel):
     variant_high: float
     n_label: str
     computed_at: str
+    consecutive_clear_nights: int = 0
 
 
 class ForesightRecommendationsResponse(BaseModel):

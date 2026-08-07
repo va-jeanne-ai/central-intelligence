@@ -306,5 +306,11 @@ class ForesightRecommendation(Base):
     variant_high: Mapped[float] = mapped_column(Float, nullable=False)
     n_label: Mapped[str] = mapped_column(Text, nullable=False)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Hysteresis streak (app.services.foresight.apply_hysteresis): how many
+    # CONSECUTIVE nightly runs the raw statistical verdict has cleared while
+    # the displayed status is still gated. Reset to 0 once published, and
+    # reset to 0 on any night the raw verdict fails to clear. Read BEFORE
+    # the delete+insert each run so the state machine has its prior state.
+    consecutive_clear_nights: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 

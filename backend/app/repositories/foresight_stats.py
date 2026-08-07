@@ -120,6 +120,23 @@ async def fetch_channel_close(session: AsyncSession) -> dict[str, dict[str, int]
     return per_bucket
 
 
+def complement_baseline(
+    channels: dict[str, dict[str, int]], variant_label: str
+) -> dict[str, int]:
+    """Complement baseline for a channel card: all leads EXCLUDING the
+    variant's own cohort (total - variant), not the inclusive all-lead
+    baseline. Comparing a channel against a baseline that already contains
+    that channel's own leads understates the true separation — the variant
+    is baked into what it's being compared against. Pure — no DB; takes the
+    dict fetch_channel_close already returns."""
+    all_leads = channels.get("__all_leads__", {"n": 0, "closed": 0})
+    variant = channels.get(variant_label, {"n": 0, "closed": 0})
+    return {
+        "n": all_leads["n"] - variant["n"],
+        "closed": all_leads["closed"] - variant["closed"],
+    }
+
+
 async def fetch_email_value(session: AsyncSession) -> dict[str, dict[str, Any]]:
     """AVG/STDDEV_SAMP/COUNT of open_rate for campaign_type='Value/Education'
     vs the rest (deleted_at IS NULL, open_rate IS NOT NULL). ONE aggregate
@@ -264,6 +281,7 @@ async def fetch_discovery_families(
 __all__ = [
     "fetch_live_vs_replay",
     "fetch_channel_close",
+    "complement_baseline",
     "fetch_email_value",
     "fetch_discovery_families",
 ]
