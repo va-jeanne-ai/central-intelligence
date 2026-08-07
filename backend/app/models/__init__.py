@@ -17,6 +17,7 @@ from app.models.instance import InstanceProfile  # noqa: F401
 # intelligence — TagDictionary & InsightTag must exist before Insight.tags resolves
 from app.models.intelligence import (  # noqa: F401
     BusinessProfile,
+    ForesightRecommendation,
     InsightTag,
     MarketSignal,
     MonthlyPreference,

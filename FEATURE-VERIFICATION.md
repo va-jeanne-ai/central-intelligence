@@ -1272,3 +1272,118 @@ A second, filtered call (`media_type=REELS`, `date_from`/`date_to` spanning
 **Backfill (2026-08-04):** one-off `_sync_snapshot_reconcile` invocation
 (bypassing Celery/Redis — pure DB-to-DB) upserted **15,856 rows** into
 `wgr_comment_events` and **2,754 rows** into `wgr_post_comment_leads`.
+
+## Foresight (P1) — real statistics engine with a publication gate (2026-08-07)
+
+**Feature:** `/foresight` no longer shows the P0 hardcoded sample
+recommendations (docs/superpowers/plans/2026-08-06-foresight-layer-
+prototype.md). Every card now comes from `GET /foresight/recommendations`,
+which reads a table computed nightly by a Celery task from four pure SQL
+cohort counts (`backend/app/repositories/foresight_stats.py`) turned into
+Wilson (or mean-of-campaigns) 95% confidence intervals
+(`backend/app/services/foresight.py`) — no ML, no heuristics. A card
+publishes only when its interval clears the baseline; overlapping
+intervals stay gated and render collapsed with a computed hold reason.
+
+**How to locate:** `/foresight` — under Central Intelligence in the
+sidebar.
+
+**Before you start:** live counts as of 2026-08-07 (unfiltered):
+- `live_watch`: watched-live 499/5,347 (9.3% [8.6–10.1]) vs replay-only
+  104/1,590 (6.5% [5.4–7.9]) — publishes as a lift.
+- `ig_dm_channel`: ig_dm 52/4,656 (1.12% [0.85–1.46]) vs the all-lead
+  baseline 83/12,933 (0.64% [0.52–0.79]) — publishes as a lift.
+- `meta_paid_close`: meta_paid 4/3,466 (0.12% [0.04–0.30]) vs the same
+  83/12,933 baseline — publishes as a **warning** card (significantly
+  BELOW baseline; the action copy tells the client what to avoid, not what
+  to do).
+- `email_value`: Value/Education 649 campaigns at mean 26.1% ±1.1 vs the
+  other 1,779 campaigns at 22.7% ±0.7 (mean-of-campaigns interval, not
+  Wilson — see the docstring on `mean_interval` for why) — publishes as a
+  lift.
+- `discovery_families`: baseline 23/188 discovery-held leads (12.2%
+  [8.3–17.7]). At P1 validation time (2026-08-06) every signal family with
+  n≥20 overlapped this baseline (closest: Life Circumstances 23.9%
+  [16.2–33.7]) and the card gated. **Live data has since moved**: as of
+  this ship date the "Relationships" family (n=57, 16 closed, 28.1%
+  [18.1–40.8]) now clears the baseline and the card publishes instead of
+  gating. This is expected engine behavior, not a defect — the task
+  recounts nightly and the card will gate again if the rate reverts. If
+  you run this verification and it's back to gated, that's correct too;
+  confirm whichever state you see matches a fresh in-process recompute
+  (see below), not a stale/cached number.
+
+**Steps:**
+1. Open `/foresight`. Confirm the amber "Prototype — static sample data"
+   banner from P0 is gone, replaced by a slim neutral line: "Computed
+   nightly from the synced mirrors · last refresh {time} · every number is
+   a reproducible SQL count".
+2. Confirm the KPI row shows **Published**, **Tracked** (0 — outcome
+   tracking is P2, not built yet), **Held by the Gate**, and **Computed
+   At** with a real timestamp (not blank, not a placeholder).
+3. Confirm each published card shows the three lenses (Hindsight / Insight
+   / Foresight), a confidence badge (High or Medium), and an interval bar
+   comparing baseline vs variant rate with the sample size labeled. Numbers
+   on the `live_watch`, `ig_dm_channel`, and `email_value` cards should
+   match the "Before you start" figures above.
+4. Confirm the `meta_paid_close` card renders with a red-tinted accent (not
+   the standard emerald), a "Warning" badge, and action copy that tells
+   the client to avoid scaling Meta spend on the blended close rate — not
+   an instruction to do something.
+5. If any card is gated, confirm it renders collapsed (no interval bars,
+   no confidence badge) with a "Held by the gate" pill and a hold-reason
+   sentence naming the baseline, the closest family, and their rates/n.
+6. Reload — confirm the loading skeleton renders briefly, never a
+   spinner-only or blank screen, never a native `alert()`/`confirm()`.
+7. Click an evidence link (e.g. "Funnel: lead_journey watched_live vs
+   replay-only →") — confirm it navigates to the named surface
+   (`/marketing/funnels`, `/marketing/email`, or `/ci-insights`).
+
+**Pass:** every card's headline rate/interval is traceable to a direct SQL
+count against `lead_journey` / `email_campaigns` / `insights`+`calls`+
+`leads`+`lead_journey`; the publication gate is honored (no card claims
+"lift" or "warning" with overlapping intervals); the discovery card's
+verdict matches a fresh recompute even if it differs from the 2026-08-06
+snapshot; loading/error states are quiet. **Fail:** any card shows a
+fabricated or hardcoded number, a published card whose intervals actually
+overlap, a gated card missing its hold reason, or a native browser dialog
+anywhere on the page.
+
+**Backend proof (2026-08-07):** in-process call to
+`get_foresight_recommendations(...)` (no HTTP server) against the real CI
+DB, immediately after running `compute_foresight_recommendations`'s
+`_run()` coroutine directly (the plan's "backfill-style one-off" pattern):
+
+| Card | Computed | Validation table | Match |
+|---|---|---|---|
+| `live_watch` | 9.3% [8.6–10.1] vs 6.5% [5.4–7.9] | 9.3% [8.6–10.1] vs 6.5% [5.4–7.9] | ✅ |
+| `ig_dm_channel` | 1.12% [0.85–1.46] vs 0.64% [0.52–0.79] | 1.12% [0.85–1.46] vs 0.64% [0.52–0.79] | ✅ |
+| `meta_paid_close` | 0.12% [0.04–0.30] vs 0.64% [0.52–0.79] (warning) | same (warning) | ✅ |
+| `email_value` | 26.1%±1.1 vs 22.7%±0.7 | 26.1%±1.1 vs 22.7%±0.7 | ✅ |
+| `discovery_families` baseline | 12.2% [8.3–17.7] (n=188, 23 closed) | 12.2% [8.3–17.7] | ✅ |
+| `discovery_families` verdict | published_lift (Relationships 28.1% [18.1–40.8], n=57) | gated (2026-08-06 snapshot) | ⚠️ live-data drift, documented above |
+
+Compute task wall time: **6.35s** (well under the plan's <60s
+aggregate-only budget — pure aggregate reads, no row shipping). Result:
+5 published (4 lift + 1 warning), 0 gated, on this run.
+
+**Discovery-join hardening:** the `insights`×`calls`×`leads`×`lead_journey`
+join originally used a plain multi-condition `ON` clause (matching
+`sales_stats.py`'s documented fan-out risk almost verbatim); confirmed a
+handful of leads in this DB do match two different `lead_journey` rows
+(one via `external_id`, one via a different row's `ghl_contact_id`).
+Hardened to the same `LEFT JOIN LATERAL ... ORDER BY (external_id match)
+DESC LIMIT 1` pattern `sales_stats.py` already uses — re-verified the
+computed counts are unchanged (188/23 baseline, same seven family counts)
+before and after the fix, confirming the fan-out risk existed structurally
+but hadn't corrupted this query's results.
+
+**Pure-stats suite:** 30 new tests
+(`backend/tests/test_foresight.py`) — `wilson_interval` against every
+number in the validation table, `mean_interval` known values + degenerate
+n≤1 case, all three `verdict` branches, High/Medium confidence tiering
+(both lift and warning directions), `lift_text` incl. zero-baseline
+division guard, and `build_card` assembly for published/warning/gated
+shapes. Backend total: **348 passing (318 baseline + 30 new)**. Frontend:
+`npx tsc --noEmit && npm run lint && npm run test && npm run build` all
+green, no dev servers run.

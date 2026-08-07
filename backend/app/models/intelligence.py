@@ -7,6 +7,7 @@ from sqlalchemy import (
     ARRAY,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -269,5 +270,41 @@ class MonthlyPreference(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class ForesightRecommendation(Base):
+    """Nightly-computed Foresight P1 card (see docs/superpowers/plans/
+    2026-08-06-foresight-layer-prototype.md). ``id`` is the candidate slug
+    (e.g. "live_watch") — a full delete+insert overwrite each run, since
+    this is OUR computed table (not a WGR mirror needing snapshot-reconcile
+    machinery). ``confidence``/``hold_reason`` are mutually meaningful:
+    published cards carry confidence and no hold_reason; gated cards carry
+    hold_reason and no confidence."""
+
+    __tablename__ = "foresight_recommendations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    confidence: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    department: Mapped[str] = mapped_column(String(32), nullable=False)
+    hindsight_headline: Mapped[str] = mapped_column(Text, nullable=False)
+    hindsight_detail: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_href: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_label: Mapped[str] = mapped_column(Text, nullable=False)
+    insight_text: Mapped[str] = mapped_column(Text, nullable=False)
+    action_text: Mapped[str] = mapped_column(Text, nullable=False)
+    lift_text: Mapped[str] = mapped_column(Text, nullable=False)
+    hold_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    baseline_label: Mapped[str] = mapped_column(Text, nullable=False)
+    baseline_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    baseline_low: Mapped[float] = mapped_column(Float, nullable=False)
+    baseline_high: Mapped[float] = mapped_column(Float, nullable=False)
+    variant_label: Mapped[str] = mapped_column(Text, nullable=False)
+    variant_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    variant_low: Mapped[float] = mapped_column(Float, nullable=False)
+    variant_high: Mapped[float] = mapped_column(Float, nullable=False)
+    n_label: Mapped[str] = mapped_column(Text, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

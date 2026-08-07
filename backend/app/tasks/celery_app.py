@@ -40,6 +40,7 @@ celery_app = Celery(
         "app.tasks.metric_snapshots",
         "app.tasks.overall_insight",
         "app.tasks.weekly_digest",
+        "app.tasks.foresight",
     ],
 )
 
@@ -148,5 +149,16 @@ celery_app.conf.beat_schedule = {
         # single upstream for leads/calls/appointments/etc.). No-op unless
         # client_sync_enabled=True. Off-peak of the other updaters.
         "schedule": crontab(minute=50),
+    },
+    "foresight-recompute-nightly": {
+        "task": "app.tasks.foresight.compute_foresight_recommendations",
+        # 04:50 UTC daily — 1 hour AFTER the 03:50 WGR sync tick so the
+        # nightly-fresh mirrors (lead_journey, email_campaigns, insights)
+        # are in place before Foresight recounts its cohorts. Also lands
+        # after metric-snapshots (03:50) and overall-insight (04:05), and
+        # before weekly-digest's Monday 05:05 run. Pure aggregate reads +
+        # a full delete+insert of the small (5-row) foresight_recommendations
+        # table — idempotent, safe to re-run.
+        "schedule": crontab(minute=50, hour=4),
     },
 }

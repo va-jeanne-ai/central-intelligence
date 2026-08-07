@@ -114,6 +114,7 @@ def create_app() -> FastAPI:
     from app.routes.chat_sessions import router as chat_sessions_router
     from app.routes.calendar import router as calendar_router
     from app.routes.analyze import router as analyze_router
+    from app.routes.foresight import router as foresight_router
 
     # Health check under /api/v1 (prefix applied here).
     app.include_router(health_router, prefix="/api/v1")
@@ -275,6 +276,10 @@ def create_app() -> FastAPI:
 
     from app.routes.config import router as config_router
     app.include_router(config_router, prefix="/api/v1")
+
+    # Foresight P1 endpoints under /api/v1.
+    # Resolves to:  GET /api/v1/foresight/recommendations
+    app.include_router(foresight_router, prefix="/api/v1")
 
     @app.on_event("startup")
     async def _prime_prompt_profile() -> None:

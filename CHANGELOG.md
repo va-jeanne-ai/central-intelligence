@@ -6,6 +6,79 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Foresight P1: real statistics engine with a publication gate
+
+- Replaces the P0 static-sample `/foresight` prototype
+  (docs/superpowers/plans/2026-08-06-foresight-layer-prototype.md) with a
+  live pipeline: nightly cohort counts → Wilson/mean confidence intervals →
+  a publication gate → a persisted table → an endpoint → the page.
+- `backend/app/services/foresight.py` — pure, no-DB statistics engine:
+  `wilson_interval` (Bernoulli proportion CI), `mean_interval`
+  (mean-of-campaigns CI for the email candidate — documented in its
+  docstring why Wilson doesn't apply there), `verdict` (published_lift /
+  published_warning / gated, plus High/Medium confidence tiering), and
+  `build_card` (assembles a declarative `CandidateDef` + computed stats
+  into the dict the API/frontend render — all display copy lives in the
+  five `CANDIDATES` definitions, never generated from numbers). 30 new
+  unit tests (`backend/tests/test_foresight.py`) reproduce every rate/
+  interval in the plan's validation table exactly.
+- `backend/app/repositories/foresight_stats.py` — one SQL aggregate query
+  per candidate family (pooler rule: no row shipping): `fetch_live_vs_replay`
+  (lead_journey watched_live vs replay-only booking), `fetch_channel_close`
+  (lead_journey combos grouped by the 5 UTM fields, bucketed via the
+  existing `bucket_channel_combos`, sliced for `ig_dm`/`meta_paid` vs the
+  all-lead baseline), `fetch_email_value` (AVG/STDDEV_SAMP/COUNT of
+  `open_rate` by `campaign_type`), `fetch_discovery_families`
+  (insights × calls × leads × lead_journey join, per-`signal_family` close
+  rate among discovery-held leads, n≥20). The discovery join uses a
+  `LEFT JOIN LATERAL ... ORDER BY (external_id match) DESC LIMIT 1` —
+  the same fan-out guard `sales_stats.py`'s channel/revenue query already
+  uses — after confirming a plain `OR`-joined version could fan a lead out
+  across two `lead_journey` rows on this DB (a handful of leads match both
+  by `external_id` and by a *different* row's `ghl_contact_id`).
+- `foresight_recommendations` table (migration `f1a2b3c4d5e6`, chained on
+  `c2df94038d03`) — nightly full-overwrite snapshot of every computed card
+  (published + gated), including the gated cards' hold reason. OUR table,
+  not a WGR mirror — delete+insert in one transaction, no snapshot-reconcile
+  machinery.
+- `app/tasks/foresight.py::compute_foresight_recommendations` — Celery task,
+  beat-scheduled `04:50 UTC` daily (1h after the 03:50 WGR sync tick, after
+  metric-snapshots/overall-insight, before Monday's weekly-digest). Bridges
+  the async repository layer via `asyncio.run` + `AsyncSessionLocal`, same
+  pattern as `wgr_sync.sync_wgr`. Backfilled once in-process at ship time —
+  **6.35s wall time**, well under the plan's <60s aggregate-only budget.
+- `GET /api/v1/foresight/recommendations` (`app/routes/foresight.py`,
+  `app/schemas/foresight.py`) — reads the table straight through (published
+  + gated lists + `computed_at`); trivially fast (5 rows, no aggregation at
+  request time).
+- `frontend/src/app/(app)/foresight/page.tsx` rewritten to fetch the live
+  endpoint (loading skeleton, quiet error state, same idiom as
+  `/marketing/funnels`) — keeps the P0 three-lens card + IntervalBar
+  design. The amber PROTOTYPE banner is replaced by a slim neutral line
+  ("Computed nightly … · every number is a reproducible SQL count").
+  `published_warning` cards get a red-tinted accent (the action copy tells
+  the client what to *avoid*, not what to do). Gated cards render collapsed
+  with their computed hold reason, mockup-style. All P0 static sample data
+  deleted. KPI row is now computed (Published / Tracked=0 (P2) / Held by
+  the Gate / Computed At).
+- **Backend proof (2026-08-07, live DB, in-process — no HTTP server):** all
+  four named candidates reproduce the plan's validation table exactly —
+  `live_watch` 499/5,347 (9.3% [8.6–10.1]) vs 104/1,590 (6.5% [5.4–7.9]),
+  `ig_dm_channel` 52/4,656 (1.12% [0.85–1.46]) vs the all-lead baseline
+  83/12,933 (0.64% [0.52–0.79]), `meta_paid_close` 4/3,466 (0.12%
+  [0.04–0.30]) vs the same baseline (published as a warning card), and
+  `email_value` 649 campaigns at 26.1%±1.1 vs 1,779 at 22.7%±0.7. The
+  discovery-families candidate's baseline reproduces exactly (23/188 =
+  12.2% [8.3–17.7]), but **live data has moved since the plan's 2026-08-06
+  snapshot**: the "Relationships" signal family (n=57, 16 closed, 28.1%
+  [18.1–40.8]) now clears the baseline and publishes rather than gating —
+  a genuinely different, honestly-computed result, not a bug (verified the
+  underlying count is real and not a join-fanout artifact). The engine
+  recounts nightly, so this can gate again if the rate reverts; today's
+  live run is 5 published (4 lift + 1 warning), 0 gated.
+- `backend/tests`: **348 passing** (318 baseline + 30 new). Frontend:
+  `tsc --noEmit`, `lint`, `test`, `build` all green.
+
 ### Fixed — `GET /email/campaigns` perf: aggregates + pagination moved into SQL (8s → ~1-1.3s)
 
 - Same class of fix already applied to `social.py` (`GET /social/overview`)
