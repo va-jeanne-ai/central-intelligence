@@ -220,8 +220,8 @@
     "semantic_hash": ""
   },
   "backend/app/main.py": {
-    "mtime": 1785092994.9925842,
-    "ast_hash": "8fe5fe42e82c2efafbc756042c7ea7b0",
+    "mtime": 1786115728.5964248,
+    "ast_hash": "d7270d26f39e164c328294f49ede557f",
     "semantic_hash": ""
   },
   "backend/app/middleware/__init__.py": {
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/__init__.py": {
-    "mtime": 1785768061.7058806,
-    "ast_hash": "803a249310ce38d7c0fd581f20ec3150",
+    "mtime": 1786115642.5979614,
+    "ast_hash": "5dcafed152c9b841d8587c4c7152cca0",
     "semantic_hash": ""
   },
   "backend/app/models/audit.py": {
@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "backend/app/models/intelligence.py": {
-    "mtime": 1785778517.2221017,
-    "ast_hash": "15ea316430b9f7097325068d88cca784",
+    "mtime": 1786117106.8114405,
+    "ast_hash": "dbb9a063edcc18b024356fee41a39a92",
     "semantic_hash": ""
   },
   "backend/app/models/marketing.py": {
@@ -735,8 +735,8 @@
     "semantic_hash": ""
   },
   "backend/app/tasks/celery_app.py": {
-    "mtime": 1785092995.0047235,
-    "ast_hash": "f9fb94283711a1e669e29d0022f1b6ca",
+    "mtime": 1786115659.3463364,
+    "ast_hash": "7a2aeca4b42fae81183d2702551168d2",
     "semantic_hash": ""
   },
   "backend/app/tasks/comments_collector.py": {
@@ -1370,8 +1370,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1785871376.322234,
-    "ast_hash": "89756badb8ff315ba8901a2be2bfa1dc",
+    "mtime": 1786117578.7222092,
+    "ast_hash": "1eaeb0073433b2ab628a89b8ee3fb2a6",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1380,13 +1380,13 @@
     "semantic_hash": ""
   },
   "FEATURE-VERIFICATION.md": {
-    "mtime": 1785871727.9021366,
-    "ast_hash": "9be534be7a4c06c97be0c936a14d9900",
+    "mtime": 1786117547.5498312,
+    "ast_hash": "660afcf7f274e416aa00f906de3a12ce",
     "semantic_hash": ""
   },
   "INTEGRATIONS.md": {
-    "mtime": 1785779194.7978942,
-    "ast_hash": "7e013a8a2293a8d6ed15a1012e120225",
+    "mtime": 1786116149.8273232,
+    "ast_hash": "adbd366de1583ca093645b4cc68cbf57",
     "semantic_hash": ""
   },
   "MANUAL-ACTIONS.md": {
@@ -2800,13 +2800,58 @@
     "semantic_hash": ""
   },
   "frontend/src/app/(app)/foresight/page.tsx": {
-    "mtime": 1786028407.7309904,
-    "ast_hash": "2e6e4a3c32a9cfdcde32231c61584a48",
+    "mtime": 1786117201.1623712,
+    "ast_hash": "a84366ede2c15d9f4d64ce1a8072f881",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-08-06-foresight-layer-prototype.md": {
-    "mtime": 1786028341.0033267,
-    "ast_hash": "b59076e93f4f20105ec0040f1eb812ff",
+    "mtime": 1786117228.4250157,
+    "ast_hash": "ea310ed4dd88db8347000d8817074117",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/158699f25a23_add_foresight_hysteresis_column.py": {
+    "mtime": 1786117356.1930087,
+    "ast_hash": "7bbe98a538a2a05c2aba310896c99f36",
+    "semantic_hash": ""
+  },
+  "backend/alembic/versions/f1a2b3c4d5e6_add_foresight_recommendations.py": {
+    "mtime": 1786115611.8630252,
+    "ast_hash": "d28e195b49258b0e4f5341d2314dfcdb",
+    "semantic_hash": ""
+  },
+  "backend/app/repositories/foresight_stats.py": {
+    "mtime": 1786117050.9609637,
+    "ast_hash": "8379dfc931b8780a5414cd0a78715e45",
+    "semantic_hash": ""
+  },
+  "backend/app/routes/foresight.py": {
+    "mtime": 1786117122.9480202,
+    "ast_hash": "75c1d7ad0b736cae12b1010d03d80c67",
+    "semantic_hash": ""
+  },
+  "backend/app/schemas/foresight.py": {
+    "mtime": 1786117111.491999,
+    "ast_hash": "f39b8fa1e687dee4083eec94a2500650",
+    "semantic_hash": ""
+  },
+  "backend/app/services/foresight.py": {
+    "mtime": 1786117031.4123845,
+    "ast_hash": "33c5eac0be6338f5ba62de04e1841b04",
+    "semantic_hash": ""
+  },
+  "backend/app/tasks/foresight.py": {
+    "mtime": 1786117195.7790794,
+    "ast_hash": "65465b8570fd40caf772e50b71659524",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_foresight.py": {
+    "mtime": 1786117306.5671315,
+    "ast_hash": "52c7180730b37ff895a929c4264227ce",
+    "semantic_hash": ""
+  },
+  "docs/mockups/foresight-mockup.html": {
+    "mtime": 1786028707.4741695,
+    "ast_hash": "12a6f0fabf165e7a242815454b06d00b",
     "semantic_hash": ""
   }
 }
